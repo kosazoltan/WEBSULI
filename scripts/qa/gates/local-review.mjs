@@ -42,8 +42,51 @@ export const LOCKFILE = /(^|\/)package-lock\.json$|\.lock$/;
 /** Kockázatos utak: itt egyszeri felhős (Claude / Gemini) második vélemény AJÁNLOTT — nem kapu. */
 export const RISK = [/migrations?\//i, /schema\.ts$/, /auth|session|csrf|password|token|secret/i, /payment|stripe|billing/i, /email|mailer/i, /\.github\/workflows\//];
 
+/**
+ * A darabméretnél nagyobb hunk SORHATÁRON bomlik (docs/specs/2026-11-25-helyi-ellenor-toredek.md) — a karakterpozíciós vágás
+ * „csonka fájl” hamis leleteket szült (#587). Minden töredék saját, számolt `@@ -régi,db +új,db @@` fejlécet kap (a nulla hosszú
+ * oldal a megelőző sorhoz horgonyoz, az eredetileg üres oldal megtartja a 0-t), és a fejléc élenként jelzi, hol VÁGOTT:
+ * `töredék i/n; eleje: vágott|hunk eleje; vége: vágott|hunk vége`. A keretnél hosszabb sor sem törik szét: egyedül alkot töredéket
+ * (a darab ilyenkor a keretnél nagyobb lehet, de minden sor pontosan egyszer, típusjelével együtt szerepel).
+ */
+export function splitHunk(hunk, max) {
+  const nlAt = hunk.indexOf('\n');
+  const head = nlAt < 0 ? hunk : hunk.slice(0, nlAt);
+  const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(head);
+  if (!m) return [hunk];
+  // Review #588: egy már töredékként vágott darab újradarabolásakor (értelmezhetetlen modellválasz után) az örökölt vágott él
+  // vágott marad — a régi jelölés lekerül, az új töredékek külső élei az örökölt állapotot viszik tovább.
+  const prev = /^ töredék \d+\/\d+; eleje: (vágott|hunk eleje); vége: (vágott|hunk vége)(.*)$/.exec(m[3]);
+  const startCut = prev?.[1] === 'vágott'; const endCut = prev?.[2] === 'vágott';
+  const tail = prev ? prev[3] : m[3];
+  const oldEmpty = Number(m[1]) === 0; const newEmpty = Number(m[2]) === 0;
+  let oldLn = oldEmpty ? 1 : Number(m[1]); let newLn = newEmpty ? 1 : Number(m[2]);
+  const lines = hunk.slice(nlAt + 1).split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  const budget = Math.max(max - 120, 40);
+  const pieces = [];
+  let cur = null;
+  for (const line of lines) {
+    if (!cur || (cur.body.length && cur.size + line.length + 1 > budget)) {
+      if (cur) pieces.push(cur);
+      cur = { oStart: oldLn, oCount: 0, nStart: newLn, nCount: 0, body: [], size: 0 };
+    }
+    cur.body.push(line); cur.size += line.length + 1;
+    const t = line[0];
+    if (t === '+') { cur.nCount++; newLn++; } else if (t === '-') { cur.oCount++; oldLn++; } else if (t !== '\\') { cur.oCount++; cur.nCount++; oldLn++; newLn++; }
+  }
+  if (cur && cur.body.length) pieces.push(cur);
+  const n = pieces.length;
+  const side = (empty, start, count) => (count === 0 ? (empty ? '0,0' : `${start - 1},0`) : `${start},${count}`);
+  return pieces.map((p, i) => {
+    const edges = `eleje: ${i === 0 && !startCut ? 'hunk eleje' : 'vágott'}; vége: ${i === n - 1 && !endCut ? 'hunk vége' : 'vágott'}`;
+    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ töredék ${i + 1}/${n}; ${edges}${tail}\n${p.body.join('\n')}\n`;
+  });
+}
+
 /** Egységes diff → fájlonkénti darabok ({ file, text }). A túl nagy fájl-diff hunk-határokon bomlik, minden darab a fájl-fejléccel
- * kezdődik, így a modell a `@@ … +új,sor @@` fejlécből valós sorszámot ad (PR #541 Sourcery). Egyetlen óriás hunk karakterre vágva. */
+ * kezdődik, így a modell a `@@ … +új,sor @@` fejlécből valós sorszámot ad (PR #541 Sourcery). A keretnél nagyobb hunk sorhatáron, élenként
+ * megjelölt töredékekre bomlik (`splitHunk`); a keretnél hosszabb sor nem törik szét. */
 export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
   const parts = String(diff).split(/^(?=diff --git )/m).filter((p) => p.startsWith('diff --git '));
   const out = [];
@@ -56,8 +99,8 @@ export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
     for (const h of hunks) {
       if (cur.length + h.length > max && cur !== header) { out.push({ file, text: cur }); cur = header; }
       if (header.length + h.length > max) {
-        const step = Math.max(max - header.length, Math.ceil(max / 2)); // túl hosszú fejlécnél is pozitív lépés
-        for (let i = 0; i < h.length; i += step) out.push({ file, text: header + h.slice(i, i + step) });
+        if (cur !== header) { out.push({ file, text: cur }); cur = header; }
+        for (const piece of splitHunk(h, Math.max(max - header.length, Math.ceil(max / 2)))) out.push({ file, text: header + piece });
         continue;
       }
       cur += h;
@@ -80,6 +123,9 @@ export function buildPrompt(chunk) {
     'security issues (secrets, injection, auth bypass, personal data in logs/URLs), broken data contracts, timezone/date bugs,',
     'tests that were weakened or became tautological. Ignore style, naming, formatting, comments and Hungarian text content.',
     'Do NOT invent code that is not shown. If unsure, use severity "low". Use "high" only for a concrete, likely bug.',
+    'If the hunk header says "töredék i/n", this is a line-aligned slice of a larger hunk; the header states for each edge whether it is "vágott" (cut) or the real hunk start/end.',
+    'At an edge marked "vágott" the code continues in the neighbouring slice: never report truncation, unterminated expressions or syntax errors caused by that cut edge.',
+    'At an edge marked "hunk eleje" / "hunk vége", and anywhere inside the slice, genuine syntax errors and unterminated constructs MUST be reported.',
     'Reply with JSON only: {"verdict":"PASS|CONCERNS|BLOCK","findings":[{"line":<new-file line or 0>,"severity":"high|medium|low","issue":"<one sentence: scenario and effect>"}]}',
     '',
     `FILE: ${chunk.file}`,

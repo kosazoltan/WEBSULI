@@ -1,7 +1,7 @@
 // docs/specs/2026-11-23-vak-kor-kivezetes.md: a helyi (GPU) ellenőr tiszta függvényei.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff } from './local-review.mjs';
+import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
 
 const DIFF = [
   'diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1 +1 @@', '-x', '+y',
@@ -12,7 +12,9 @@ const DIFF = [
 test('splitDiff: fájlonként bont, a zárfájlt kihagyja, a nagy diffet darabolja', () => {
   const c = splitDiff(DIFF);
   assert.deepEqual(c.map((x) => x.file), ['src/a.ts', 'server/db/migrations/0001.sql']);
-  assert.equal(splitDiff(DIFF, 20).filter((x) => x.file === 'src/a.ts').length > 1, true);
+  // A töredékezés sorhatáron vág (2026-11-25-helyi-ellenor-toredek): a darabolás több soros hunkon mérhető.
+  const many = ['diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1,6 +1,6 @@', ...Array.from({ length: 6 }, (_, i) => `+sor${i}`.padEnd(30, 'y'))].join('\n');
+  assert.equal(splitDiff(many, 120).filter((x) => x.file === 'src/a.ts').length > 1, true);
 });
 
 test('riskyFiles: a migráció kockázatos, a sima forrás és a dokumentáció nem', () => {
@@ -88,4 +90,59 @@ test('parseFindings: {"verdict":"PASS"} lelet nélkül = üres lista; CONCERNS /
 test('alapértelmezett modell: gemma4:26b (E2)', () => {
   if (process.env.WEBSULI_LOCAL_REVIEW_MODEL) return;
   assert.equal(DEFAULT_MODEL, 'gemma4:26b');
+});
+
+test('töredék: a nagy új-fájl hunk sorhatáron, összefüggő @@ fejlécekkel, megjelölve bomlik; a prompt kimondja a darabhatár-szabályt', () => {
+  const body = Array.from({ length: 40 }, (_, i) => `+const sor${i + 1} = ${i + 1}; // ${'x'.repeat(20)}`);
+  const big = ['diff --git a/n.py b/n.py', 'new file mode 100644', '--- /dev/null', '+++ b/n.py', '@@ -0,0 +1,40 @@', ...body].join('\n');
+  const parts = splitDiff(big, 600);
+  assert.ok(parts.length >= 3, 'több darab');
+  let next = 1;
+  for (const [i, c] of parts.entries()) {
+    const m = /^@@ -0,0 \+(\d+),(\d+) @@ töredék (\d+)\/(\d+)/m.exec(c.text);
+    assert.ok(m, `a(z) ${i + 1}. darabnak saját, megjelölt hunk-fejléce van`);
+    assert.equal(Number(m[1]), next, 'összefüggő új sorszámok');
+    assert.equal(Number(m[3]), i + 1);
+    assert.equal(Number(m[4]), parts.length);
+    const lines = c.text.split('\n').slice(c.text.split('\n').findIndex((l) => l.startsWith('@@ ')) + 1).filter(Boolean);
+    assert.equal(lines.length, Number(m[2]), 'a fejléc darabszáma egyezik a darab soraival');
+    assert.ok(lines.every((l) => /^\+const sor\d+ = \d+; \/\/ x{20}$/.test(l)), 'csak teljes sorok (sorhatáron vágva)');
+    next += Number(m[2]);
+  }
+  assert.equal(next, 41, 'a darabok lefedik az 1..40 tartományt');
+  // review #588: a töredéktörzsek összefűzve pontosan, sorrendben adják vissza a bemenetet (nincs ismétlés / kiesés).
+  const bodies = parts.flatMap((c) => c.text.split('\n').slice(c.text.split('\n').findIndex((l) => l.startsWith('@@ ')) + 1).filter(Boolean));
+  assert.deepEqual(bodies, body);
+  assert.match(parts[0].text, /töredék 1\/\d+; eleje: hunk eleje; vége: vágott/);
+  assert.match(parts.at(-1).text, /eleje: vágott; vége: hunk vége/);
+  const prompt = buildPrompt(parts[0]);
+  assert.match(prompt, /never report truncation, unterminated expressions or syntax errors caused by that cut edge/i);
+  assert.match(prompt, /genuine syntax errors and unterminated constructs MUST be reported/i);
+});
+
+test('töredék (review #588): vegyes hunk nulla oldala a megelőző sorhoz horgonyoz; a túl hosszú sor egészben, típusjellel marad', () => {
+  const ctx = Array.from({ length: 10 }, (_, i) => ` k${i + 1}`.padEnd(30, 'c'));
+  const add = Array.from({ length: 10 }, (_, i) => `+u${i + 1}`.padEnd(30, 'a'));
+  const h = ['@@ -1,10 +1,20 @@', ...ctx, ...add].join('\n') + '\n';
+  const pieces = splitHunk(h, 120 + 340);
+  const addOnly = pieces.find((x) => /^@@ -\d+,0 /.test(x));
+  assert.ok(addOnly, 'van csak hozzáadást tartalmazó töredék');
+  assert.match(addOnly, /^@@ -10,0 \+11,/, 'a nulla hosszú régi oldal a 10. sorhoz horgonyoz (nem -11,0)');
+  const long = '+' + 'z'.repeat(2000);
+  const lp = splitHunk(['@@ -0,0 +1,3 @@', '+a', long, '+b'].join('\n') + '\n', 300);
+  const all = lp.flatMap((x) => x.split('\n').slice(1).filter(Boolean));
+  assert.deepEqual(all, ['+a', long, '+b'], 'a hosszú sor egészben, egyszer, a + jellel');
+  const counts = lp.map((x) => Number(/\+\d+,(\d+) @@/.exec(x)[1]));
+  assert.equal(counts.reduce((a, b) => a + b, 0), 3);
+});
+
+test('töredék (review #588): a középső töredék újradarabolása megtartja a vágott éleket, a régi jelölés nem duplázódik', () => {
+  const body = Array.from({ length: 30 }, (_, i) => `+s${i + 1}`.padEnd(30, 'q'));
+  const mid = splitHunk(['@@ -0,0 +1,30 @@', ...body].join('\n') + '\n', 120 + 340)[1];
+  assert.match(mid, /eleje: vágott; vége: vágott/);
+  const again = splitHunk(mid, 120 + 160);
+  assert.ok(again.length >= 2);
+  assert.match(again[0], /töredék 1\/\d+; eleje: vágott; vége: vágott/, 'az örökölt vágott eleje megmarad');
+  assert.match(again.at(-1), /eleje: vágott; vége: vágott/, 'az örökölt vágott vége megmarad');
+  assert.ok(again.every((x) => (x.split('\n')[0].match(/töredék/g) || []).length === 1), 'egy jelölés fejlécenként');
 });
