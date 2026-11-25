@@ -11,6 +11,7 @@ import {
   STATUS, createGate, externalResult, isMain, listEvidence, makeContext, readEvidence, redact, redactFirstLine, resolveVerdict, transferReviewEvidence, verdictResult, writeEvidence,
 } from './lib.mjs';
 import { evidenceRecord } from './pre-push-gate.mjs';
+import { feladatSzinkron } from './feladat-szinkron.mjs';
 
 /** A kötelező ellenőrzések állapota a fej check-runjai / státuszai alapján (azonos névnél a legutóbbi számít). */
 export function requiredChecks(required, checkRuns = [], statuses = []) {
@@ -427,6 +428,8 @@ async function main() {
     gate.add('adatgyűjtés (gh / hálózat)', STATUS.FAIL, String(e?.message ?? e).split('\n')[0]);
   }
   const code = gate.finish();
+  // K-FELADATDB: a feladat-nyilvántartás szinkronja (PR-állapot, review-szálak) — nem blokkoló, a kapu eredményét nem érinti.
+  gate.log(`[pre-merge-gate] feladat-nyilvántartás: ${feladatSzinkron({ exec, root }).note}`);
   const evHead = pr?.headRefOid ?? seenHead;
   if (evHead) {
     const published = publishMergeEvidence(ctx.evDir, n, runId, `merge-${n}-${evHead}`, evidenceRecord('merge', evHead, gate, { pr: Number(n) }));

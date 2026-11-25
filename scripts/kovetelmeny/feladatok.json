@@ -1,0 +1,119 @@
+{
+  "$megjegyzes": "Kurált, ismert WEBSULI-feladatok a feladat-nyilvántartás visszatöltéséhez (feladat.py visszatoltes). Nyilvános repó: név, e-mail-cím, titok TILOS. Idempotens: meglévő feladatnál csak a hiányzó mezőt / egységet / feltételt / hivatkozást pótolja, az állapotot csak előre lépteti. Az élő haladást a szinkron vezeti (commit Állapot-sorok, PR-ok).",
+  "feladatok": [
+    {
+      "code": "K-FELADATDB", "title": "Folyamatos SQL feladat-nyilvántartás (feladat, terv, teljesülés, készültségi fok)",
+      "goal": "Egy lekérdezéssel: feladat, terv, állapot + mért %, PR/commit/spec/kapcsoló, blokkoló, következő lépés; automatikus frissülés a munka közben.",
+      "origin": "tulajdonos 2026-11-25", "requirement_code": "K-FELADATDB", "priority": 1, "status": "folyamatban",
+      "szelet": "feladat-db", "branch": "feat/feladat-nyilvantartas", "spec": "docs/specs/2026-11-25-feladat-nyilvantartas.md",
+      "specek": ["docs/specs/2026-11-25-feladat-nyilvantartas-vegrehajtas.md"],
+      "egysegek": ["spec + végrehajtási utasítás", "RED tesztek", "séma + állapotgép", "CLI alparancsok", "szinkron", "visszatöltés",
+                   "skill + integráció", "próbahiba + zárás"],
+      "kriteriumok": ["spec + végrehajtási fájl az első kódcommit előtt", "idempotens migráció a valódi DB-n, a régi táblák sorszáma változatlan",
+                      "minden alparancs működik; attekintes egy képernyőn", "szinkron a valódi repóból, kétszer futtatva azonos",
+                      "visszatöltés: ismert feladatok + a követelmény-DB nyitott tételei", "skill + tükrök + gates.config + skills-sync (7), README, revízió-hivatkozás",
+                      "tesztek zöldek, próbahiba igazolva, tiszta munkafa"]
+    },
+    {
+      "code": "W1", "title": "W1: minden forrásformátum képpel együtt a webes gyártásba", "requirement_code": "W1", "priority": 2,
+      "status": "beolvadt", "spec": "docs/specs/2026-11-25-w1-forrasformatumok.md",
+      "specek": ["docs/specs/2026-11-25-w1-forrasformatumok-vegrehajtas.md"],
+      "next_step": "élő ellenőrzés: webes gyártás PDF / DOCX / PPTX / kép forrással"
+    },
+    {
+      "code": "W1a", "title": "W1a — webes forrás minden formátumban + képek megőrzése", "parent": "W1", "priority": 2, "status": "beolvadt",
+      "szelet": "W1a", "prs": [592], "commits": ["543c971e"], "next_step": "élő ellenőrzés (a W1 része)"
+    },
+    {
+      "code": "W1b", "title": "W1b — kép, szkennelt PDF és beágyazott képek a webes gyártásba (látó út)", "parent": "W1", "priority": 2,
+      "status": "beolvadt", "szelet": "W1b", "prs": [593], "commits": ["126753a1"], "next_step": "élő ellenőrzés (a W1 része)"
+    },
+    {
+      "code": "D1H", "title": "D1 hibrid: a forrás fényképei és nehezen rajzolható ábrái kivágott képként, forrásmegjelöléssel",
+      "requirement_code": "D1-HIBRID", "priority": 2, "status": "folyamatban", "spec": "docs/specs/2026-11-25-d1h-kivagott-kep.md",
+      "specek": ["docs/specs/2026-11-25-d1h-kivagott-kep-vegrehajtas.md"], "kapcsolok": ["STUDIO_SOURCE_IMAGES", "STUDIO_SOURCE_VISUALS"],
+      "next_step": "D1H-1 (#594) beolvasztása, majd D1H-2",
+      "kriteriumok": ["kép- és PDF-forrásból kivágott forráskép a leckében, forrásmegjelöléssel", "STUDIO_SOURCE_IMAGES élesítve mérés után (D1H-4)"]
+    },
+    {
+      "code": "D1H-1", "title": "D1H-1 — sourceImage ábrafajta, tár (0049), végpont, lejátszó-megjelenítés", "parent": "D1H", "priority": 2,
+      "status": "review", "szelet": "D1H-1", "branch": "docs/d1h-kivagott-kep", "prs": [594], "next_step": "review-szálak + kapulánc + merge"
+    },
+    {
+      "code": "D1H-2", "title": "D1H-2 — leltár photo fajta + box kivágási keret; kivágás KÉP forrásból (sharp)", "parent": "D1H", "priority": 2,
+      "status": "tervezve", "szelet": "D1H-2", "next_step": "a D1H-1 beolvadása után indul"
+    },
+    {
+      "code": "D1H-3", "title": "D1H-3 — kivágás PDF-oldalból (raszterizálás pdfjs + szerveroldali vászon)", "parent": "D1H", "priority": 2,
+      "status": "tervezve", "szelet": "D1H-3"
+    },
+    {
+      "code": "D1H-4", "title": "D1H-4 — élesítés a STUDIO_SOURCE_IMAGES kapcsolóval, mérés valódi leckén", "parent": "D1H", "priority": 2,
+      "status": "tervezve", "szelet": "D1H-4", "kapcsolok": ["STUDIO_SOURCE_IMAGES"]
+    },
+    {
+      "code": "U4", "title": "Összevont eredménylevél (szöveges + kvíz egy levélben)", "requirement_code": "U4", "priority": 2, "status": "kesz",
+      "spec": "docs/specs/2026-11-24-osszevont-eredmenylevel.md", "specek": ["docs/specs/2026-11-24-osszevont-eredmenylevel-vegrehajtas.md"],
+      "lefedi": ["SPEC:2026-11-24-osszevont-eredmenylevel"], "prs": [583], "kapcsolok": ["RESULT_COMBINED_EMAIL"],
+      "bizonyitek": "U4a–d beolvadt (#585 #586 #589 #591), U4e: RESULT_COMBINED_EMAIL=on (tulajdonosi döntés 2026-11-25)"
+    },
+    {"code": "U4a", "title": "U4a: adatmodell és sablon (félretételi tábla)", "parent": "U4", "requirement_code": "U4a", "priority": 3,
+     "status": "kesz", "szelet": "U4a", "prs": [585], "commits": ["d8db1650"]},
+    {"code": "U4b", "title": "U4b: szerverút, párosítás tanácsadó zárral, fiókos út", "parent": "U4", "requirement_code": "U4b", "priority": 3,
+     "status": "kesz", "szelet": "U4b", "prs": [586], "commits": ["2ebb73a9"]},
+    {"code": "U4c", "title": "U4c: söprő (lejárt rész, kézbesítetlen pótlás, tartalom-törlés)", "parent": "U4", "requirement_code": "U4c",
+     "priority": 3, "status": "kesz", "szelet": "U4c", "prs": [589], "commits": ["694826d1"]},
+    {"code": "U4d", "title": "U4d: kliens — figyelmeztetés a várakozó részre", "parent": "U4", "requirement_code": "U4d", "priority": 3,
+     "status": "kesz", "szelet": "U4d", "prs": [591], "commits": ["c41c8daa"]},
+    {"code": "U4e", "title": "U4e: élesítés — RESULT_COMBINED_EMAIL élesben BE", "parent": "U4", "requirement_code": "U4e", "priority": 3,
+     "status": "kesz", "szelet": "U4e", "kapcsolok": ["RESULT_COMBINED_EMAIL"], "bizonyitek": "RESULT_COMBINED_EMAIL=on (tulajdonos, 2026-11-25)"},
+    {
+      "code": "VALTOZATOSSAG", "title": "Tananyag-változatosság: 12 variációs tengely (V0–V5)", "requirement_code": "VALTOZATOSSAG", "priority": 2,
+      "status": "folyamatban", "spec": "docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md", "prs": [584],
+      "next_step": "V1 (nyitásforma-bővítés) szelet terve"
+    },
+    {"code": "V1", "title": "V1: nyitásforma-bővítés, témakontextus, összefoglaló formák, ritmus", "parent": "VALTOZATOSSAG",
+     "requirement_code": "V1", "priority": 2, "status": "tervezve", "szelet": "V1"},
+    {"code": "V2", "title": "V2: új interaktív feladattípusok (igaz/hamis sorozat, szókiemelés, kategorizálás)", "parent": "VALTOZATOSSAG",
+     "requirement_code": "V2", "priority": 2, "status": "tervezve", "szelet": "V2"},
+    {"code": "V3", "title": "V3: kártyaformák (fordító, felfedő, Tudtad?, összehasonlító, idővonal)", "parent": "VALTOZATOSSAG",
+     "requirement_code": "V3", "priority": 2, "status": "tervezve", "szelet": "V3"},
+    {"code": "V4", "title": "V4: kvízkérdés-típusok keverése", "parent": "VALTOZATOSSAG", "requirement_code": "V4", "priority": 2,
+     "status": "tervezve", "szelet": "V4"},
+    {"code": "V5", "title": "V5: játékos elemek (boss-kérdés, sorozatjelvény), szókereső, keresztrejtvény", "parent": "VALTOZATOSSAG",
+     "requirement_code": "V5", "priority": 2, "status": "tervezve", "szelet": "V5"},
+    {
+      "code": "K-068", "title": "Segédfeladatok a helyi Gemma 4 26B A4B-n (GPU), nem API-n és nem CPU-n", "requirement_code": "K-068",
+      "priority": 2, "status": "tervezve", "next_step": "terv: mely segédfeladatok, mérés GPU-n"
+    },
+    {
+      "code": "REVIZIO-TELJES", "title": "Teljes működési revízió (elvárt ↔ valós) a feladatsor végén", "priority": 2, "status": "tervezve",
+      "origin": "tulajdonosi állandó utasítás", "next_step": "a nyitott feladatsor után: websuli-kovetelmeny-revizio skill; leletekből feladat"
+    },
+    {
+      "code": "MP_MODE", "title": "Többjátékos mód élesítése (MP_MODE)", "requirement_code": "MP_MODE", "priority": 3, "status": "elesitve",
+      "kapcsolok": ["MP_MODE"], "next_step": "élő ellenőrzés: gyujt.py Render-mérés (a DB-ben még régi érték)",
+      "bizonyitek": "MP_MODE=on (tulajdonos, 2026-11-25)"
+    },
+    {"code": "PR-576", "title": "test(speed-math): a rövid életű kimenetel laponbelüli rögzítése (#1730)", "requirement_code": "PR#576",
+     "priority": 3, "status": "review", "branch": "fix/speed-math-1730", "prs": [576], "next_step": "régi nyitott PR: frissítés / merge vagy lezárás"},
+    {"code": "PR-570", "title": "feat(qa): PR-leírás vázlat-generátor a kapu-bizonyítékokból (K-PR)", "requirement_code": "PR#570",
+     "priority": 3, "status": "review", "branch": "feat/pr-leiras-generator", "prs": [570], "next_step": "régi nyitott PR: frissítés / merge vagy lezárás"},
+    {"code": "PR-529", "title": "fix(kisfilm): Seedance 2.0 Mini 480p — beállítható mozgókép-modell és -felbontás", "requirement_code": "PR#529",
+     "priority": 3, "status": "review", "branch": "fix/kisfilm-videomodell", "prs": [529], "next_step": "régi nyitott PR: frissítés / merge vagy lezárás"},
+    {"code": "PR-510", "title": "fix(lecke): eredmény-e-mail a kvízekhez – S1b (félbehagyott kör, pillanatkép)", "requirement_code": "PR#510",
+     "priority": 3, "status": "review", "branch": "fix/eredmeny-email-kviz", "prs": [510], "next_step": "régi nyitott PR: az U4 után még kell-e?"},
+    {"code": "PR-486", "title": "feat(jatekok): J6a – Galaktikus Aszteroida: kapuk nélkül, Kristály-válasz", "requirement_code": "PR#486",
+     "priority": 3, "status": "review", "branch": "feat/jatek-j6a-aszteroida-kristaly", "prs": [486], "next_step": "régi nyitott PR: frissítés / merge vagy lezárás"},
+    {"code": "PR-484", "title": "feat(jatekok): J3a – Kockavadász „Rúnabánya”", "requirement_code": "PR#484",
+     "priority": 3, "status": "review", "branch": "feat/jatek-j3a-kockavadasz-runabanya", "prs": [484], "next_step": "régi nyitott PR: frissítés / merge vagy lezárás"}
+  ],
+  "kapcsolo_dontesek": [
+    {"name": "MP_MODE", "value": "on", "decided_at": "2026-11-25", "source": "tulajdonos (élesítve)", "task_code": "MP_MODE"},
+    {"name": "LESSON_CLIPS_AUTO", "value": "on", "decided_at": "2026-11-25", "source": "tulajdonos (élesítve)"},
+    {"name": "RESULT_PARTIAL_EMAIL", "value": "on", "decided_at": "2026-11-25", "source": "tulajdonos (élesítve)"},
+    {"name": "ADVENT_RESULT_EMAIL_MODE", "value": "send", "decided_at": "2026-11-25", "source": "tulajdonos (élesítve)"},
+    {"name": "RESULT_COMBINED_EMAIL", "value": "on", "decided_at": "2026-11-25", "source": "tulajdonos (U4e élesítés)", "task_code": "U4e"},
+    {"name": "STUDIO_SOURCE_VISUALS", "value": "on", "decided_at": "2026-11-25", "source": "tulajdonosi döntés", "task_code": "D1H"}
+  ]
+}

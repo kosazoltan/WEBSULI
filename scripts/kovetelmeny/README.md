@@ -68,3 +68,32 @@ kapcsolóállapot). A záró revízió (`.agents/skills/websuli-kovetelmeny-revi
 5. **PR#N** — minden nyitott PR (`felkesz`); **FELADAT#id / KANBAN:tábla:id** — a kódhoz nem kötött nyitott feladatok.
 
 Új kérés felvétele: `kovetelmenyek.json`-ba új tétel (vagy a régi `superseded_by`-ja az újra), majd `gyujt.py`.
+
+## Feladat-nyilvántartás (K-FELADATDB) — `feladat.py`
+
+Ugyanebben a DB-fájlban, ÚJ táblákban (a fenti táblák sorait nem érinti; terv: `docs/specs/2026-11-25-feladat-nyilvantartas.md`,
+skill: `.agents/skills/websuli-feladat-nyilvantartas/SKILL.md`, tükör: `.claude/skills`, `.hermes/skills`). Az igazság forrása a
+beadott / folyamatban lévő / kész feladatokra; a kanban és az MD-k csak olvasva, hivatkozásként.
+
+- **Séma** (idempotens migráció, `feladat_meta.sema_verzio`): `tasks` (kód, cím, cél, eredet, `requirement_code`, szülő, prioritás,
+  állapot, `szelet`, következő lépés, blokkoló, ág, spec), `task_units` (szelet-egységek), `task_criteria` (elfogadási feltétel +
+  bizonyíték), `task_links` (`pr|commit|spec|kanban|finding|flag|requirement|branch|doc|feladat_sql`; PR-nál állapot, merge-SHA,
+  nyitott review-szálak), `task_events` (idővonal, a szinkron eseményei `dedupe`-kulccsal), `flag_decisions` (tulajdonosi
+  kapcsoló-döntések — a `flags`-et a gyűjtő birtokolja), `tasks_fts`. Nézetek: `v_sajat_keszultseg`, `v_keszultseg` (SZÁMÍTOTT %),
+  `v_task_pr`, `v_nyitott`, `v_kapcsolo_dontesek`.
+- **Állapotgép:** `beadva → tervezve → folyamatban → review → beolvadt → elesitve → elo_ellenorizve → kesz` (előre ugorható; hátra
+  csak `review|beolvadt|elesitve → folyamatban`), mellék: `blokkolt`, `elvetve`, `felulirva`; `kesz` csak teljesült feltételekkel,
+  lezárt újranyitása `--force --indok`.
+- **Készültség:** (kész egység + teljesült feltétel + gyerekfeladatok saját %-a) / (összes); ha nincs mérhető elem, állapotból
+  becsült (`~`).
+- **Szinkron** (`feladat.py szinkron [--no-gh] [--fetch] [--napok 45]`, idempotens): git `Állapot:` sorok (origin/main + a feladatok
+  ágai) → egységek, következő lépés, commit / PR; gh PR-állapot + nyitott review-szálak → review / beolvadt; gazdátlan nyitott PR →
+  `PR-<n>`; a gyűjtő által még nem ismert terv → `SPEC:<téma>`; a követelmény-DB nyitott tételei → feladat (a lezárásukat követi).
+  gh / hálózat nélkül a helyi részek lefutnak, semmi nem fokozódik le. A `gate:pr` és a `gate:merge` végén nem blokkoló lépésként
+  fut (`scripts/qa/gates/feladat-szinkron.mjs`; csak ha a DB létezik, `FELADAT_SZINKRON=off` kikapcsolja).
+- **Visszatöltés:** `feladat.py visszatoltes` — `feladatok.json` (kurált ismert feladatok + kapcsoló-döntések; nyilvános: név,
+  e-mail, titok TILOS), idempotens.
+- **Parancsok:** `migral`, `uj`, `terv`, `egyseg`, `kriterium`, `allapot`, `esemeny`, `kapcsol`, `kapcsolo`, `lista`, `tetel`,
+  `attekintes`, `kereses`, `szinkron`, `visszatoltes` — mindegyik `--json`-nal is.
+- **Tesztek:** `python -B -m unittest discover -s scripts/kovetelmeny -p "test_*.py"` (ideiglenes DB és git-repó; gh helyettesítve);
+  a kapu-segéd: `node --test scripts/qa/gates/feladat-szinkron.test.mjs`.
