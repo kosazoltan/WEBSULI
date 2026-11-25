@@ -77,3 +77,29 @@ test("3 új nyitásforma (kihívás, képtalálós, híres történet) a megfele
   assert.ok(ids("young").includes("kepes") && ids("middle").includes("kepes"));
   assert.ok(ids("middle").includes("hires-tortenet") && ids("older").includes("hires-tortenet"));
 });
+
+test("bekötés: a szerzői prompt a futás kiosztott tengelyeit csak BE kapcsolónál kapja; kiosztás nélkül / KI-nél bájtra a régi", async () => {
+  const { buildAuthorPrompt } = await import("../server/studio/step-io");
+  const { runWithLessonVariety, setRunVarietyAxes } = await import("../server/studio/lesson-variety-flag");
+  const map = { title: "T", subject: "matek", classroom: 6, concepts: [{ localId: "c1", examWeight: "core" as const, term: "terület" }] };
+  const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" as const], animationSuggestions: [] as string[] }];
+  const axes = pickVarietyAxes(seedFrom("bekotes"), 1);
+  const plain = runWithLessonVariety(true, () => buildAuthorPrompt(sections, map, []));
+  const assigned = runWithLessonVariety(true, () => { setRunVarietyAxes(axes); return buildAuthorPrompt(sections, map, []); });
+  assert.doesNotMatch(plain, /PÉLDÁK TÉMAKÖRE/);
+  assert.match(assigned, new RegExp(`PÉLDÁK TÉMAKÖRE: ${axes.exampleTheme.label}`));
+  const { lessonLengthBudget } = await import("../shared/lesson-length");
+  assert.equal(assigned.replace(`\n${varietyAxesContract(axes, lessonLengthBudget(map).targetWords)}`, ""), plain, "a kiosztás csak a V1-sorokat adja hozzá")
+  const off = runWithLessonVariety(false, () => { setRunVarietyAxes(axes); return buildAuthorPrompt(sections, map, []); });
+  assert.doesNotMatch(off, /PÉLDÁK TÉMAKÖRE/);
+  assert.equal(off, runWithLessonVariety(false, () => buildAuthorPrompt(sections, map, [])));
+});
+
+test("sorozat-előzmény a job-kimenetből: csak ismert alakú mezők; blokkváz-aláírás a vázlatból", async () => {
+  const { seriesPreviousOf } = await import("../server/studio/pipeline-store");
+  assert.equal(seriesPreviousOf(null), undefined);
+  assert.equal(seriesPreviousOf({ foo: 1 }), undefined);
+  assert.deepEqual(seriesPreviousOf({ openingForm: "rejtely", exampleTheme: "sport", recapForm: "3-2-1", outline: { sections: [{ plannedBlocks: ["explain", "check"] }, { plannedBlocks: ["recap"] }] } }),
+    { openingForm: "rejtely", exampleTheme: "sport", recapForm: "3-2-1", shapeSignature: "explain>check|recap" });
+  assert.deepEqual(seriesPreviousOf({ openingForm: "ROSSZ FORMA!", exampleTheme: 3 }), undefined);
+});

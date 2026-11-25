@@ -14,10 +14,10 @@ import type { Block } from "../shared/lesson-schema";
 const GROUPS = ["young", "middle", "older"] as const;
 const GROUP_CLASSROOMS = { young: [1, 2, 3, 4], middle: [5, 6, 7, 8, 0], older: [9, 10, 11, 12] } as const;
 
-test("V9: lépcsőcsoportonként 3–4 forma, 2–3 mondatos leírással, kódszótári címkével", () => {
+test("V9 / V1: lépcsőcsoportonként 4–7 forma, 2–3 mondatos leírással, kódszótári címkével", () => {
   for (const group of GROUPS) {
     const forms = OPENING_FORMS[group];
-    assert.ok(forms.length >= 3 && forms.length <= 4, `${group}: ${forms.length}`);
+    assert.ok(forms.length >= 4 && forms.length <= 7, `${group}: ${forms.length}`);
     assert.equal(new Set(forms.map((f) => f.id)).size, forms.length);
     for (const f of forms) {
       const sentences = f.description.split(/(?<=[.!?])\s+/u).filter(Boolean).length;
