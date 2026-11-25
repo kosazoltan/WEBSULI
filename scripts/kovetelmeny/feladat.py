@@ -55,7 +55,7 @@ PCT_ALAP = {"beadva": 0, "tervezve": 5, "folyamatban": 30, "review": 70, "beolva
             "elo_ellenorizve": 95, "kesz": 100, "blokkolt": 0, "elvetve": 0, "felulirva": 0}
 LINK_KINDS = ("pr", "commit", "spec", "kanban", "finding", "flag", "requirement", "branch", "doc", "feladat_sql")
 SOURCES = ("kezi", "szinkron", "kovetelmeny", "visszatoltes")
-# attekintes sorrend: ami mozgásban van, előre
+# attekintes / lista sorrend: prioritás, azon belül ami mozgásban van, előre
 RANG = {"folyamatban": 0, "review": 1, "blokkolt": 2, "beolvadt": 3, "elesitve": 4, "elo_ellenorizve": 5, "tervezve": 6,
         "beadva": 7}
 
@@ -165,9 +165,12 @@ def migrate(c: sqlite3.Connection):
     """Idempotens: csak új táblák / nézetek (IF NOT EXISTS; a nézetek fix szövegből újraépülnek). A meglévő
     követelmény-táblák sorait nem érinti."""
     c.executescript(SCHEMA)
-    for name, sql in VIEWS.items():  # fix nevek és fix SQL
-        c.execute(f"DROP VIEW IF EXISTS {name}")
-        c.execute(f"CREATE VIEW {name} AS {sql}")
+    for name, sql in VIEWS.items():  # fix nevek és fix SQL; csak eltérés esetén épül újra (nincs fölösleges írás / zár)
+        want = f"CREATE VIEW {name} AS {sql}"
+        have = c.execute("SELECT sql FROM sqlite_master WHERE type='view' AND name=?", (name,)).fetchone()
+        if not have or have[0] != want:
+            c.execute(f"DROP VIEW IF EXISTS {name}")
+            c.execute(want)
     c.execute("INSERT INTO feladat_meta(key,value) VALUES('sema_verzio',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value "
               "WHERE value IS NOT excluded.value", (str(SEMA_VERZIO),))
     c.commit()
@@ -454,7 +457,7 @@ def _ts(s) -> float:
 
 
 def _order(rows: list[dict]) -> list[dict]:
-    return sorted(rows, key=lambda r: (RANG.get(r["status"], 9), r["priority"], -_ts(r["updated_at"])))
+    return sorted(rows, key=lambda r: (r["priority"], RANG.get(r["status"], 9), -_ts(r["updated_at"])))
 
 
 # ---------------------------------------------------------------- parancsok
@@ -626,6 +629,305 @@ def cmd_kereses(c, a):
     _out(a, rows, txt)
 
 
+# ---------------------------------------------------------------- szinkron (git, gh, spec, követelmény)
+OPEN_REQ = ("elvart", "reszben", "felkesz", "elfelejtett", "kapcsolo_ki")
+REQ_PRIO = {"p-tetel": 4, "dontes": 4}
+REQ_BLOCKER = {"elfelejtett": "elfelejtett (revízió: régóta elvárt, nincs commit/PR-nyom)", "kapcsolo_ki": "kapcsoló KI élesben"}
+PR_SUBJ_RE = re.compile(r"\(#(\d+)\)\s*$")
+SPEC_RE = re.compile(r"^docs/specs/(\d{4}-\d{2}-\d{2})-(.+)\.md$")
+GH_TIMEOUT = 90
+
+
+def _git(repo: str, *a: str) -> subprocess.CompletedProcess:
+    """Fix argumentumlista, shell nélkül."""
+    return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+def _advance(c, code: str, target: str, evidence=None, at: str | None = None) -> bool:
+    """Szinkron-léptetés: csak előre a fő láncon; blokkolt vagy lezárt feladatot nem ír felül (spec D6)."""
+    t = get_task(c, code)
+    if not t or t["status"] in LEZART or t["status"] == "blokkolt":
+        return False
+    if FO_LANC.index(target) <= FO_LANC.index(t["status"]):
+        return False
+    return set_status(c, code, target, actor="szinkron", evidence=evidence, source="szinkron", at=at)
+
+
+def sync_requirements(c) -> dict:
+    """A követelmény-DB nyitott, nem felülírt tételeiből feladat (ha még semmi nem fedi le); a követelményből képzett
+    feladat követi a követelmény lezárását és félkész állapotát. A requirements táblát csak olvassa."""
+    rep = {"uj": 0, "valtozas": 0}
+    if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='requirements'").fetchone():
+        return rep
+    reqs = _rows(c.execute("SELECT code,title,category,status,superseded_by FROM requirements ORDER BY date, code"))
+    covered = {r[0] for r in c.execute("SELECT requirement_code FROM tasks WHERE requirement_code IS NOT NULL")}
+    codes = {r[0] for r in c.execute("SELECT code FROM tasks")}
+    for r in reqs:
+        if r["status"] not in OPEN_REQ or r["superseded_by"] or r["code"] in covered:
+            continue
+        pr = re.fullmatch(r"PR#(\d+)", r["code"])
+        code = f"PR-{pr.group(1)}" if pr else r["code"]
+        if code in codes:  # már van ilyen kódú feladat (pl. a gh-szinkron PR-feladata): csak a kötés
+            if not get_task(c, code)["requirement_code"]:
+                rep["valtozas"] += update_fields(c, code, requirement_code=r["code"])
+            covered.add(r["code"])
+            continue
+        if pr:
+            status = "review"
+        else:
+            status = "folyamatban" if r["status"] in ("felkesz", "reszben") else "beadva"
+        new_task(c, code, r["title"] or code, origin=f"kovetelmeny:{r['code']}", requirement_code=r["code"],
+                 priority=REQ_PRIO.get(r["category"], 3), status=status, blocker=REQ_BLOCKER.get(r["status"]),
+                 source="kovetelmeny", actor="szinkron")
+        link(c, code, "requirement", r["code"])
+        if pr:
+            link(c, code, "pr", pr.group(1))
+        if code.startswith("KANBAN:"):
+            link(c, code, "kanban", code.split(":", 1)[1])
+        if code.startswith("FELADAT#"):
+            link(c, code, "feladat_sql", code[len("FELADAT#"):])
+        codes.add(code)
+        covered.add(r["code"])
+        rep["uj"] += 1
+        rep["valtozas"] += 1
+    by = {r["code"]: r for r in reqs}
+    for t in _rows(c.execute("SELECT code,status,requirement_code FROM tasks WHERE origin LIKE 'kovetelmeny:%'")):
+        r = by.get(t["requirement_code"])
+        if not r or t["status"] in LEZART:
+            continue
+        ev = f"követelmény {r['code']} = {r['status']}"
+        target = "felulirva" if (r["status"] == "felulirt" or r["superseded_by"]) else {"kesz": "kesz", "elvetve": "elvetve"}.get(r["status"])
+        if target:
+            try:
+                rep["valtozas"] += set_status(c, t["code"], target, actor="szinkron", source="kovetelmeny", evidence=ev)
+            except AllapotHiba:  # pl. kesz nyitott elfogadási feltétellel: marad, a revízió dönt
+                pass
+        elif r["status"] in ("felkesz", "reszben"):
+            rep["valtozas"] += _advance(c, t["code"], "folyamatban", evidence=ev)
+    return rep
+
+
+def sync_git(c, repo: str, base: str, napok: int, rep: dict):
+    """`Állapot:` sorok a base-ről és a feladatok ágairól → egységek, következő lépés, commit- és PR-hivatkozás."""
+    since = f"--since={napok}.days"
+    tasks = _rows(c.execute("SELECT code, szelet, branch FROM tasks"))
+    by: dict[str, set] = {}
+    for t in tasks:
+        for key in {(t["szelet"] or "").lower(), t["code"].lower()} - {""}:
+            by.setdefault(key, set()).add(t["code"])
+    refs = [base]
+    for t in tasks:
+        if t["branch"]:
+            for cand in (f"refs/heads/{t['branch']}", f"refs/remotes/origin/{t['branch']}"):
+                if _git(repo, "rev-parse", "-q", "--verify", cand).returncode == 0:
+                    refs.append(cand)
+                    break
+    refs = list(dict.fromkeys(refs))
+    r = _git(repo, "log", "--topo-order", since, "--format=%H%x1f%cI%x1f%B%x1e", *refs, "--")
+    rb = _git(repo, "rev-list", since, base, "--")
+    if r.returncode != 0 or rb.returncode != 0:
+        rep["nem_elerheto"].append("git")
+        rep["git_hiba"] = safe((r.stderr or rb.stderr).strip()[:200])
+        return
+    on_base = set(rb.stdout.split())
+    latest: dict[str, dict] = {}
+    for rec in r.stdout.split("\x1e"):
+        if "\x1f" not in rec:
+            continue
+        sha, date, body = rec.lstrip("\n").split("\x1f", 2)
+        lines = parse_allapot(body)
+        if not lines:
+            continue
+        subject = body.strip().split("\n", 1)[0]
+        prm = PR_SUBJ_RE.search(subject)
+        mine: dict[str, list] = {}
+        for ln in lines:
+            hit = by.get(ln["szelet"].lower())
+            if not hit:
+                rep["ismeretlen_szelet"].add(ln["szelet"])
+                continue
+            if len(hit) > 1:
+                rep["ketertelmu"].add(ln["szelet"])
+                continue
+            code = next(iter(hit))
+            mine.setdefault(code, []).append(ln)
+            lt = latest.setdefault(code, {})
+            lt.setdefault("any", (ln, sha, date))  # topo-sorrend: az első a legújabb; egy commiton belül az utolsó sor
+            if code in latest and lt["any"][1] == sha:
+                lt["any"] = (ln, sha, date)
+            if not ln["fazis"]:
+                if "main" not in lt or lt["main"][1] == sha:
+                    lt["main"] = (ln, sha, date)
+        for code, lns in mine.items():
+            st = "main" if sha in on_base else "ag"
+            ch = link(c, code, "commit", sha, state=st, extra={"datum": date[:19], "targy": subject[:140]})
+            allap = "; ".join(f"{x['szelet']}{' ' + x['fazis'] if x['fazis'] else ''} {x['k']}/{x['n']} → {x['kovetkezo']}"
+                              for x in lns)
+            ch |= add_event(c, code, "commit", f"{subject[:160]} | {allap}", actor="szinkron", evidence=sha[:12],
+                            dedupe=f"commit:{sha}:{code}", at=date[:19])
+            if prm:
+                ch |= link(c, code, "pr", prm.group(1))
+            ch |= _advance(c, code, "folyamatban", evidence=f"commit {sha[:12]}")
+            rep["valtozas"] += ch
+    for code, lt in latest.items():
+        ch = False
+        if "main" in lt:
+            ln, sha, date = lt["main"]
+            ch |= ensure_units(c, code, ln["n"])
+            for seq in range(1, ln["n"] + 1):
+                ch |= set_unit(c, code, seq, seq <= ln["k"], evidence=f"commit {sha[:12]}", at=date[:19])
+        ln, sha, date = lt["any"]
+        t = get_task(c, code)
+        if ln["kovetkezo"] and (not t["next_step_at"] or date[:19] > t["next_step_at"][:19]):
+            ch |= update_fields(c, code, next_step=ln["kovetkezo"], next_step_at=date[:19])
+        rep["valtozas"] += ch
+
+
+def gh_pr_list() -> list[dict]:
+    r = subprocess.run(["gh", "pr", "list", "--repo", GH_REPO, "--state", "all", "--limit", "300", "--json",
+                        "number,title,state,headRefName,mergeCommit,mergedAt,url,isDraft"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GH_TIMEOUT)
+    if r.returncode != 0:
+        raise RuntimeError(safe((r.stderr or r.stdout).strip()[:200]))
+    return json.loads(r.stdout or "[]")
+
+
+def gh_open_threads(n: int) -> int:
+    owner, name = GH_REPO.split("/")
+    q = ("query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n)"
+         "{reviewThreads(first:100){nodes{isResolved}}}}}")
+    r = subprocess.run(["gh", "api", "graphql", "-f", f"query={q}", "-f", f"o={owner}", "-f", f"r={name}", "-F", f"n={n}"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GH_TIMEOUT)
+    if r.returncode != 0:
+        raise RuntimeError(safe((r.stderr or r.stdout).strip()[:200]))
+    nodes = json.loads(r.stdout)["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+    return sum(1 for x in nodes if not x["isResolved"])
+
+
+def sync_gh(c, gh_prs, gh_threads, rep: dict) -> list[dict]:
+    """PR-állapot → feladat (OPEN: review, MERGED: beolvadt + merge-SHA, CLOSED: esemény); gazdátlan nyitott PR → PR-<n>."""
+    try:
+        prs = gh_prs()
+    except Exception as e:  # noqa: BLE001 — hálózat / gh hiba: a helyi részek ettől még lefutnak
+        rep["nem_elerheto"].append("gh")
+        rep["gh_hiba"] = safe(str(e))[:200]
+        return []
+    by_branch: dict[str, set] = {}
+    for code, b in c.execute("SELECT code, branch FROM tasks WHERE branch IS NOT NULL"):
+        by_branch.setdefault(b, set()).add(code)
+    by_pr: dict[str, set] = {}
+    for code, ref in c.execute("SELECT t.code, l.ref FROM task_links l JOIN tasks t ON t.id=l.task_id WHERE l.kind='pr'"):
+        by_pr.setdefault(ref, set()).add(code)
+    for pr in prs:
+        n, st = str(pr["number"]), pr["state"]
+        codes = set(by_pr.get(n, ())) | set(by_branch.get(pr.get("headRefName") or "", ()))
+        if not codes and st == "OPEN":
+            code = f"PR-{n}"
+            if not get_task(c, code):
+                new_task(c, code, pr["title"], origin="gh:pr", requirement_code=f"PR#{n}", status="review",
+                         branch=pr.get("headRefName"), source="szinkron", actor="szinkron")
+                rep["uj"] += 1
+                rep["valtozas"] += 1
+            codes = {code}
+        if not codes:
+            continue
+        merge = (pr.get("mergeCommit") or {}).get("oid")
+        extra = {"cim": pr["title"][:140], "merge": merge, "nyitott_szalak": 0}
+        if st == "OPEN":
+            try:
+                extra["nyitott_szalak"] = gh_threads(int(n)) if gh_threads else 0
+            except Exception:  # noqa: BLE001 — a korábbi szálszám marad
+                extra = None
+                if "gh-szalak" not in rep["nem_elerheto"]:
+                    rep["nem_elerheto"].append("gh-szalak")
+        for code in sorted(codes):
+            ch = link(c, code, "pr", n, state=st, extra=extra)
+            if st == "OPEN":
+                ch |= _advance(c, code, "review", evidence=f"PR #{n} nyitott")
+            elif st == "MERGED":
+                ch |= _advance(c, code, "beolvadt", evidence=f"PR #{n} beolvadt ({(merge or '?')[:12]})")
+                if merge:
+                    ch |= link(c, code, "commit", merge, state="main")  # extra: a git-ág tölti (dátum, tárgy)
+            elif st == "CLOSED":
+                ch |= add_event(c, code, "pr", f"PR #{n} lezárva merge nélkül", actor="szinkron", dedupe=f"pr-closed:{n}:{code}")
+            rep["valtozas"] += ch
+    return prs
+
+
+def sync_specs(c, repo: str, base: str, napok: int, extra_refs: list[str], rep: dict):
+    """Új terv (még a gyűjtő sem ismeri, és egyetlen feladat sem hivatkozik rá) → SPEC:<téma> feladat, tervezve."""
+    hatar = (dt.date.today() - dt.timedelta(days=napok)).isoformat()
+    known = {r[0] for r in c.execute("SELECT spec FROM tasks WHERE spec IS NOT NULL")}
+    known |= {r[0] for r in c.execute("SELECT ref FROM task_links WHERE kind='spec'")}
+    for ref in [base, *extra_refs]:
+        r = _git(repo, "ls-tree", "-r", "--name-only", ref, "--", "docs/specs")
+        if r.returncode != 0:
+            rep["nem_elerheto"].append(f"spec:{ref}")
+            continue
+        files = set(r.stdout.split())
+        for f in sorted(files):
+            mm = SPEC_RE.match(f)
+            if not mm or mm.group(2).endswith("-vegrehajtas") or mm.group(1) < hatar or f in known:
+                continue
+            code = f"SPEC:{mm.group(1)}-{mm.group(2)}"
+            if get_task(c, code) or c.execute("SELECT 1 FROM requirements WHERE code=?", (code,)).fetchone():
+                continue  # a gyűjtő már ismeri: a követelmény-ág kezeli (kész terv nem lesz újra feladat)
+            head = _git(repo, "show", f"{ref}:{f}").stdout.split("\n", 1)[0]
+            title = head.lstrip("# ").strip() or code
+            new_task(c, code, title, origin=f"spec:{ref}", status="tervezve", spec=f, source="szinkron", actor="szinkron")
+            link(c, code, "spec", f)
+            v = f[:-3] + "-vegrehajtas.md"
+            if v in files:
+                link(c, code, "spec", v)
+            known.add(f)
+            rep["uj"] += 1
+            rep["valtozas"] += 1
+
+
+def sync(c, repo: str, base: str = "origin/main", napok: int = 45, gh_prs=None, gh_threads=None, fetch: bool = False) -> dict:
+    """Idempotens, újrafuttatható; a nem elérhető forrás semmit nem fokoz le (spec D6)."""
+    rep = {"ido": now(), "valtozas": 0, "uj": 0, "nem_elerheto": [], "ismeretlen_szelet": set(), "ketertelmu": set()}
+    if fetch and _git(repo, "fetch", "-q", "origin").returncode != 0:
+        rep["nem_elerheto"].append("git-fetch")
+    rq = sync_requirements(c)
+    rep["uj"] += rq["uj"]
+    rep["valtozas"] += rq["valtozas"]
+    sync_git(c, repo, base, napok, rep)
+    if gh_prs:
+        prs = sync_gh(c, gh_prs, gh_threads, rep)
+    else:
+        prs = []
+        rep["nem_elerheto"].append("gh")
+    open_refs = []
+    for p in prs:
+        ref = f"refs/remotes/origin/{p.get('headRefName')}"
+        if p["state"] == "OPEN" and _git(repo, "rev-parse", "-q", "--verify", ref).returncode == 0:
+            open_refs.append(ref)
+    if "git" not in rep["nem_elerheto"]:
+        sync_specs(c, repo, base, napok, open_refs, rep)
+    rep["ismeretlen_szelet"] = sorted(rep["ismeretlen_szelet"])
+    rep["ketertelmu"] = sorted(rep["ketertelmu"])
+    meta = {k: rep[k] for k in ("ido", "valtozas", "uj", "nem_elerheto")}
+    c.execute("INSERT INTO feladat_meta(key,value) VALUES('utolso_szinkron',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+              (json.dumps(meta, ensure_ascii=False),))
+    c.commit()  # rövid tranzakció: a gyűjtő (gyujt.py) ugyanazt a fájlt írja
+    return rep
+
+
+def cmd_szinkron(c, a):
+    rep = sync(c, a.repo, base=a.alap, napok=a.napok, gh_prs=None if a.no_gh else gh_pr_list,
+               gh_threads=None if a.no_gh else gh_open_threads, fetch=a.fetch)
+
+    def txt():
+        print(f"szinkron: változás {rep['valtozas']} (új feladat {rep['uj']}); nem elérhető: {', '.join(rep['nem_elerheto']) or '—'}")
+        if not a.q and rep["ismeretlen_szelet"]:
+            sz = rep["ismeretlen_szelet"]
+            print(f"  feladat nélküli Állapot-szeletek ({len(sz)}): {', '.join(sz[:12])}{' …' if len(sz) > 12 else ''}")
+        if not a.q and rep["ketertelmu"]:
+            print(f"  kétértelmű szeletnév (több feladat): {', '.join(rep['ketertelmu'])}")
+    _out(a, rep, txt)
+
+
 COMMANDS: dict = {}
 
 
@@ -696,6 +998,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = add("kereses", cmd_kereses, "FTS-keresés")
     p.add_argument("q")
     p.add_argument("--limit", type=int, default=20)
+    p = add("szinkron", cmd_szinkron, "git Állapot-sorok, gh PR-ok, specek, követelmények → feladatok (idempotens)")
+    p.add_argument("--alap", default="origin/main")
+    p.add_argument("--napok", type=int, default=45)
+    p.add_argument("--no-gh", action="store_true")
+    p.add_argument("--fetch", action="store_true")
     return ap
 
 
