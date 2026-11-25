@@ -55,8 +55,8 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
-import { avoidSeriesRepeat, exampleThemeById, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { lessonVarietyForRun, runVarietyAxes, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
+import { avoidSeriesRepeat, cardFormById, cardFormProblems, exampleThemeById, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -824,16 +824,17 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);
       const pick = openingFormById(assigned.openingForm, promptMap.classroom)!;
       assignedForm = pick.id;
-      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands };
+      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, cardForm: assigned.cardForm.id };
       setRunOpeningForm(pick);
-      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands });
+      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: assigned.cardForm });
     } else if (typeof output.openingForm === "string") {
       const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
       // V1: folytatásnál a mentett tengelyek (régi, tengely nélküli checkpointnál nincs kiosztás).
       const theme = exampleThemeById(output.exampleTheme), recap = recapFormById(output.recapForm);
       const bands = Array.isArray(output.lengthBands) && output.lengthBands.every((b) => b === "rövid" || b === "közepes" || b === "hosszabb") ? output.lengthBands as LengthBand[] : undefined;
-      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands });
+      // V3b: a kártyaforma csak a mentett értékből (régi, kártya nélküli checkpoint: nincs kártya-kiosztás).
+      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands, cardForm: cardFormById(output.cardForm) });
     }
   }
   if (!resumed?.lesson) await save("author", output);
@@ -862,7 +863,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
     const coverage = checkCoverageGate(parsed.data, concepts);
     const arc = checkLessonArc(parsed.data);
-    const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
+    // V3b: a kiosztott kártya (≥ 4 fejezetnél) — javító kört kap.
+    const card = varietyOn ? cardFormProblems(parsed.data, runVarietyAxes()?.cardForm) : [];
+    const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons), ...card];
     if (problems.length && dropNotes.length) {
       telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;
       log(`[EGYFUTÁS] A javító üzenet megnevezi a kivett ábrablokkot (${dropNotes.length}) — a kivétel után kapu bukott.`);

@@ -51,6 +51,12 @@ test("kapu: ≥ 4 fejezetnél a kiosztott kártya nem első fejezetben kötelez�
   assert.deepEqual(cardFormProblems(lesson, undefined), [], "kiosztás nélkül nincs megkötés");
 });
 
+test("sorozat-előzmény: a mentett kártyaforma (camelCase) visszaolvasható", async () => {
+  const { seriesPreviousOf } = await import("../server/studio/pipeline-store");
+  assert.equal(seriesPreviousOf({ cardForm: "didYouKnow" })?.cardForm, "didYouKnow");
+  assert.equal(seriesPreviousOf({ cardForm: "rossz érték!" }), undefined);
+});
+
 test("a szerzői katalógus a kártyák spec-alakját is közli", async () => {
   const { AUTHOR_BLOCK_CATALOG } = await import("../server/studio/step-io");
   for (const [k, f] of [["flipCard", "front"], ["stepReveal", "steps"], ["didYouKnow", "fact"], ["decision", "consequence"], ["flashcards", "cards"]]) {
