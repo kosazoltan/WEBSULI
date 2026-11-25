@@ -52,3 +52,21 @@ Közös szabályok minden szeletre:
 - **V5:**
   - WHEN szókincslecke THEN szókereső vagy keresztrejtvény készül, és a rácsgenerátor determinisztikus (mag);
   - a boss-kérdés a fejezet anyagából való (lektori ellenőrzés).
+
+## V2a — végrehajtás (2026-11-25): öt új feladatfajta — séma, pontozó, megjelenítő (gyártás nélkül)
+Előfeltétel: a V-kompat élesítése (a régi kliens az ismeretlen `tryKind` helyén frissítésre kérő magyarázatot mutat). A V2a a fajtákat
+NEM hirdeti a modellnek (a szerzői katalógus és a vázlat `tryKind`-ja a régi hármas — `PROMPT_TRY_KINDS`); a gyártási prompt és a kapu
+a V2b.
+Fajták és DOKUMENTÁLT pontozás (`shared/try-scoring.ts`, determinisztikus):
+- `trueFalseSeries` — 2–8 állítás igaz/hamis jelöléssel: pont = helyes jelölések száma, max = állítások száma.
+- `highlight` (szókiemelés) — szöveg + 1–8 célszó (a szöveg szavai): pont = max(0, eltalált − téves kijelölés), max = célszavak száma.
+- `categorize` — 2–4 kategória, 3–12 elem: pont = helyesen besorolt elemek, max = elemek száma.
+- `numberLine` — min < cél < max, tűrés: |érték − cél| ≤ tűrés → 2 pont; ≤ 2×tűrés → 1 pont; különben 0 (max 2).
+- `estimate` (becslés csúszkával) — relatív eltérés ≤ 5% → 2 pont; ≤ 15% → 1 pont; különben 0 (max 2).
+Ítélet: max pont = „teljes”, 0 < pont < max = „részleges”, 0 = „rossz”.
+1. RED: `source/tests/try-scoring.test.ts` (mind az öt pontozó teljes / részleges / rossz válaszra; a séma a hibás specifikációt elutasítja, a
+   helyeset elfogadja; a modellnek hirdetett fajták a régi hármas), `source/tests/lesson-try-v2.spec.ts` (e2e: billentyűzettel kezelhető
+   mind az öt, a visszajelzés megjelenik, az állapot újratöltés után visszaáll).
+2. GREEN: `shared/try-scoring.ts`, `shared/lesson-schema.ts`, `client/src/lesson-runtime/blocks/try-blocks.tsx`,
+   `client/src/lesson-runtime/useLessonProgress.ts`, `shared/lesson-block-label.ts`, `server/studio/grounding.ts`, `server/studio/step-io.ts`.
+3. Próbahiba, kapulánc, PR.
