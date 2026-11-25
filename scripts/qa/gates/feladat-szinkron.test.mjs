@@ -62,3 +62,12 @@ test('hibás futás vagy kivétel → ok=false, de nem dob', () => {
   assert.equal(r2.ok, false);
   assert.match(r2.note, /robbant/);
 });
+
+test('időtúllépés (realExec: 127 + ETIMEDOUT) → nem próbál másik értelmezőt, egyszeri nem blokkoló hiba', () => {
+  const db = dbFile();
+  const tried = [];
+  const r = feladatSzinkron({ root: 'R', env: { KOVETELMENY_DB: db }, exec: (cmd) => { tried.push(cmd); return { code: 127, stdout: '', stderr: 'spawnSync python3 ETIMEDOUT' }; } });
+  assert.deepEqual(tried, ['python3']);
+  assert.equal(r.ok, false);
+  assert.match(r.note, /időtúllépés/);
+});

@@ -381,5 +381,158 @@ class Visszatoltes(Alap):
         self.assertEqual(F.get_task(self.c, "W1b")["status"], "beolvadt")
 
 
+# ---------------------------------------------------------------- PR #595 review-szálak (RED → GREEN)
+class ReviewAllapotvedelem(Alap):
+    """Szálak: a követelmény-lezárás és a szinkron nem írhatja felül a kézi állapotot (spec D6)."""
+
+    def test_kezzel_ujranyitott_feladatot_a_kovetelmeny_nem_zarja_vissza(self):
+        F.sync_requirements(self.c)
+        self.c.execute("UPDATE requirements SET status='kesz' WHERE code='K-900'")
+        F.sync_requirements(self.c)
+        self.assertEqual(F.get_task(self.c, "K-900")["status"], "kesz")
+        F.set_status(self.c, "K-900", "folyamatban", actor="teszt", force=True, reason="regresszió")
+        F.sync_requirements(self.c)
+        self.assertEqual(F.get_task(self.c, "K-900")["status"], "folyamatban")
+
+    def test_kezzel_blokkolt_kovetelmeny_feladat_nem_vetodik_el(self):
+        F.sync_requirements(self.c)
+        F.set_status(self.c, "K-901", "blokkolt", actor="teszt", blocker="tulajdonosi döntésre vár")
+        self.c.execute("UPDATE requirements SET status='elvetve' WHERE code='K-901'")
+        F.sync_requirements(self.c)
+        self.assertEqual(F.get_task(self.c, "K-901")["status"], "blokkolt")
+
+    def test_azonos_allapotnal_az_explicit_blokkolo_frissul(self):
+        F.new_task(self.c, "B-1", "Blokkolt")
+        F.set_status(self.c, "B-1", "blokkolt", actor="teszt", blocker="régi akadály")
+        self.assertTrue(F.set_status(self.c, "B-1", "blokkolt", actor="teszt", blocker="új akadály"))
+        self.assertEqual(F.get_task(self.c, "B-1")["blocker"], "új akadály")
+        self.assertFalse(F.set_status(self.c, "B-1", "blokkolt", actor="teszt", blocker="új akadály"))
+        F.set_status(self.c, "B-1", "blokkolt", actor="teszt", blocker="")
+        self.assertIsNone(F.get_task(self.c, "B-1")["blocker"])
+
+
+class ReviewMaszkolas(Alap):
+    """Szálak: eseményfajta / aktor / hivatkozás-állapot maszkolása, azonosító-mezők érzékeny tartalma, CLI-visszaigazolás."""
+
+    def test_esemeny_fajta_es_aktor_maszkolva(self):
+        F.new_task(self.c, "M-1", "x")
+        F.add_event(self.c, "M-1", "fajta valaki.pelda@example.com", "szöveg", actor="token=abcdef1234567890")
+        F.link(self.c, "M-1", "doc", "d", state="allapot valaki.pelda@example.com")
+        dump = "\n".join(self.c.iterdump())
+        self.assertNotIn("valaki.pelda@", dump)
+        self.assertNotIn("abcdef1234567890", dump)
+
+    def test_erzekeny_azonosito_elutasitva(self):
+        with self.assertRaises(F.AllapotHiba):
+            F.new_task(self.c, "M-2", "x", branch="feat/valaki.pelda@example.com")
+        with self.assertRaises(F.AllapotHiba):
+            F.new_task(self.c, "valaki.pelda@example.com", "x")
+        F.new_task(self.c, "M-3", "x")
+        with self.assertRaises(F.AllapotHiba):
+            F.update_fields(self.c, "M-3", spec="docs/token=abcdef1234567890.md")
+        self.assertNotIn("abcdef1234567890", "\n".join(self.c.iterdump()))
+
+    def test_kapcsol_visszaigazolas_maszkolt(self):
+        self.cli("uj", "M-4", "x")
+        rc, out = self.cli("kapcsol", "M-4", "doc", "postgres://felhasznalo:***@127.0.0.1:5432/x")
+        self.assertEqual(rc, 0)
+        self.assertNotIn("felhasznalo", out)
+
+
+class ReviewKapcsoloDontes(Alap):
+    def test_aznapi_uj_dontes_nem_vesz_el(self):
+        self.assertEqual(self.cli("kapcsolo", "PROBA_KAPCSOLO", "on", "--forras", "tulajdonos")[0], 0)
+        self.assertEqual(self.cli("kapcsolo", "PROBA_KAPCSOLO", "off", "--forras", "tulajdonos")[0], 0)
+        rc, out = self.cli("--json", "kapcsolo")
+        d = {r["name"]: r for r in json.loads(out)}
+        self.assertEqual(d["PROBA_KAPCSOLO"]["dontes"], "off")
+
+    def test_azonos_explicit_datum_uj_ertekkel_felulir_ujrafuttatva_idempotens(self):
+        F.flag_decision(self.c, "PROBA_KAPCSOLO", "on", "2026-11-25", source="t")
+        self.assertTrue(F.flag_decision(self.c, "PROBA_KAPCSOLO", "off", "2026-11-25", source="t"))
+        self.assertFalse(F.flag_decision(self.c, "PROBA_KAPCSOLO", "off", "2026-11-25", source="t"))
+        self.assertEqual(self.c.execute("SELECT dontes FROM v_kapcsolo_dontesek WHERE name='PROBA_KAPCSOLO'").fetchone()[0], "off")
+
+
+class ReviewSzinkron(Szinkron):
+    """Szálak: újranyitott beolvadt feladat, időzóna, írási zár a hálózati hívás alatt, review-szál lapozás."""
+
+    def commit_datummal(self, msg, datum):
+        env = {**os.environ, "GIT_AUTHOR_NAME": "Teszt", "GIT_AUTHOR_EMAIL": "teszt@example.invalid",
+               "GIT_COMMITTER_NAME": "Teszt", "GIT_COMMITTER_EMAIL": "teszt@example.invalid",
+               "GIT_COMMITTER_DATE": datum, "GIT_AUTHOR_DATE": datum}
+        r = subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "--allow-empty", "-m", msg],
+                           capture_output=True, text=True, encoding="utf-8", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_ujranyitott_beolvadt_feladatot_a_regi_merge_nem_lepteti_vissza(self):
+        self.futtat()
+        self.assertEqual(F.get_task(self.c, "PROBA")["status"], "beolvadt")
+        F.set_status(self.c, "PROBA", "folyamatban", actor="teszt", evidence="regresszió")
+        self.futtat()
+        self.assertEqual(F.get_task(self.c, "PROBA")["status"], "folyamatban")
+
+    def test_kovetkezo_lepes_idozonahelyes_osszevetese(self):
+        F.new_task(self.c, "IDO1", "x", szelet="IDO1")
+        F.new_task(self.c, "IDO2", "y", szelet="IDO2")
+        F.update_fields(self.c, "IDO1", next_step="kézi 1", next_step_at="2026-11-25T10:30:00+00:00")
+        F.update_fields(self.c, "IDO2", next_step="kézi 2", next_step_at="2026-11-25T11:30:00+01:00")
+        # 11:00+01:00 = 10:00Z → RÉGEBBI a 10:30Z kézi bejegyzésnél; 10:45Z → ÚJABB a 10:30Z (11:30+01:00) bejegyzésnél
+        self.commit_datummal("régi\n\nÁllapot: IDO1 1/2 egység kész — következő: commitból 1", "2026-11-25T11:00:00+01:00")
+        self.commit_datummal("új\n\nÁllapot: IDO2 1/2 egység kész — következő: commitból 2", "2026-11-25T10:45:00+00:00")
+        self.futtat(gh=False)
+        self.assertEqual(F.get_task(self.c, "IDO1")["next_step"], "kézi 1")
+        self.assertEqual(F.get_task(self.c, "IDO2")["next_step"], "commitból 2")
+        self.assertEqual(self.futtat(gh=False)["valtozas"], 0)
+
+    def test_gh_lekeres_alatt_nincs_nyitott_irasi_zar(self):
+        sikerek = []
+
+        def masik_iro():
+            k = sqlite3.connect(self.db, timeout=0)
+            try:
+                k.execute("BEGIN IMMEDIATE")
+                k.execute("ROLLBACK")
+                sikerek.append(True)
+            except sqlite3.OperationalError:
+                sikerek.append(False)
+            finally:
+                k.close()
+
+        def prs():
+            masik_iro()
+            return self.prs
+
+        def szalak(n):
+            masik_iro()
+            return 0
+        F.sync(self.c, str(self.repo), base="main", napok=3650, gh_prs=prs, gh_threads=szalak)
+        self.assertTrue(sikerek)
+        self.assertTrue(all(sikerek), sikerek)
+
+
+class ReviewSzalLapozas(unittest.TestCase):
+    def valasz(self, nodes, kov=None, info=True):
+        pr = {"reviewThreads": {"nodes": nodes}}
+        if info:
+            pr["reviewThreads"]["pageInfo"] = {"hasNextPage": kov is not None, "endCursor": kov}
+        return subprocess.CompletedProcess([], 0, json.dumps({"data": {"repository": {"pullRequest": pr}}}), "")
+
+    def test_minden_oldalt_bejar(self):
+        lapok = [self.valasz([{"isResolved": True}] * 100, kov="C1"), self.valasz([{"isResolved": False}] * 20)]
+        hivasok = []
+
+        def run(args, **kw):
+            hivasok.append(args)
+            return lapok[len(hivasok) - 1]
+        self.assertEqual(F.gh_open_threads(5, run=run), 20)
+        self.assertEqual(len(hivasok), 2)
+        self.assertTrue(any("C1" in a for a in hivasok[1]))
+
+    def test_hianyos_valasz_hiba(self):
+        with self.assertRaises(RuntimeError):
+            F.gh_open_threads(5, run=lambda args, **kw: self.valasz([{"isResolved": False}], info=False))
+
+
 if __name__ == "__main__":
     unittest.main()
