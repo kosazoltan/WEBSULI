@@ -91,7 +91,8 @@ test("elavult időzítők: a fázisváltás játékórán fut, az újrakezdés �
   assert.match(restart, /clearPendingTimers\(\)/, "az újrakezdés nem törli a függő időzítőket");
   const step = block(page, "stepRef.current = (dt: number) => {", "const sc = sceneRef.current;");
   assert.match(step, /const halted = pausedRef\.current \|\| rotateBlockRef\.current;/, "a futás-megállítás nem a szünetből / forgatási kérésből számol");
-  assert.match(step, /if \(!halted\)/, "a játékóra szünetben is halad");
+  // SPEC-VÁLTOZÁS 2026-11-25 (review #610): a játékóra a „Miért?” / „Mutasd” olvasása alatt is áll (`!reading`).
+  assert.match(step, /if \(!halted && !reading\)/, "a játékóra szünetben is halad");
   assert.match(step, /t\.run === run/, "egy előző futás időzítője is lefuthat");
 });
 

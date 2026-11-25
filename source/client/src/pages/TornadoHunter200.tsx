@@ -1417,6 +1417,8 @@ function PlayScreen(props: {
   feedbackRef.current = feedback;
   /** A kérdés-sáv „Mutasd” (kinyitott hosszú kérdés) — amíg nyitva, áll a játék (terv 8.9). */
   const expandedRef = useRef(false);
+  /** Review #610: a menet vége a futó megoldás-kijelzés lefutásáig halasztva (a győzelem / vereség jelzője). */
+  const deferredFinishRef = useRef<boolean | null>(null);
   const expandedIdRef = useRef<number | null>(null);
   const [anchorMsg, setAnchorMsg] = useState<string | null>(null);
   /** J7b: az elágazás / turbó következménye („Rövidítés — turbó!”, „Kerülő: −9 mp”), a sáv alatt. */
@@ -2203,6 +2205,13 @@ function PlayScreen(props: {
     (won: boolean) => {
       if (finishedRef.current) return;
       finishedRef.current = true;
+      // Review #610: a futó megoldás-kijelzés (≥ 1,8 s) kifut — a mag áll (finishedRef → 0-s időskála), a kérdés-sáv lezárul,
+      // és az eredmény csak a `settled()` után jelenik meg (a képkocka hívja újra a befejezést).
+      if (qRef.current.view().reveal && !qRef.current.settled()) {
+        qRef.current.finish();
+        deferredFinishRef.current = won;
+        return;
+      }
       const p = playerRef.current;
       const distKm = toKm(Math.hypot(p.x - tornadoPosRef.current.x, p.z - tornadoPosRef.current.z));
       const reward = won
@@ -2401,6 +2410,7 @@ function PlayScreen(props: {
   restartRef.current = () => {
     // Az előző futás minden függő időzítője és félbehagyott kvíze érvénytelen (review-lelet #426).
     runIdRef.current += 1;
+    deferredFinishRef.current = null;
     clearPendingTimers();
     pendingAnchorRef.current = null;
     setFeedback(null);
@@ -2755,8 +2765,11 @@ function PlayScreen(props: {
       rotateBlockRef.current = typeof document !== "undefined" && document.querySelector('[data-testid="game-rotate-hint"]') != null;
     }
     const halted = pausedRef.current || rotateBlockRef.current;
+    // Review #610: a „Miért?” / „Mutasd” olvasása alatt a játékóra is áll (pl. a horgonyzás utáni győzelmi időzítő nem zárja be
+    // olvasás közben a magyarázatot).
+    const reading = !!feedbackRef.current || expandedRef.current;
     // Játékóra + a fázisváltó időzítők: szünetben állnak, és csak a saját futásuk időzítői futnak le.
-    if (!halted) {
+    if (!halted && !reading) {
       gameClockRef.current += dt;
       const timers = gameTimersRef.current;
       if (timers.length > 0) {
@@ -2796,6 +2809,13 @@ function PlayScreen(props: {
     drv.loop.setTimeScale(playing && !feedbackRef.current && !expandedRef.current && !finishedRef.current ? 1 : 0);
     frameClockRef.current += dt * 1000;
     drv.frame(frameClockRef.current);
+    // Review #610: a menet végén elhalasztott eredmény a megoldás-kijelzés lefutása után.
+    if (deferredFinishRef.current !== null && qRef.current.settled()) {
+      const won = deferredFinishRef.current;
+      deferredFinishRef.current = null;
+      finishedRef.current = false;
+      finishRunRef.current(won);
+    }
     if (dt > 0) fpsRef.current = fpsRef.current * 0.9 + Math.min(240, 1 / dt) * 0.1;
 
     // Always spin the funnel and rain so paused screens still feel alive. Befogáskor (600 ms) a tölcsér
@@ -3040,7 +3060,8 @@ function PlayScreen(props: {
             const rv = qView.reveal;
             const st = !rv ? "idle" : i === rv.correctOptionIndex ? "correct" : i === rv.pickedOptionIndex ? "wrong" : "dim";
             const tap = pointerTapHandlers(signTracker, i, () => {
-              if (pausedRef.current || feedbackRef.current) return;
+              // Review #610: a kibontott („Mutasd”) kérdés alatt a tábla sem választ — mint a közös kérdéskomponens.
+              if (pausedRef.current || feedbackRef.current || expandedRef.current) return;
               qRef.current.pick(i);
             });
             return (

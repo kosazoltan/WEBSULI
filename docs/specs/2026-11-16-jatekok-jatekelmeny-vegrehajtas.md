@@ -3144,3 +3144,9 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 3. A K.3 etikai lista, a K.4 30 pontos kapu és a K.5 kódszabályok a PR-leírásban.
 4. A követhetőségi táblázat (terv 12.) minden cél-mondatához legalább egy lezárt szelet a J9 végén; a G8–G10 a JM
    véglegesítésével.
+
+### J7b — review #610 (2026-11-25)
+- Turbópad: a már elért pad a tartás (horgonyzás / mérési sáv) alatt sem kérdez; a tartás elengedése után igen (`sim.ts`, teszt: `tornado-junctions.test.ts`).
+- A tábla-koppintás a kibontott („Mutasd”) kérdés alatt tiltott, mint a közös kérdéskomponensben (különben a kibontás beragad és a mag 0-s időskálán áll).
+- A menet vége kifuttatja a futó megoldás-kijelzést: a mag áll, a kérdés-sáv lezárul, az eredmény a `settled()` után jelenik meg; az újrakezdés törli a halasztást.
+- A „Miért?” / „Mutasd” olvasása alatt a játékóra is áll (a horgonyzás utáni győzelmi időzítő nem zárja be olvasás közben a magyarázatot).

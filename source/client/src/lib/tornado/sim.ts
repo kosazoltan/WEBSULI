@@ -327,7 +327,8 @@ export function createChaseCore(opts: {
         events.push({ kind: "pad-gone" });
       }
       if (pad && !padArmed && padReached(pad, px, pz)) padArmed = true;
-      if (pad && padArmed && q.canAsk()) {
+      // Review #610: tartás (horgonyzás / mérési sáv) alatt a már elért pad sem kérdez — a turbót a tartás tiltja; elengedve igen.
+      if (pad && padArmed && !ctx.hold && q.canAsk()) {
         if (padAskSince === null) padAskSince = clock;
         if (!ask("turbo", "trigger") && !q.pending() && clock - padAskSince >= PAD_FREE_AFTER_MS) {
           // K4: nincs kérdés-forrás (üres kupon-lecke, kérdés nélküli mód) — a pad nem ragad be.
