@@ -58,7 +58,10 @@ test("C10: a Brain Rot kvízrétegén saját szünetgomb van (a z-60-as réteg t
 test("C9: Tornado — horgonyzott állapotban nincs új horgony-kvíz, és az eredmény bezárja a nyitott kvízt", () => {
   const src = strip(read("pages/TornadoHunter200.tsx"));
   assert.match(body(src, /tryAnchorRef\.current = \(\) => \{/, 300), /if \(playerRef\.current\.anchored\) return;/);
-  assert.match(body(src, /const finishRun = useCallback\(/, 2000), /setActiveQuiz\(null\);/);
+  // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 5.7, 9.; végrehajtás J7b 3.: a megállító overlay
+  // és vele az `activeQuiz` állapot megszűnt): az eredmény a közös kérdés-sávot zárja le — a nyitott kérdés „megszakítva”
+  // (`finish`), és a sáv nem marad az eredmény alatt (`abort`). A követelmény (az eredmény bezárja a nyitott kérdést) változatlan.
+  assert.match(body(src, /const finishRun = useCallback\(/, 2400), /qRef\.current\.finish\(\);\s*qRef\.current\.abort\(\);/);
 });
 
 test("L1: a Szökőár a tananyag-kérdés válaszát nem írja a közös szóbank-naplóba", () => {

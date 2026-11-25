@@ -6,6 +6,7 @@
  * tables so a track cannot accidentally get a level whose price is lower than
  * the one before it — the tests assert that monotonicity.
  */
+import { WIND_RESISTANCE_CAP } from "./wind";
 
 export type UpgradeTrackId = "engine" | "suspension" | "tires" | "chassis" | "anchor" | "instruments";
 
@@ -111,11 +112,18 @@ export type EffectiveStats = {
   handling: number;
   /** 100 = alap; a talaj tapadásának szorzója ennek századrésze. */
   grip: number;
+  /** A jármű alapadata × alváz. A játékban NEM hat (kanban #83 L2) — a garázs a `crashTolerance`-t mutatja. */
   stability: number;
+  /** Szélállóság (alap × alváz), a `WIND_RESISTANCE_CAP` fölött levágva: e fölött a szélsodrás már nem csökken (#83 L1). */
   windResistance: number;
+  /** A jármű alapadata × horgony. A játékban NEM hat (kanban #83 L2) — a garázs az `anchorSpeed`-et mutatja. */
   anchorPower: number;
   /** 100 = alap; a mérési sáv szélességének szorzója ennek századrésze. */
   instruments: number;
+  /** J7b / #83 L2 — a garázs „Stabilitás” sávja: ütközés-tűrés, 100 = alap (100 / `crashLossFactor`). */
+  crashTolerance: number;
+  /** J7b / #83 L2 — a garázs „Horgony” sávja: rögzítési gyorsaság, 100 = alap (100 × alap / `anchorHoldMs`). */
+  anchorSpeed: number;
   /** A talaj tapadásának szorzója (`tires`). */
   gripFactor: number;
   /** Az ütközési sebességvesztés szorzója (1 = alap, < 1 = kisebb vesztés; `chassis`). */
@@ -133,18 +141,21 @@ export function effectiveStats(base: UpgradeBaseStats, state: UpgradeState): Eff
   const mChassis = statMultiplier(state, "chassis");
   const mAnchor = statMultiplier(state, "anchor");
   const mInst = statMultiplier(state, "instruments");
+  const anchorHoldMs = Math.max(ANCHOR_HOLD_MIN_MS, Math.round(ANCHOR_HOLD_BASE_MS / mAnchor));
   return {
     speed: base.speed,
     acceleration: base.acceleration * mEngine,
     handling: base.handling * mSusp,
     grip: 100 * mTires,
     stability: base.stability * mChassis,
-    windResistance: base.windResistance * mChassis,
+    windResistance: Math.min(WIND_RESISTANCE_CAP, base.windResistance * mChassis),
     anchorPower: base.anchorPower * mAnchor,
     instruments: 100 * mInst,
+    crashTolerance: 100 * mChassis,
+    anchorSpeed: (100 * ANCHOR_HOLD_BASE_MS) / anchorHoldMs,
     gripFactor: mTires,
     crashLossFactor: 1 / mChassis,
-    anchorHoldMs: Math.max(ANCHOR_HOLD_MIN_MS, Math.round(ANCHOR_HOLD_BASE_MS / mAnchor)),
+    anchorHoldMs,
     bandWidthFactor: mInst,
   };
 }
