@@ -64,6 +64,13 @@ test("B7: a 400-as válasz után a bejegyzés törlődik, újra nem megy", async
   await page.goto("/");
   await page.waitForTimeout(1500);
   expect(finals(posts)).toHaveLength(1);
+  // review #608: ugyanazt a leckét újranyitva (a kör a tárolóból visszatöltődik) sem kerül újra sorba, és nem megy ki
+  await page.goto("/preview/quiz-fixture");
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  await expect(page.locator("[data-quiz-id]")).toHaveCount(25);
+  await page.waitForTimeout(2000);
+  expect(finals(posts)).toHaveLength(1);
+  expect(await outboxKeys(page)).toHaveLength(0);
 });
 
 test("B7 / R30: a 7 napnál régebbi tevékenységű bejegyzés induláskor küldés nélkül törlődik", async ({ page }) => {

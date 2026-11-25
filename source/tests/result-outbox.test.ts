@@ -113,3 +113,20 @@ test("B7: a kapcsoló alapból KI — élesben csak a build-idejű VITE_RESULT_O
   const app = readFileSync(new URL("../client/src/App.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(app, /if \(!resultOutboxEnabled\(\)\) return;/);
 });
+
+test("review #608: a hiba besorolása — csak ismert, végleges HTTP-4xx a végleges elutasítás; a besorolhatatlan hiba korlátos újrapróbára marad", async () => {
+  const { outboxFailureAction } = await import("../shared/result-outbox");
+  for (const status of [400, 401, 403, 404, 409, 413, 422]) assert.equal(outboxFailureAction(Object.assign(new Error("x"), { status })), "reject", String(status));
+  for (const status of [408, 429, 500, 502, 503, 504]) assert.equal(outboxFailureAction(Object.assign(new Error("x"), { status })), "retry", String(status));
+  assert.equal(outboxFailureAction(new Error("CSRF-token frissítés: 503 (státusz nélkül továbbítva)")), "retry", "státusz nélküli Error");
+  assert.equal(outboxFailureAction(new TypeError("Failed to fetch")), "retry", "hálózati hiba");
+  assert.equal(outboxFailureAction(null), "retry");
+});
+
+test("review #608: a végleges elutasítás külön, tartós jelző — a kör újra sorba vétele előtt ellenőrzött", () => {
+  const src = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
+  assert.match(src, /rejectedKeyOf\(/, "elutasítás-jelző kulcs");
+  const hook = src.slice(src.indexOf("if (resultOutboxEnabled()) {"), src.indexOf("outbox.add("));
+  assert.match(hook, /isRejected\(/, "a sorba vétel előtt ellenőrzi az elutasítást");
+  assert.match(src, /outboxFailureAction\(error\)/, "a besorolás a közös függvénnyel");
+});
