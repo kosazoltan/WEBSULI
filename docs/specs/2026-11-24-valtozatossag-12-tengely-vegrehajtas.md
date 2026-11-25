@@ -111,3 +111,14 @@ Dokumentált spec-változás: a V2a tesztje a hirdetett fajtákat a régi hárma
 2. GREEN: `shared/lesson-section-shapes.ts`, `shared/lesson-schema.ts` (`PROMPT_TRY_KINDS`), `server/studio/step-io.ts` (katalógus),
    `server/studio/single-run/engine.ts` (tantárgy → számos jelző).
 3. Próbahiba, kapulánc, PR (a V3a után).
+
+## V3b — végrehajtás (2026-11-25): kártyaformák a GYÁRTÁSBAN (V1 + V2b + V3a után)
+- Új változatossági tengely: **kártyaforma** (`CARD_FORMS`: fordítókártya, lépésenkénti felfedés, „Tudtad?”, döntés–következmény) — a
+  magból, a sorozatszabály a következőre lépteti, a job állapotába mentve (`cardForm`), folytatásnál a mentett számít (régi checkpoint:
+  nincs kártya-kiosztás).
+- Szerződés (BE változatosság): a lecke egy NEM első fejezetébe pontosan egy kiosztott kártya kerül `try` blokként (pontos spec-alak).
+- Kapu: ≥ 4 fejezetes leckénél a kiosztott kártya hiánya (vagy csak az első fejezetben) javító kört kap (`cardFormProblems`).
+- Új összefoglaló forma: **villámkártyák** (`villamkartya`) — a záró recap előtt egy `flashcards` csomag a kulcsfogalmakkal.
+- A szerzői katalógus a kártyafajták spec-alakját is közli.
+1. RED: `source/tests/lesson-card-form.test.ts`. 2. GREEN: `shared/lesson-variety-axes.ts`, `server/studio/{step-io.ts,pipeline-store.ts,
+   single-run/engine.ts}`. 3. Próbahiba, kapulánc, PR (a V1, V2a, V3a, V2b után).
