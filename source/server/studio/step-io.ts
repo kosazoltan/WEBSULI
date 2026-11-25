@@ -5,7 +5,7 @@ import { DECISION_STORY_CONTRACT } from "../../shared/decision-story";
 
 import type { MapConcept } from "./coverage";
 import { SUPPORTING_THRESHOLD } from "./coverage";
-import { PROMPT_ANIM_KINDS, TRY_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
+import { PROMPT_ANIM_KINDS, PROMPT_TRY_KINDS, ageBandForClassroom, conceptIdsOf, type Lesson, LESSON_TEXT_LIMITS } from "../../shared/lesson-schema";
 import { VISUAL_PARAMS_CONTRACT } from "../../shared/lesson-visual-params";
 import { subjectKindHintLine } from "../../shared/visual-kind-plan";
 import { LESSON_ARC_CONTRACT } from "../../shared/lesson-arc";
@@ -107,7 +107,7 @@ export const outlineSectionSchema = z.object({
    */
   sectionKind: z.enum(SECTION_KINDS).optional().catch(undefined),
   /** S6b (13. szakasz): a kiosztott `try`-fajta — a program írja (BE kapcsolónál), a modell kéretlen értékét a motor eldobja. */
-  tryKind: z.enum(TRY_KINDS).optional().catch(undefined),
+  tryKind: z.enum(PROMPT_TRY_KINDS).optional().catch(undefined),
 });
 
 export type OutlineSection = z.infer<typeof outlineSectionSchema>;
