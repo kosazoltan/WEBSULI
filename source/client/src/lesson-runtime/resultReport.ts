@@ -8,7 +8,7 @@ import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapsho
 import { isRetryableRequestError } from "@shared/request-retry";
 import { createRoundOwners, isFreshRound, roundHasActivity } from "@shared/round-owner";
 import { createOutboxStore, outboxEntryExpired, outboxFailureAction, rejectedKeyOf, type OutboxEntry } from "@shared/result-outbox";
-import { roundIdOf, sentFlagsOf } from "@shared/round-id";
+import { legacyRoundIdField, outboxFlagsOf, roundIdOf, sentFlagsOf } from "@shared/round-id";
 import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
@@ -68,7 +68,7 @@ class OutboxEntryExpired extends Error {}
 export function drainResultOutbox(): void {
   const now = Date.now();
   for (const entry of outbox.read()) {
-    if ([entry.flag, ...(entry.alsoFlags ?? [])].some(flagSet) || isRejected(entry.flag)) { outbox.remove(entry.id); continue; }
+    if ([entry.flag, ...(entry.alsoFlags ?? [])].some(flagSet) || [entry.flag, ...(entry.alsoFlags ?? [])].some(isRejected)) { outbox.remove(entry.id); continue; }
     // R30: a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül.
     if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
     const state = outboxAttempts.get(entry.id);
@@ -98,7 +98,7 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     // R30: a lejárt bejegyzés küldés nélkül kikerül. Review #608: végleges elutasítás csak ismert, végleges HTTP-4xx-nél — akkor a kör
     // elutasítás-jelzőt kap (újranyitáskor sem kerül újra sorba); minden más (besorolhatatlan hiba is) korlátos újrapróbán marad.
     if (error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
-    if (outboxFailureAction(error) === "reject") { markRejected(entry.flag); outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
+    if (outboxFailureAction(error) === "reject") { [entry.flag, ...(entry.alsoFlags ?? [])].forEach(markRejected); outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
     const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
     const delay = RESULT_REPORT_RETRY_DELAYS_MS[Math.min(attempts, RESULT_REPORT_RETRY_DELAYS_MS.length) - 1];
     outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });
@@ -149,15 +149,16 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const owner = roundOwners.bind(ownerKey, seenFresh.current.has(experienceFingerprint({ ids: round.ids })));
     if (resultOutboxEnabled()) {
       // Review #608: a véglegesen elutasított kör újra nem kerül sorba (a lecke újranyitásakor sem).
-      if (isRejected(flag)) return;
+      if (flags.some(f => isRejected(f))) return;
       // B7 (R24): BE állásban a kör törzse várakozás nélkül a tartós sorba kerül, és a sor azonnal ürül (a küldést a sor végzi).
       const times = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
       const body = kind === "tasks"
-        ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])) }
-        : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])) };
+        ? { kind, roundId, ...legacyRoundIdField(round), answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])) }
+        : { kind, roundId, ...legacyRoundIdField(round), picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])) };
       // R30: lezárt körnél a sorba kerülés ideje, le nem zártnál a kör utolsó tevékenysége.
       const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
-      outbox.add({ id: `${lessonId}|${flag}`, lessonId, kind, body, times, flag, alsoFlags: flags.slice(1), partialKey: `${storageKey}:${kind}:partial:${roundId}`, ownerKey, owner, activityAt });
+      const entryFlags = outboxFlagsOf(storageKey, kind, round);
+      outbox.add({ id: `${lessonId}|${entryFlags.flag}`, lessonId, kind, body, times, flag: entryFlags.flag, alsoFlags: entryFlags.alsoFlags, partialKey: `${storageKey}:${kind}:partial:${roundId}`, ownerKey, owner, activityAt });
       drainResultOutbox();
       return;
     }
@@ -173,9 +174,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         // utáni belső ismétlés után is — PR #574 review), így a várakozás alatti újrapárosítás sem öröklődik.
         const learnerNow = ({ ownerBinding }: { ownerBinding: boolean }) => (ownerBinding ? roundOwners.learnerFor(owner) : getLearnerToken() ?? undefined);
         const bodyFor = (learner: string | undefined) => kind === "tasks"
-          ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }
+          ? { kind, roundId, ...legacyRoundIdField(round), answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) }
           // Review #280: a kör minden kérdése megy; a kihagyott -1 (nulla pont), különben a levél pontszáma eltérne a képernyőétől.
-          : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
+          : { kind, roundId, ...legacyRoundIdField(round), picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
         // J5 (spec 2026-11-10-gyartas-meres) + B2 (#510 R26): ingadozó mobilhálózaton az eredmény ne vesszen el — hálózati hibánál,
         // időtúllépésnél és 5xx-nél újrapróba, de egyetlen szinten (lásd RESULT_REPORT_ATTEMPTS). Biztonságos: a szerver a kört egyedi
         // kulccsal egyszer rögzíti. B2 (#510 R8): a kvíz végleges kérése `keepalive` (az utolsó válasz utáni lapbezárás nem szakítja meg);
@@ -253,7 +254,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           const learnerNow = ({ ownerBinding }: { ownerBinding: boolean }) => (ownerBinding ? roundOwners.learnerFor(owner) : getLearnerToken() ?? undefined);
           const body = (ctx: { ownerBinding: boolean }) => {
             const learner = learnerNow(ctx);
-            return { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}) };
+            return { kind, roundId, ...legacyRoundIdField(current), partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}) };
           };
           await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: true, timeout: left });
           accepted = true;

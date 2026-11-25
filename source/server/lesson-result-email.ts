@@ -159,13 +159,21 @@ export function setRoundStateFault(fault: ((stage: "finalized" | "partialSent") 
  * #510 R27 + R42: a jelzősor és a tulajdonos-sor egy tranzakcióban. Igaz, ha ez az ELSŐ végleges beküldés a körre. Ismétlésnél a jelzősor
  * `created_at`-ja best effort frissül (R51 L2: a hibája nem kerüli meg a hívó tulajdonos-ellenőrzését); az írás hibája a hívóhoz jut (503).
  */
-async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number, who: string): Promise<boolean> {
+async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId: string, percent: number, who: string, legacyRoundId?: string): Promise<boolean> {
   finalMarkerFault?.("insert");
   const fresh = await db.transaction(async tx => {
     const marker = await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(roundId, kind), percent })
       .onConflictDoNothing().returning({ id: lessonResultEmails.id });
-    if (marker.length) await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalOwnerKeyOf(who, kind, roundId), percent }).onConflictDoNothing();
-    return marker.length > 0;
+    if (!marker.length) return false;
+    // Review #613 (B8): az új azonosítójú kör a régi azonosítóját is lefoglalja — a régi kliens késői végleges beküldése így duplikátum;
+    // ha a régi azonosítóval már véglegesítették (régi kliens), ez a beküldés duplikátum (tulajdonos-sor nélkül).
+    if (legacyRoundId && legacyRoundId !== roundId) {
+      const legacy = await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalRoundKeyOf(legacyRoundId, kind), percent })
+        .onConflictDoNothing().returning({ id: lessonResultEmails.id });
+      if (!legacy.length) return false;
+    }
+    await tx.insert(lessonResultEmails).values({ lessonId, kind, roundKey: finalOwnerKeyOf(who, kind, roundId), percent }).onConflictDoNothing();
+    return true;
   });
   if (fresh) return true;
   try {
@@ -351,20 +359,21 @@ function schedulePartial(key: string, owner: string, answered: number, send: (ve
  * A „félbehagyva” levél egy küldési kísérlete a kör kizárása ALATT: (R1 / R18) ha a kör közben véglegesült, (R21) ha újabb pillanatkép
  * ütemeződött, nem küld. A bukott kísérlet egyetlen újrapróbája ugyanezen a kapun megy át (E17: véglegesített körre az újrapróbából sem).
  */
-async function attemptPartial(lessonId: string, roundId: string, version: number, input: Parameters<typeof sendLessonResult>[0], retryLeft: number): Promise<void> {
+async function attemptPartial(lessonId: string, roundId: string, version: number, input: Parameters<typeof sendLessonResult>[0], retryLeft: number, aliases: readonly string[] = []): Promise<void> {
   const key = `${lessonId}|${roundId}`;
   // PR #577 review: a kapu (állapot-lekérdezés) átmeneti hibája is sikertelen kísérlet — az egyetlen újrapróba ugyanezen a kapun
   // (változat + véglegesítés) megy át újra, így a 202-vel nyugtázott pillanatkép nem vész el egy pillanatnyi DB-hiba miatt.
   const outcome = await withRoundLock(key, async () => {
     if (partialVersions.get(key) !== version) return null;
-    if (await roundFinalized(lessonId, roundId)) { forgetPartial(key); return null; }
+    // Review #613: a kör bármelyik azonosítójával (r2 / régi) történt véglegesítés elnyomja a „félbehagyva” levelet.
+    for (const id of [roundId, ...aliases]) if (await roundFinalized(lessonId, id)) { forgetPartial(key); return null; }
     const report = { failed: 0 };
     await sendLessonResult(input, false, report);
     if (report.failed === 0) forgetPartial(key);
     return report;
   }).catch((error) => { logger.warn(`[LESSON-RESULT] a félbehagyott kvíz kísérletének kapuja átmenetileg hibázott: ${errorClass(error)}`); return { failed: 1 }; });
   if (outcome && outcome.failed !== 0 && retryLeft > 0) {
-    defer(() => { void track(attemptPartial(lessonId, roundId, version, input, retryLeft - 1)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz újrapróbája nem sikerült: ${errorClass(error)}`)); });
+    defer(() => { void track(attemptPartial(lessonId, roundId, version, input, retryLeft - 1, aliases)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz újrapróbája nem sikerült: ${errorClass(error)}`)); });
   }
 }
 
@@ -493,7 +502,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   const lockKey = `${req.params.lessonId}|${body.roundId}`;
   if (partialOn) {
     // B5a-1: a pillanatkép — (P4 / R18) véglegesített körre nem ütemeződik; (R6) kiment „félbehagyva” levél után sem; különben (R7) ütemez.
-    if (await roundFinalized(req.params.lessonId, body.roundId)) return res.status(202).json({ queued: false, partial: true, finalized: true });
+    const partialAliases = body.legacyRoundId && body.legacyRoundId !== body.roundId ? [body.legacyRoundId] : [];
+    for (const id of [body.roundId, ...partialAliases]) if (await roundFinalized(req.params.lessonId, id)) return res.status(202).json({ queued: false, partial: true, finalized: true });
     if (await partialAlreadySent(req.params.lessonId, body.roundId)) return res.status(202).json({ queued: false, partial: true, alreadySent: true });
     const partialGraded = graded as GradedQuiz;
     const lessonId = req.params.lessonId;
@@ -504,7 +514,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     schedulePartial(lockKey, `${lessonId}|${who}`, partialGraded.meta?.partial?.answered ?? 0, async version => {
       const learner = pairedName ?? await learnerName(userId);
       await attemptPartial(lessonId, roundId, version, { lessonId, roundKey: partialRoundKeyOf(roundId), learner,
-        ...(paired && !userId ? { learnerFirst: paired.firstName } : {}), guest: !userId && !paired, graded: partialGraded }, 1);
+        ...(paired && !userId ? { learnerFirst: paired.firstName } : {}), guest: !userId && !paired, graded: partialGraded }, 1, partialAliases);
     });
     return res.status(202).json({ queued: true, partial: true });
   }
@@ -520,7 +530,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     // az ő beküldése rögzíti a jelzőt (legfeljebb egy további levélpár), minden további kilét duplikátum; az eredeti kilét a saját során
     // csak a hiányzó címzettjeit pótolja. A bekapcsolás előtti körök a kliens „elküldve” jelzője miatt jellemzően nem jönnek újra.
     let first: boolean;
-    try { first = await claimFinalRound(req.params.lessonId, body.kind, body.roundId, graded.summary.percent, who); }
+    try { first = await claimFinalRound(req.params.lessonId, body.kind, body.roundId, graded.summary.percent, who, body.legacyRoundId); }
     catch (error) { logger.error(`[LESSON-RESULT] a véglegesítés nyoma nem íródott: ${errorClass(error)}`); return res.status(503).json({ message: "Átmeneti hiba — próbáld újra." }); }
     if (!first) {
       let own: string[];
@@ -554,7 +564,14 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   // B5a-1 (R1, R15): a kvíz véglegesítése SZINKRON jelölődik (innentől „félbehagyva” kísérlet nem küld), a várakozó pillanatkép törlődik;
   // hogy a részleges levél korábban kiment-e (felülíró mondat), az a kör kizárása alatt dől el, a háttérben.
   const finalizing = once && graded.kind === "quiz";
-  if (finalizing) { markFinalized(lockKey); cancelPartial(lockKey); partialVersions.delete(lockKey); forgetPartial(lockKey); }
+  if (finalizing) {
+    markFinalized(lockKey); cancelPartial(lockKey); partialVersions.delete(lockKey); forgetPartial(lockKey);
+    // Review #613: a régi azonosító is véglegesített (a régi azonosítóval várakozó pillanatkép sem megy ki).
+    if (body.legacyRoundId && body.legacyRoundId !== body.roundId) {
+      const legacyLock = `${req.params.lessonId}|${body.legacyRoundId}`;
+      markFinalized(legacyLock); cancelPartial(legacyLock); partialVersions.delete(legacyLock); forgetPartial(legacyLock);
+    }
+  }
   const lessonIdF = req.params.lessonId;
   // Review #586: vendégnél csak egyértelmű (ujjlenyomatos) kilét párosít — a közös tartalék-kilét (IP / „?”) nem keverheti össze
   // különböző vendégek eredményét; ilyenkor a régi egyrészes út megy.
