@@ -7,6 +7,7 @@ import { CLIP_BAND_STYLE, clipBandFor, clipImagePrompt, type ClipBandStyle } fro
 import type { DesignThemeId } from "../shared/lesson-design";
 import { spokenHu } from "../shared/hu-numbers";
 import { logger } from "./lib/logger";
+import { redactCredentials } from "./lib/error-sanitize";
 import type { ClipMediaKind } from "./lesson-clip-media";
 
 /**
@@ -219,7 +220,20 @@ export async function writeDraft(input: ClipInput, band: DesignThemeId, deps: Pi
 
 export type ChapterStats = { images: number; imageRetries: number; audio: number; audioRetries: number; audioImperfect: number; videos: number; videoFailures: number; bytes: number };
 
-const describe = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 200);
+/**
+ * Naplóbiztos hibaleírás a kisfilm-út MINDEN naplóhatárára (#529 vak kör 1 L1, hibaosztály): egy URL-ből csak a host marad (az útvonal
+ * és a lekérdezés hozzáférési adatot hordozhat — aláírt letöltési cím), a hitelesítő címkék (token, secret, authorization, …) és a sor
+ * további része kitakarva; legfeljebb 200 karakter.
+ */
+export function clipLogDetail(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const noUrls = raw.replace(/\bhttps?:\/\/[^\s"'<>()]+/gi, (url) => {
+    try { return `[cím: ${new URL(url).host}]`; } catch { return "[cím]"; }
+  });
+  return redactCredentials(noUrls).slice(0, 200);
+}
+
+const describe = clipLogDetail;
 
 /** Egy mondat hangja legfeljebb ennyiszer készül el, amíg a visszaírt szöveg betűre nem egyezik. */
 export const CLIP_SPEECH_ATTEMPTS = 3;
@@ -426,12 +440,13 @@ export async function stopLessonClipWorker(waitMs = 30_000): Promise<void> {
   clearTimeout(timer);
 }
 /** Indítás (csak élesben hívja a szerver). Gyártás csak `auto` módban; különben nem indul időzítő. */
-export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void }, env: Record<string, string | undefined> = process.env): ClipMode {
+export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void; rss?: () => number }, env: Record<string, string | undefined> = process.env): ClipMode {
   const mode = clipsMode(env);
   if (mode !== "auto" || started) return mode;
   started = true;
-  const { deps, model, maintenance } = makeDeps();
-  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: () => process.memoryUsage().rss, shouldStop: () => stopping };
+  const { deps, model, maintenance, rss } = makeDeps();
+  // FLAKE-KISFILM-RSS: a memóriamérés befecskendezhető (teszt); élesben a folyamat valódi RSS-e.
+  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: rss ?? (() => process.memoryUsage().rss), shouldStop: () => stopping };
   let running = false;
   const run = async () => {
     if (running || stopping) return;
