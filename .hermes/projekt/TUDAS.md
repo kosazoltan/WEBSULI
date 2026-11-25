@@ -46,6 +46,12 @@
 - 2026-11-24 — Őr-tesztet érintő PR-nál push ELŐTT `git merge origin/main` (különben a merge-kapu C-61 FAIL → újabb ~1 órás CI). Egy másik PR beolvasztása után a még futó CI-jű PR-ba azonnal olvaszd be a maint.
 - 2026-11-24 — A `local-review.mjs` (helyi 9B modell) ugyanarra a kódra futásonként új, gyakran spekulatív high-t ad. Minden high-t kódból ellenőrizz (AGENTS.md): igazolt hibánál javítás + új ellenőrzés; `--refuted ... --refuted-reason` KIZÁRÓLAG kódhivatkozással bizonyított hamis pozitívra; új fejen a korábbi cáfolat érvényességét újra ellenőrizd, mielőtt átviszed.
 - 2026-11-24 — A zárási TRAP-sort linked worktree-ből a `zaro-hurok.mjs trap add` a FŐ checkoutba írja (mainWorktree) — tudás-ágon a sort kézzel kell átvinni, a fő checkoutot visszaállítani.
+- 2026-11-25 — Egymásra épülő ágak + squash merge: ha B az A ágról nyílt és A squash-sal beolvad, a main-t NE merge-öld vakon B-be (ugyanaz a változás két alakban → ütközés). Előtte `git rebase --onto origin/main <A fej a B nyitásakor>` (B még nem pusholt → nem force-push).
+- 2026-11-25 — Lánc-szkript: a sikertelen `git merge origin/main` félbehagyott merge-ben hagyja a munkafát. Ha CSAK `docs/specs/*.md` ütközik (közös végrehajtási napló), mindkét szakasz marad (main, majd ág); kódütközésnél abort és kézi feloldás.
+- 2026-11-25 — E2E: a „már elküldve” localStorage-jelző a 2xx válasz FELDOLGOZÁSA után íródik — a POST megérkezése után `expect.poll`-lal várd. Mentett (bejelentkezett) kvíz e2e-nél a `/api/lessons/review/<lecke>`-t is mockold: a 401 az `AuthStatus` révén kiüríti a kilétet.
+- 2026-11-25 — Szövegcsere CRLF-fájlon Pythonból: szövegmódú olvasás a CRLF-et LF-re fordítja, a `\r\n`-es minta csendben nem talál → `newline=""` + normalizálás és visszaírás az eredeti sorvéggel; a cserét mindig `assert count == 1`.
+- 2026-11-25 — Változatosság KI = bájtra azonos kérés: a szolgáltatói szigorú séma (`response_format`) is a kérés része — új mező csak BE mellett (V4 `quizFormats`).
+- 2026-11-25 — FLAKE-U4-R1: a `delivered_at` a kézbesítési zár tranzakciójában, a levelek UTÁN íródik — DB-teszt fix türelmi idő helyett korlátos lekérdező várakozással (`waitRows`) mérje.
 
 ## Kapcsolódó
 - Hermes-projekt: `websuli` (mappa: `WEBSULI`) · Kanban-tábla: `websuli`
