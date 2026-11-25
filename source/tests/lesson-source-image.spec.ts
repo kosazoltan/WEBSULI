@@ -9,11 +9,15 @@ const PNG = Buffer.from("89504e470d0a1a0a0000000d4948445200000001000000010806000
 test("a sourceImage blokk: kép a végpontról, alt, felirat és kattintható forrásmegjelölés", async ({ page }) => {
   const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: Array<{ coversConceptIds?: string[] }> }> };
   const concept = lesson.sections[0].blocks.find(b => b.coversConceptIds?.length)!.coversConceptIds!.slice(0, 1);
+  // Ismeretlen azonosítójú kép (404): az ábra nem marad törött képként a leckében.
+  lesson.sections[0].blocks.push({ kind: "animate", animKind: "sourceImage", caption: "Hiányzó kép felirata.", coversConceptIds: concept,
+    params: { imageId: "d".repeat(64), alt: "Hiányzó", credit: "x" } } as never);
   lesson.sections[0].blocks.push({ kind: "animate", animKind: "sourceImage", caption: "A vulkán keresztmetszete a forrásban.", coversConceptIds: concept,
     params: { imageId: ID, alt: "Rétegvulkán keresztmetszete", credit: "nkp.hu — Földrajz 7.", sourceUrl: "https://www.nkp.hu/foldrajz" } } as never);
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === `/api/source-images/${ID}`) return route.fulfill({ status: 200, contentType: "image/png", body: PNG });
+    if (path.startsWith("/api/source-images/")) return route.fulfill({ status: 404, json: {} });
     if (path === "/api/auth/user") return route.fulfill({ json: null });
     if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
     if (path === "/api/html-files/img-fixture") return route.fulfill({ json: { id: "img-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
@@ -22,7 +26,7 @@ test("a sourceImage blokk: kép a végpontról, alt, felirat és kattintható fo
     return route.fulfill({ json: [] });
   });
   await page.goto("/preview/img-fixture");
-  const figure = page.locator('[data-anim="sourceImage"]').first();
+  const figure = page.locator('[data-anim="sourceImage"]').filter({ hasText: "A vulkán keresztmetszete" });
   await figure.scrollIntoViewIfNeeded();
   const img = figure.locator("img");
   await expect(img).toHaveAttribute("alt", "Rétegvulkán keresztmetszete");
@@ -31,4 +35,5 @@ test("a sourceImage blokk: kép a végpontról, alt, felirat és kattintható fo
   const credit = figure.getByRole("link", { name: /nkp\.hu — Földrajz 7\./ });
   await expect(credit).toHaveAttribute("href", "https://www.nkp.hu/foldrajz");
   await expect(credit).toHaveAttribute("rel", /noopener/);
+  await expect(page.locator('[data-anim="sourceImage"]').filter({ hasText: "Hiányzó kép felirata." })).toHaveCount(0);
 });

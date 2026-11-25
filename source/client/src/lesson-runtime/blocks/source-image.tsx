@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { sourceImageParamsSchema, sourceImageSrc } from "@shared/source-image";
 
 type AnimProps = { params: Record<string, unknown>; caption: string };
@@ -7,13 +8,15 @@ type AnimProps = { params: Record<string, unknown>; caption: string };
  * (webes forrásnál kattintható, új lapon, `noopener noreferrer`). Hibás paraméter → nem jelenik meg (mint a többi ábrafajta).
  */
 export function SourceImageAnim({ params, caption }: AnimProps) {
+  const [broken, setBroken] = useState(false);
   const parsed = sourceImageParamsSchema.safeParse(params);
-  if (!parsed.success) return null;
+  // A nem létező / betölthetetlen kép (pl. ismeretlen azonosító) nem hagy törött képet a leckében: az ábra elrejtve.
+  if (!parsed.success || broken) return null;
   const p = parsed.data;
   const credit = p.page ? `${p.credit}, ${p.page}. oldal` : p.credit;
   return (
     <figure className="lesson-source-image my-4" data-anim="sourceImage">
-      <img src={sourceImageSrc(p.imageId)} alt={p.alt} loading="lazy" decoding="async" className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg border" />
+      <img src={sourceImageSrc(p.imageId)} alt={p.alt} loading="lazy" decoding="async" onError={() => setBroken(true)} className="mx-auto max-h-[70vh] w-auto max-w-full rounded-lg border" />
       <figcaption className="text-sm text-muted-foreground mt-2">
         {caption}
         <span className="block text-xs mt-1">Forrás:{" "}

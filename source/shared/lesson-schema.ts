@@ -396,18 +396,11 @@ const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema
  * előtti séma, vagyis a kimenet elfogadása, a levágott mezők és a hibaüzenetek (tartalom ÉS sorrend) a kapcsoló előttivel azonosak.
  * A tárolt leckét OLVASNI mindig a teljes `lessonSchema`-val kell.
  */
-/** D1H: a modell kimenetében a `sourceImage` tilos — a kivágott képet és azonosítóját a program tölti (hamis azonosító nem juthat be). */
-const noModelSourceImage = (block: unknown, ctx: z.RefinementCtx, path: Array<string | number>) => {
-  const b = block as { kind?: unknown; animKind?: unknown } | null;
-  if (b?.kind === "animate" && b.animKind === "sourceImage") ctx.addIssue({ code: z.ZodIssueCode.custom, path, message: "A sourceImage ábrát a program tölti; a modell nem írhat ilyet." });
-};
-const modelFullLessonSchema = lessonSchema.superRefine((lesson, ctx) => lesson.sections.forEach((s, i) => s.blocks.forEach((b, j) => noModelSourceImage(b, ctx, ["sections", i, "blocks", j]))));
-const modelFullBlockSchema = blockSchema.superRefine((block, ctx) => noModelSourceImage(block, ctx, []));
 export function modelLessonSchema(sourceVisuals: boolean): z.ZodType<z.infer<typeof lessonSchema>, z.ZodTypeDef, unknown> {
-  return sourceVisuals ? modelFullLessonSchema : legacyLessonSchema;
+  return sourceVisuals ? lessonSchema : legacyLessonSchema;
 }
 export function modelBlockSchema(sourceVisuals: boolean): z.ZodType<z.infer<typeof blockSchema>, z.ZodTypeDef, unknown> {
-  return sourceVisuals ? modelFullBlockSchema : legacyBlockSchema;
+  return sourceVisuals ? blockSchema : legacyBlockSchema;
 }
 
 export type Block = z.infer<typeof blockSchema>;

@@ -21,6 +21,8 @@ A táblázat, folyamat, döntési fa, szabálydoboz, képes kártya továbbra is
 - **D1H-1:** séma (`sourceImage` ábrafajta + paraméterek), tárolás (migráció 0049), végpont, lejátszó-megjelenítés (figure + forrás).
 - **D1H-2:** a leltár `photo` fajtája és a `box` kivágási keret (fénykép / nehezen rajzolható ábra); kivágás KÉP forrásból (sharp),
   a gyártás a leltár-azonosító alapján tölti a paramétereket (a modell nem ír képazonosítót); hiányzó kivágás → az elem kimarad.
+  A lecke mentésének határa eldobja azt a `sourceImage`-et, amelynek azonosítója nincs a tárban (a modell által kitalált azonosító
+  így nem juthat a leckébe). A D1H-1-ben a fajta a gyártó promptjaiban nem hirdetett, és a lejátszó a betölthetetlen képet elrejti.
 - **D1H-3:** kivágás PDF-oldalból: az oldal raszterizálása (pdfjs + szerveroldali vászon), majd ugyanaz az út.
 - **D1H-4:** élesítés a kapcsolóval, mérés egy valódi leckén (képes PDF és webes kép).
 

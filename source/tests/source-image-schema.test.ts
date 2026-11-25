@@ -33,7 +33,10 @@ test("a lecke sémája a sourceImage blokkot érvényes paraméterrel elfogadja,
   assert.equal(lessonSchema.safeParse(withBlock({ imageId: "x", alt: "Vulkán", credit: "nkp.hu" })).success, false);
 });
 
-test("a modell kimenete sourceImage blokkot SOHA nem hozhat (a képet a program vágja és tölti) — kapcsoló BE és KI mellett sem", () => {
-  for (const on of [true, false]) assert.equal(modelLessonSchema(on).safeParse(withBlock({ imageId: ID, alt: "Vulkán", credit: "nkp.hu" })).success, false, `sourceVisuals=${on}`);
-  assert.equal(modelLessonSchema(true).safeParse(fusionFixture()).success, true, "a kép nélküli lecke változatlanul átmegy");
+test("a sourceImage a gyártó promptjaiban nem hirdetett fajta (a modell nem ismeri); KI kapcsolónál a modell-séma nem fogadja el", async () => {
+  const { PROMPT_ANIM_KINDS } = await import("../shared/lesson-schema");
+  const { SOURCE_VISUALS_CONTRACT } = await import("../shared/source-visuals");
+  assert.equal((PROMPT_ANIM_KINDS as readonly string[]).includes("sourceImage"), false);
+  assert.doesNotMatch(String(SOURCE_VISUALS_CONTRACT), /sourceImage/);
+  assert.equal(modelLessonSchema(false).safeParse(withBlock({ imageId: ID, alt: "Vulkán", credit: "nkp.hu" })).success, false);
 });
