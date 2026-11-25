@@ -199,7 +199,7 @@ test("B2: usableSource — kép és szkennelt PDF szöveg nélkül elfogadva, hi
   const photo = usableSource({ url: "https://a.hu/k.png", title: "Térkép", text: "", format: "image", images: [img(10)], needsOcr: true });
   assert.equal(photo?.format, "image");
   assert.equal(photo?.images?.length, 1);
-  const scan = usableSource({ url: "https://a.hu/s.pdf", title: "Szkennelt", text: "", format: "pdf", images: [], needsOcr: true, scan: { mime: "application/pdf", dataUrl: "data:application/pdf;base64,JVBERg==" } });
+  const scan = usableSource({ url: "https://a.hu/s.pdf", title: "Szkennelt", text: "", format: "pdf", images: [], needsOcr: true, scan: { mime: "application/pdf" as const, dataUrl: "data:application/pdf;base64,JVBERg==" } });
   assert.equal(scan?.scan?.mime, "application/pdf");
   assert.equal(usableSource({ url: "https://a.hu/x", title: "Korlátozva", text: "", format: "image", images: [img(10)] }), undefined, "hibaoldal-cím");
   const many = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "docx", images: [img(10), img(2_000_000), img(20), img(30), img(40)] });

@@ -109,7 +109,7 @@ test("üres letöltés, hitelesítetlen készítő vagy hiányzó futásazonosí
 test("B3 + B4: kép → image, szkennelt PDF → pdf, beágyazott kép → image; egyedi név; ≤ 6 vizuális fájl, ≤ 10 MB; a vizuális forrás felhasznált", () => {
   const png = (n: number, bytes = 100) => ({ mime: "image/png", dataUrl: `data:image/png;base64,${"A".repeat(4)}${n}`, bytes, sourceUrl: `https://pelda.hu/k${n}.png` });
   const photo = { url: "https://pelda.hu/terkep.png", title: "Térkép", text: "", format: "image" as const, images: [png(1)], needsOcr: true };
-  const scan = { url: "https://pelda.hu/szkennelt.pdf", title: "Szkennelt", text: "", format: "pdf" as const, images: [], needsOcr: true, scan: { mime: "application/pdf", dataUrl: "data:application/pdf;base64,JVBERi0=" } };
+  const scan = { url: "https://pelda.hu/szkennelt.pdf", title: "Szkennelt", text: "", format: "pdf" as const, images: [], needsOcr: true, scan: { mime: "application/pdf" as const, dataUrl: "data:application/pdf;base64,JVBERi0=" } };
   const doc = { ...page(1), format: "docx" as const, images: [png(2), png(3)] };
   const { files, sources } = webSourcesToOneStepFiles([doc, photo, scan]);
   assert.deepEqual(files.map(f => f.kind), ["text", "image", "image", "image", "pdf"]);
