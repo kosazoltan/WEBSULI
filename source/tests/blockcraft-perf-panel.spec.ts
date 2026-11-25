@@ -538,7 +538,11 @@ test("WebGL-kontextusvesztéskor nincs „kirajzolt” képkocka, FPS-minta, GPU
   expect(start.lost).toBe(true);
   const probe = await page.evaluate(() => (window as unknown as PerfTestWindow).__websuliPerf.runGpuProbe(5));
   expect(probe, "elveszett kontextuson a GPU-próba nem ad eredményt").toBeNull();
-  await expect.poll(() => page.evaluate(() => (window as unknown as PerfTestWindow).__bcRafCalls ?? 0), { timeout: 60_000 }).toBeGreaterThan(10);
+  // J3a (K.4/7, review #484 — dokumentált spec-változás a J3A-INTEGRACIO-ban): kontextusvesztéskor a játék SZÜNETEL és a
+  // „Grafika újraindítása” jelenik meg, a hurok tehát nem kér új képkockát (a főági változatban tovább pörgött rajzolás nélkül). A vak
+  // kör L2 lényege változatlan: nincs „kirajzolt” képkocka, FPS-minta, GPU-próbaeredmény, és a panel „áll”.
+  await expect(page.getByTestId("bc-gl-lost")).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(1500);
   const s = await snapshot(page);
   expect(s.renderedFrames, "rajzolás nélküli visszatérés nem kirajzolt képkocka").toBe(start.frames);
   expect(s.frame, "nincs FPS-minta").toBeNull();
@@ -569,28 +573,28 @@ test("könnyű grafika módban (aktív képpont-plafon) a 100 / 75 / 50 % három
   expect((await snapshot(page)).cssWidth).toBe(at100.cssWidth);
 });
 
-test("álló 360×640-en a panel a sort törő érintési súgó alatt kezdődik, nem takarja (2026-11-21 vak kör L4)", async ({ page }) => {
+test("álló 360×640-en a panel a teljes felső HUD alatt kezdődik, nem takarja (2026-11-21 vak kör L4)", async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize({ width: 360, height: 640 });
   await startGame(page, "&perf=1&look=medium");
   await expect(page.getByTestId("bc-perf-panel")).toBeVisible({ timeout: 20_000 });
-  const hint = page.getByText("Bal: mozgás · jobb: nézelődés", { exact: false });
-  await expect(hint).toBeVisible();
-  // A súgó 6 s után eltűnik — a helyet és a találatot egyszerre, a lapon belül mérjük. A panel helye másodpercenként frissül.
+  // J3a (dokumentált spec-változás a J3A-INTEGRACIO-ban): a Rúnabánya felső HUD-ja (`bc-top-hud`) már nem visz külön sort törő érintési
+  // súgót („Bal: mozgás · …”) — a vak kör L4 szabálya a teljes felső HUD-ra áll: a panel alatta kezdődik, és a HUD közepét nem takarja.
   await expect
     .poll(
       () =>
         page.evaluate(() => {
           const panel = document.querySelector('[data-testid="bc-perf-panel"]')!.getBoundingClientRect();
-          const tip = Array.from(document.querySelectorAll("span")).find((el) => el.textContent?.startsWith("Bal: mozgás"));
-          if (!tip) return "nincs súgó";
-          const r = tip.getBoundingClientRect();
+          const hud = document.querySelector('[data-testid="bc-top-hud"]');
+          if (!hud) return "nincs felső HUD";
+          const r = hud.getBoundingClientRect();
+          if (r.height <= 0) return "üres felső HUD";
           const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) as HTMLElement | null;
-          if (panel.top < r.bottom) return `a panel teteje (${panel.top}) a súgó alja (${r.bottom}) fölött`;
-          if (hit && hit.closest('[data-testid="bc-perf-panel"]')) return "a súgó közepén a panel van";
+          if (panel.top < r.bottom) return `a panel teteje (${panel.top}) a HUD alja (${r.bottom}) fölött`;
+          if (hit && hit.closest('[data-testid="bc-perf-panel"]')) return "a HUD közepén a panel van";
           return "ok";
         }),
-      { timeout: 4_000 },
+      { timeout: 8_000 },
     )
     .toBe("ok");
 });
