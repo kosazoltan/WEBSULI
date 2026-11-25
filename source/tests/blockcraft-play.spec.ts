@@ -716,3 +716,31 @@ test("vak K6: nyitott kérdés alatt a lap legfeljebb ~13 render/s (a kérdés-s
   expect((await probe(page)).lockOpen, "a mérés nyitott zár alatt történt").toBe(1);
   expect(rate, `render/s nyitott kérdés alatt: ${rate.toFixed(1)}`).toBeLessThanOrEqual(13);
 });
+
+/* ------------------------- review #484 (BlockCraftQuiz.tsx:3229): a dinamikus sorkorlát újramérést indít ------------------------- */
+/** Közepes prompt: 3–5 sorba befér, de a leghosszabb válaszok mellett a kártya 2 sorra szűkül. */
+const MEDIUM_PROMPT_XLONG_QUIZ = {
+  prompt:
+    "Egy bányász reggel 12 kockát bányászott, délben a felét elhasználta egy hídhoz, délután még hármat talált. " +
+    "Hány kockája maradt estére a hátizsákjában?",
+  options: MATERIAL_XLONG_QUIZ.options,
+  correctIndex: 0,
+};
+
+test.describe("review #484 360x640: a 2 sorra szűkített közepes prompt", () => {
+  test.use({ viewport: { width: 360, height: 640 } });
+  test("ha a sorkorlát utólag levágja a kérdést, megjelenik a „Mutasd”", async ({ page }) => {
+    await startGame(page);
+    await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), MEDIUM_PROMPT_XLONG_QUIZ);
+    await expect(page.locator('[data-testid="bc-quiz"] [data-correct]')).toHaveCount(4, { timeout: 10_000 });
+    // A mérő (200 ms-onként) beállítja a sorkorlátot; várunk, amíg elrendeződik.
+    await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--bc-pq-lines")), { timeout: 5_000 }).toBe("2");
+    await page.waitForTimeout(800);
+    const clipped = await page.evaluate(() => {
+      const el = document.querySelector<HTMLElement>(".play-question-prompt");
+      return !!el && el.scrollHeight > el.clientHeight + 1;
+    });
+    expect(clipped, "a próba valóban levágott promptot ad (különben nem bizonyít)").toBe(true);
+    await expect(page.getByTestId("play-question-more"), "a levágott kérdés vége elérhető").toBeVisible({ timeout: 3_000 });
+  });
+});
