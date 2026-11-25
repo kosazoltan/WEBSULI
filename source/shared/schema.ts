@@ -1186,6 +1186,18 @@ export const lessonResultEmails = pgTable(
 );
 
 /** U4 (docs/specs/2026-11-24-osszevont-eredmenylevel.md): a kétrészes lecke félretett végleges részeredménye (0047). */
+/** D1H-1 (migrations/0049): a forrás kivágott képei, tartalomcímzetten (sha256). */
+export const lessonSourceImages = pgTable("lesson_source_images", {
+  id: char("id", { length: 64 }).primaryKey(),
+  mime: varchar("mime", { length: 32 }).notNull(),
+  bytes: bytea("bytes").notNull(),
+  sourceUrl: text("source_url"),
+  sourceFile: text("source_file"),
+  page: smallint("page"),
+  credit: text("credit").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const lessonResultPending = pgTable(
   "lesson_result_pending",
   {

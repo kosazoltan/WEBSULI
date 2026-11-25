@@ -7,10 +7,10 @@ import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 /** D1H-1 (docs/specs/2026-11-25-d1h-kivagott-kep.md): a `sourceImage` ábrafajta paraméterei és a modellkimenet határa. */
 
 const ID = "a".repeat(64);
-const block = (params: Record<string, unknown>) => ({ kind: "animate", animKind: "sourceImage", params, caption: "A vulkán keresztmetszete a forrásban.", coversConceptIds: [] });
 function withBlock(params: Record<string, unknown>) {
-  const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: unknown[] }> };
-  lesson.sections[0].blocks.push(block(params));
+  const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: Array<{ coversConceptIds?: string[] }> }> };
+  const concept = lesson.sections[0].blocks.find(b => b.coversConceptIds?.length)!.coversConceptIds!.slice(0, 1);
+  lesson.sections[0].blocks.push({ kind: "animate", animKind: "sourceImage", params, caption: "A vulkán keresztmetszete a forrásban.", coversConceptIds: concept } as never);
   return lesson;
 }
 
