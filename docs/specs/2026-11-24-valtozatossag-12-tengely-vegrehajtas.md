@@ -65,6 +65,32 @@ Cél: a régi (gyorsítótárazott) kliens az újabb programverzió blokkfajtái
 3. Próbahiba, kapulánc, PR; beolvadás és DEPLOY után indulhat a V2 / V3 (új fajták gyártása).
 Hatókörön kívül (a V4 terve dönt): a gyakorlókvíz új kérdéstípusai — a V4 visszafelé kompatibilis alakkal (választós alap) vezeti be.
 
+## V4 — végrehajtás (2026-11-25): kvízkérdés-típusok keverése
+**Döntés (a terv „beírós szám” típusától eltérve):** minden kvíztípus a meglévő, opcióindex-alapú adatmodellben marad (`options`,
+`correctIndex`, `feedbackPerOption`) — a szabad beírás megtörné az index-alapú eredménymodellt (eredménylevél, részleges kiértékelés,
+játékexport: `shared/lesson-result-email.ts` `gradeQuiz` a `picks` indexeiből dolgozik). A típus az opcionális `format` mező:
+- `choice` (alapértelmezés, hiányzó mező = ez) — egyválasztós;
+- `fillGap` — kiegészítés: a kérdés pontosan egy `___` hiányt tartalmaz, az opciók a hiány kitöltései; a megjelenítő a választott opciót a
+  hiányba írja;
+- `oddOneOut` — kakukktojás: pontosan 4 opció, a helyes a „nem illik a sorba”;
+- `number` — számolós: minden opció szám (mértékegységgel is), a helyes a számítás eredménye.
+A régi kliens a `format` mezőt figyelmen kívül hagyja (a zod objektum levágja) — egyválasztósként jeleníti meg, helyesen pontoz.
+Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, legalább 2 különböző típus (`quizFormatProblems`, javító kört kap).
+1. RED: `source/tests/quiz-formats.test.ts` (séma fajtánként; keverési szabály; szerződés-sor; a pontozás index-alapú, típustól független;
+   a szigorú csomagséma a mezőt kéri), `source/tests/lesson-quiz-formats.spec.ts` (e2e: kiegészítésnél a hiányba kerül a válasz,
+   kakukktojás- és számolós címke).
+2. GREEN: `shared/lesson-experience.ts`, `server/studio/bank-schema.ts`, `server/studio/experience-builder.ts`,
+   `client/src/lesson-runtime/LessonExperienceView.tsx`, `LessonRuntimeProbe.tsx` (`?quizFormats=1`).
+
+### V4 — kapulánc-javítás (2026-11-25)
+- A szolgáltatói szigorú séma (`bankResponseFormat`) a `format` mezőt CSAK változatosság BE mellett kéri (`quizFormats`); KI-ben a `response_format` bájtra a régi — a KI kérés nem változik (TRAP: új szerzői/szolgáltatói tartalom csak BE mögé).
+- Dokumentált tesztváltozás: a `lesson-variety-paths` hamis modellje BE kérésben (KVÍZTÍPUSOK szabály) típusolt kvízt ad (`bankAnswer`), mert a V4 bankszabálya (≥ 6 kérdésnél ≥ 2 típus) BE-ben kötelező; a `quiz-formats` séma-tesztje a BE és a KI sémát külön méri.
+
+### V4 — review #603 (2026-11-25)
+- Számolós opció: a meglévő számértelmezővel (`isNumericOption`, `shared/single-choice-check.ts`) — tört, vegyes tört, tagolt egész, előjel, opcionális mértékegység.
+- Ismétlődés-kulcs: a kakukktojás-törzs („Melyik nem illik a sorba?”) és minden `oddOneOut` tétel az opciókészlettel kulcsolt.
+- Bejelentkezett tanuló mentett kvíze: a típus a lecke azonos kérdéséből (questionId + azonos szöveg) — címke és kitöltött hiány; eltérő szövegnél (frissült lecke) választós.
+
 ## V2a — végrehajtás (2026-11-25): öt új feladatfajta — séma, pontozó, megjelenítő (gyártás nélkül)
 Előfeltétel: a V-kompat élesítése (a régi kliens az ismeretlen `tryKind` helyén frissítésre kérő magyarázatot mutat). A V2a a fajtákat
 NEM hirdeti a modellnek (a szerzői katalógus és a vázlat `tryKind`-ja a régi hármas — `PROMPT_TRY_KINDS`); a gyártási prompt és a kapu

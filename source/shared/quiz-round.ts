@@ -25,3 +25,22 @@ export function roundTooOld(activityAt: number, now: number): boolean {
 export function roundActivityAt(round: { lastAnsweredAt?: number }): number {
   return round.lastAnsweredAt ?? 0;
 }
+
+/** B5b (docs/specs/2026-11-25-eredmeny-email-b5b.md): a kör megválaszolt kérdései (csak a kör kérdései számítanak). */
+export function answeredCount(round: { ids: readonly string[]; picks: Readonly<Record<string, number>> }): number {
+  return round.ids.reduce((n, id) => n + (round.picks[id] !== undefined ? 1 : 0), 0);
+}
+
+/** A pillanatkép-küldés állapota: a körre legutóbb ELFOGADOTT (2xx) és az éppen úton lévő pillanatkép. */
+export type SnapshotState = { sent: { roundId: string; count: number } | null; pending: { roundId: string; count: number } | null };
+
+/**
+ * B5b (4. pont): pillanatkép akkor megy, ha van válasz, és több, mint a körre legutóbb elfogadott ÉS az úton lévő (azonos körben) —
+ * ugyanaz az állapot nem megy kétszer, másik kör tiszta lappal indul.
+ */
+export function snapshotDue(state: SnapshotState, roundId: string, count: number): boolean {
+  if (count <= 0) return false;
+  if (state.sent?.roundId === roundId && state.sent.count >= count) return false;
+  if (state.pending?.roundId === roundId && state.pending.count >= count) return false;
+  return true;
+}
