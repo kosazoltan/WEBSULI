@@ -221,3 +221,12 @@ test("review #592: ismétlődő FAT-szektorhivatkozású PPT → sérült fájl 
   for (let i = 1; i < 109; i++) bad.writeUInt32LE(0, 76 + i * 4);
   await assert.rejects(readWebDocument(bad, "", URL_), /sérült/);
 });
+
+test("W1b (B1): szkennelt PDF — a nyers PDF adat-URL-ként megmarad az átíráshoz (≤ 8 MB)", async () => {
+  const bytes = pdf([null]);
+  const scan = await readWebDocument(bytes, "application/pdf", URL_);
+  assert.equal(scan.needsOcr, true);
+  assert.equal(scan.scan?.dataUrl, `data:application/pdf;base64,${bytes.toString("base64")}`);
+  const text = await readWebDocument(pdf(["Van szovegretege"]), "application/pdf", URL_);
+  assert.equal(text.scan, undefined, "szövegrétegű PDF-hez nem kell nyers másolat");
+});
