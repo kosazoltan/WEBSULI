@@ -64,3 +64,20 @@ Cél: a régi (gyorsítótárazott) kliens az újabb programverzió blokkfajtái
    névvel), `client/src/lesson-runtime/LessonView.tsx` (olvasás).
 3. Próbahiba, kapulánc, PR; beolvadás és DEPLOY után indulhat a V2 / V3 (új fajták gyártása).
 Hatókörön kívül (a V4 terve dönt): a gyakorlókvíz új kérdéstípusai — a V4 visszafelé kompatibilis alakkal (választós alap) vezeti be.
+
+## V4 — végrehajtás (2026-11-25): kvízkérdés-típusok keverése
+**Döntés (a terv „beírós szám” típusától eltérve):** minden kvíztípus a meglévő, opcióindex-alapú adatmodellben marad (`options`,
+`correctIndex`, `feedbackPerOption`) — a szabad beírás megtörné az index-alapú eredménymodellt (eredménylevél, részleges kiértékelés,
+játékexport: `shared/lesson-result-email.ts` `gradeQuiz` a `picks` indexeiből dolgozik). A típus az opcionális `format` mező:
+- `choice` (alapértelmezés, hiányzó mező = ez) — egyválasztós;
+- `fillGap` — kiegészítés: a kérdés pontosan egy `___` hiányt tartalmaz, az opciók a hiány kitöltései; a megjelenítő a választott opciót a
+  hiányba írja;
+- `oddOneOut` — kakukktojás: pontosan 4 opció, a helyes a „nem illik a sorba”;
+- `number` — számolós: minden opció szám (mértékegységgel is), a helyes a számítás eredménye.
+A régi kliens a `format` mezőt figyelmen kívül hagyja (a zod objektum levágja) — egyválasztósként jeleníti meg, helyesen pontoz.
+Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, legalább 2 különböző típus (`quizFormatProblems`, javító kört kap).
+1. RED: `source/tests/quiz-formats.test.ts` (séma fajtánként; keverési szabály; szerződés-sor; a pontozás index-alapú, típustól független;
+   a szigorú csomagséma a mezőt kéri), `source/tests/lesson-quiz-formats.spec.ts` (e2e: kiegészítésnél a hiányba kerül a válasz,
+   kakukktojás- és számolós címke).
+2. GREEN: `shared/lesson-experience.ts`, `server/studio/bank-schema.ts`, `server/studio/experience-builder.ts`,
+   `client/src/lesson-runtime/LessonExperienceView.tsx`, `LessonRuntimeProbe.tsx` (`?quizFormats=1`).
