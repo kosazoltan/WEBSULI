@@ -417,3 +417,40 @@ test("vak 3. kör L4: a lecke-kupon bónusz a lejárt kérdésre -1-et kap, a me
   assert.equal(couponClaimIndex({ result: "correct", pickedOriginalIndex: 0 }), 0, "a 0. index is érvényes választás");
   assert.equal(couponClaimIndex({ result: "wrong", pickedOriginalIndex: null }), null);
 });
+
+test("review #486 (#679ypC): a felirat sorszáma is számít — a mért szóközökkel és törési helyekkel háromnál több sor → jelmagyarázat", async () => {
+  const { labelFitsChip, crystalLabelsFit } = await import("../client/src/lib/spaceAsteroid/crystals");
+  const measure = (word: string, px: number) => [...word].reduce((n, ch) => n + (ch === "W" || ch === "M" ? 0.95 : 0.56) * px, 0);
+  assert.equal(labelFitsChip("WWW WWW WWW WWW WWW", measure, 360), false, "19 karakter, de öt sor");
+  assert.equal(crystalLabelsFit(["WWW WWW WWW WWW WWW", "a", "b", "c"], (o) => labelFitsChip(o, measure, 360)), false);
+  assert.equal(labelFitsChip("Dunántúli-középhegység", measure, 360), true, "kötőjeles törés: két sor");
+  assert.equal(labelFitsChip("a kis herceg", measure, 360), true);
+});
+
+test("review #486 (#679ype): fekvő jelmagyarázat — a közös rácssorok maximumából becsül (sorszám-minimummal)", async () => {
+  const { landscapeLegendHeightPx, LEGEND_LANDSCAPE_LINE_PX, LEGEND_ITEM_GAP_PX } = await import("../client/src/lib/spaceAsteroid/crystals");
+  const long = "nagyon hosszú válasz, amely több sorra törik a keskeny oszlopban is";
+  const vp = { width: 844, height: 390 };
+  const longOnly = landscapeLegendHeightPx([long, "a", "b", long], vp.width);
+  const sameRows = landscapeLegendHeightPx([long, long, "a", "b"], vp.width);
+  assert.equal(longOnly, sameRows, "1. és 4. hosszú, 2. és 3. rövid: mindkét sorban hosszú elem van");
+  const minimal = landscapeLegendHeightPx(["a", "b", "c", "d"], vp.width);
+  assert.ok(minimal >= 2 * (18 + 8) + LEGEND_ITEM_GAP_PX, `a sorszámjel 18 px-es minimuma: ${minimal}`);
+  assert.ok(LEGEND_LANDSCAPE_LINE_PX < 18);
+});
+
+test("review #486 (#679yp8): helyhiánynál fedésmentes, külön elrendezés (360×640, 70 px-nél kezdődő 430 px-es vászon, hosszú kérdés)", async () => {
+  const { legendLayoutFor, CRYSTAL_CHIP_HALF_PX, LEGEND_BUTTON_PX, LEGEND_ITEM_GAP_PX } = await import("../client/src/lib/spaceAsteroid/crystals");
+  const prompt = "Melyik állítás igaz a magyar történelem egyik legfontosabb eseményére, az 1848-as forradalomra és szabadságharcra, amely Pesten kezdődött március tizenötödikén, és amelynek következményei a mai napig hatnak az ország politikai és kulturális életére?";
+  const l = legendLayoutFor({ labels: ["W".repeat(22), "M".repeat(22), "kör", "négyzet"], viewport: { width: 360, height: 640 }, safeTopPx: 0, prompt, boxTopPx: 70, boxHeightPx: 430 });
+  const crystalTop = 70 + 0.7 * 430 - CRYSTAL_CHIP_HALF_PX;
+  if (l.compact) {
+    assert.equal(l.listPx, 0, "tömör módban nincs lista a kártya alatt");
+    assert.equal(l.reservePx, 0);
+  } else {
+    assert.ok(l.topPx + LEGEND_BUTTON_PX + LEGEND_ITEM_GAP_PX + l.listPx <= crystalTop, `a jelmagyarázat alja (${l.topPx + LEGEND_BUTTON_PX + LEGEND_ITEM_GAP_PX + l.listPx}) a kristálygomb teteje (${crystalTop}) fölött`);
+  }
+  assert.equal(l.compact, true, "ebben a helyzetben a lista nem fér el → tömör mód");
+  const roomy = legendLayoutFor({ labels: ["W".repeat(22), "M".repeat(22), "kör", "négyzet"], viewport: { width: 390, height: 844 }, safeTopPx: 0, prompt: "Melyik a megfelelő?", boxTopPx: 70, boxHeightPx: 700 });
+  assert.equal(roomy.compact, false, "elegendő helynél marad a kártya alatti lista");
+});

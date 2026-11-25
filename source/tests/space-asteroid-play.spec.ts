@@ -970,3 +970,60 @@ test.describe("vak 4. kör L5 — a főellenfél legyőzése után is végigmegy
     expect(Date.now() - t0, "a helyes válasz legalább 1,8 mp-ig látható volt (mérési ráhagyással)").toBeGreaterThanOrEqual(1780);
   });
 });
+
+test.describe("review #486 (#679pgR) — a kijelzés közben elvesztett menetet semmi nem fordítja győzelemre", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("rossz válasz → kijelzés → utolsó élet elfogy → közben a főellenfél elesik: az eredmény „Kör vége” marad", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").click();
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    await force(page, { question: true, questionItem: { ...SHORT_ITEM, id: "r486-lost" } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
+    await closeList(page);
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
+    await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
+    await expect.poll(async () => (await probe(page)).reveal, { timeout: 3_000 }).toBe(1);
+    await force(page, { lastLife: true });
+    expect((await probe(page)).over).toBe(1);
+    await force(page, { bossFinale: true });
+    await expect(page.getByTestId("sa-over")).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByTestId("sa-over")).toContainText("Kör vége");
+  });
+});
+
+test.describe("review #486 (#679yp8) — 360×640, hosszú kérdés és jelmagyarázat: tömör, fedésmentes elrendezés", () => {
+  test.use({ viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true });
+
+  test("a „Válaszok” gomb nem fedi a kristályokat, a kártyát és a vezérlőket; megnyitva a teljes válaszlista olvasható", async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto("/games/space-asteroid-quiz");
+    await page.getByTestId("sa-start").tap();
+    await expect(page.getByTestId("sa-touch-controls")).toBeVisible({ timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await force(page, { noEnemies: true });
+    const prompt = "Melyik állítás igaz a magyar történelem egyik legfontosabb eseményére, az 1848-as forradalomra és szabadságharcra, amely Pesten kezdődött március tizenötödikén, és amelynek következményei a mai napig hatnak az ország politikai és kulturális életére?";
+    await force(page, { question: true, questionItem: { id: "r486-compact", prompt, options: ["W".repeat(22), "M".repeat(22), "kör", "négyzet"], correctIndex: 2 } });
+    await expect(crystals(page)).toHaveCount(4, { timeout: 8_000 });
+    await expect(page.getByTestId("sa-legend")).toHaveAttribute("data-compact", "true");
+    await page.waitForTimeout(400);
+    const rects = await page.evaluate(() => {
+      const r = (el: Element | null) => { if (!el) return null; const b = el.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
+      return {
+        button: r(document.querySelector('[data-testid="sa-answers-open"]')),
+        chips: [...document.querySelectorAll('[data-testid="sa-crystals"] .sa-crystal')].map(r),
+        controls: [...document.querySelectorAll('[data-testid="sa-touch-controls"] button, [data-testid="sa-touch-controls"] [role="slider"], .sa-joystick, .sa-fire')].map(r).filter((x) => x && x[2] > x[0]),
+        list: r(document.querySelector('[data-testid="sa-legend-list"]')),
+      };
+    });
+    const hit = (a: number[], b: number[]) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    expect(rects.button, "a „Válaszok” gomb látszik").not.toBeNull();
+    for (const c of rects.chips) expect(hit(rects.button!, c!), `a gomb ${JSON.stringify(rects.button)} nem fedi a kristályt ${JSON.stringify(c)}`).toBe(false);
+    for (const c of rects.controls) expect(hit(rects.button!, c!), `a gomb ${JSON.stringify(rects.button)} nem fedi a vezérlőt ${JSON.stringify(c)}`).toBe(false);
+    expect(rects.button![3] <= 640 && rects.button![0] >= 0 && rects.button![2] <= 360, "a gomb a nézeten belül").toBe(true);
+    await page.getByTestId("sa-answers-open").tap();
+    await expect(page.getByText("W".repeat(22)).first()).toBeVisible();
+  });
+});
