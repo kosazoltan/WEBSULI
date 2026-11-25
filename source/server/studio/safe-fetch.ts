@@ -24,7 +24,7 @@ export type RawRequest = (url: URL, address: ResolvedAddress, timeoutMs: number,
  * W1a: dokumentum-módban (`documents: true`) a PDF / DOCX / PPTX / PPT / ODP / ODT / MHT / kép is forrás: `format`, a kinyert szöveg,
  * a megőrzött képek (`images`) és a szövegréteg nélküli forrás jele (`needsOcr`, W1b írja át).
  */
-export type PublicPage = { url: string; title: string; text: string; format?: import("./web-document").WebFormat; images?: import("./web-document").WebImage[]; needsOcr?: boolean };
+export type PublicPage = { url: string; title: string; text: string; format?: import("./web-document").WebFormat; images?: import("./web-document").WebImage[]; needsOcr?: boolean; scan?: import("./web-document").WebScan };
 /** W1a: dokumentum-módban a letöltés méretkorlátja (a HTML-oldal korlátja 2 MB marad). */
 export const DOCUMENT_MAX_BYTES = 15 * 1024 * 1024;
 
@@ -248,7 +248,7 @@ async function fetchWithinDeadline(raw: string, opts: Parameters<typeof fetchPub
   if (opts.documents) {
     const { readWebDocument } = await import("./web-document");
     const doc = await readWebDocument(Buffer.from(bytes), contentType, url.href);
-    return { url: url.href, title: doc.title || url.href, text: doc.text, format: doc.format, images: doc.images, needsOcr: doc.needsOcr };
+    return { url: url.href, title: doc.title || url.href, text: doc.text, format: doc.format, images: doc.images, needsOcr: doc.needsOcr, ...(doc.scan ? { scan: doc.scan } : {}) };
   }
   const body = decode(bytes, charsetOf(contentType, bytes));
   if (/^text\/plain/i.test(contentType)) return { url: url.href, title: url.href, text: body.trim() };

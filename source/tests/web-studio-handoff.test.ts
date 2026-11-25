@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generateWebStudioLesson, MAX_SOURCE_CHARS, MAX_TOTAL_CHARS, webSourcesToOneStepFiles, type StudioRunView, type WebStudioDeps } from "../server/studio/web-studio-handoff";
+import { generateWebStudioLesson, MAX_SOURCE_CHARS, MAX_TOTAL_CHARS, MAX_VISUAL_BYTES, MAX_VISUAL_FILES, webSourcesToOneStepFiles, type StudioRunView, type WebStudioDeps } from "../server/studio/web-studio-handoff";
 import { WebResearchFailure, type ResearchObserver } from "../server/studio/web-research-runner";
 import type { OneStepRequest } from "../server/studio/one-step";
 import type { WebResearchEvent } from "../server/studio/web-research-agent";
@@ -103,4 +103,27 @@ test("üres letöltés, hitelesítetlen készítő vagy hiányzó futásazonosí
   noJob.observer.jobId = undefined;
   await assert.rejects(generateWebStudioLesson(input, noJob.observer, noJob.deps), /futás azonosítója/);
   assert.equal(empty.manufactured.length + anonymous.manufactured.length + noJob.manufactured.length, 0);
+});
+
+// W1b (B3, B4): a kép / szkennelt PDF / beágyazott kép a gyártásba vizuális fájlként megy át, keretek között.
+test("B3 + B4: kép → image, szkennelt PDF → pdf, beágyazott kép → image; egyedi név; ≤ 6 vizuális fájl, ≤ 10 MB; a vizuális forrás felhasznált", () => {
+  const png = (n: number, bytes = 100) => ({ mime: "image/png", dataUrl: `data:image/png;base64,${"A".repeat(4)}${n}`, bytes, sourceUrl: `https://pelda.hu/k${n}.png` });
+  const photo = { url: "https://pelda.hu/terkep.png", title: "Térkép", text: "", format: "image" as const, images: [png(1)], needsOcr: true };
+  const scan = { url: "https://pelda.hu/szkennelt.pdf", title: "Szkennelt", text: "", format: "pdf" as const, images: [], needsOcr: true, scan: { mime: "application/pdf" as const, dataUrl: "data:application/pdf;base64,JVBERi0=" } };
+  const doc = { ...page(1), format: "docx" as const, images: [png(2), png(3)] };
+  const { files, sources } = webSourcesToOneStepFiles([doc, photo, scan]);
+  // Review #593: a csak vizuális forrás mellé egy rövid forrásfejléc (URL + cím) is jár a gyártáshoz.
+  assert.deepEqual(files.map(f => f.kind), ["text", "image", "image", "image", "text", "pdf", "text"]);
+  const header = files.filter(f => f.kind === "text" && f.name.endsWith("-forras.txt"));
+  assert.equal(header.length, 2);
+  assert.match(header[0].content, /^Forrás: https:\/\/pelda\.hu\/terkep\.png\nCím: Térkép/);
+  assert.match(header[1].content, /szkennelt\.pdf/);
+  assert.equal(new Set(files.map(f => f.name)).size, files.length);
+  assert.ok(files.find(f => f.kind === "pdf")?.content.startsWith("data:application/pdf;base64,"));
+  assert.deepEqual(sources.map(s => s.url), [doc.url, photo.url, scan.url]);
+  const crowd = webSourcesToOneStepFiles(Array.from({ length: 5 }, (_, i) => ({ url: `https://pelda.hu/kep${i}.png`, title: `K${i}`, text: "", format: "image" as const, images: [png(10 + i, 3 * 1024 * 1024), png(20 + i)] })));
+  const visual = crowd.files.filter(f => f.kind !== "text");
+  assert.ok(crowd.files.filter(f => f.kind === "text").every(f => f.content.startsWith("Forrás: https://pelda.hu/kep")));
+  assert.ok(visual.length <= MAX_VISUAL_FILES);
+  assert.ok(visual.reduce((s, f) => s + Math.ceil(f.content.length * 3 / 4), 0) <= MAX_VISUAL_BYTES);
 });
