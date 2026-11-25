@@ -57,8 +57,8 @@ test("sorozat-előzmény: a mentett kártyaforma (camelCase) visszaolvasható", 
   assert.equal(seriesPreviousOf({ cardForm: "rossz érték!" }), undefined);
 });
 
-test("a szerzői katalógus a kártyák spec-alakját is közli", async () => {
-  const { AUTHOR_BLOCK_CATALOG } = await import("../server/studio/step-io");
+test("a szerzői katalógus (BE változatosság) a kártyák spec-alakját is közli", async () => {
+  const { AUTHOR_BLOCK_CATALOG_VARIETY: AUTHOR_BLOCK_CATALOG } = await import("../server/studio/step-io");
   for (const [k, f] of [["flipCard", "front"], ["stepReveal", "steps"], ["didYouKnow", "fact"], ["decision", "consequence"], ["flashcards", "cards"]]) {
     assert.ok(AUTHOR_BLOCK_CATALOG.includes(`${k}:`) && AUTHOR_BLOCK_CATALOG.includes(`"${f}"`), k);
   }
