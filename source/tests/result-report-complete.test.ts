@@ -25,8 +25,11 @@ test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a f
   assert.match(source, /if \(!lessonId \|\| !done \|\| !\(ready \|\| timedOut\)\) return;/);
   // A körönkénti egyszeri küldés őrei: a localStorage-jelző és a folyamatban lévő küldés. B5b / R20 (dokumentált spec-változás,
   // docs/specs/2026-11-25-eredmeny-email-b5b.md 6. pont): az „úton van” őr KÖRÖNKÉNTI (a jelző kulcsán), nem komponensszintű.
-  assert.match(source, /if \(localStorage\.getItem\(flag\)\) return;/);
-  assert.match(source, /if \(sentInMemory\.has\(flag\) \|\| sending\.current\.has\(flag\)\) return;/);
+  // B8 (dokumentált spec-változás, docs/specs/2026-11-25-eredmeny-email-b8.md 3. pont): a jelző a kör BÁRMELYIK azonosítójáé lehet
+  // (az új `r2-` és a régi) — a memóriabeli és a tárolt jelzőt a `flagSet` nézi, mindegyikre.
+  assert.match(source, /const flags = sentFlagsOf\(storageKey, kind, round\);/);
+  assert.match(source, /if \(sending\.current\.has\(flag\) \|\| flags\.some\(flagSet\)\) return;/);
+  assert.match(source, /const flagSet = \(flag: string\) => \{ if \(sentInMemory\.has\(flag\)\) return true; try \{ return !!localStorage\.getItem\(flag\); \}/);
   assert.match(source, /sending\.current\.add\(flag\);/);
   assert.match(source, /finally \{ sending\.current\.delete\(flag\); \}/);
 });
