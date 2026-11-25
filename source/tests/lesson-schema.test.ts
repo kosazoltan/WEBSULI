@@ -142,6 +142,12 @@ test("animate and try only accept the planned kinds", () => {
     dragSort: { items: ["a", "b"], correctOrder: ["a", "b"] },
     fillBlank: { text: "A ___ b.", answers: ["x"] },
     match: { pairs: [{ left: "a", right: "b" }] },
+    // V2a: az öt új fajta (üres spec is elutasítandó — B2)
+    trueFalseSeries: { statements: [{ text: "A", answer: true }, { text: "B", answer: false }] },
+    highlight: { text: "A macska fut.", targets: ["macska"] },
+    categorize: { categories: ["x", "y"], items: [{ text: "a", category: "x" }, { text: "b", category: "y" }, { text: "c", category: "x" }] },
+    numberLine: { min: 0, max: 10, target: 5, tolerance: 1 },
+    estimate: { min: 0, max: 100, answer: 50 },
   };
   for (const tryKind of TRY_KINDS) {
     assert.throws(

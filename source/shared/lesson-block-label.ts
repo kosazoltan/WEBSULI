@@ -60,7 +60,11 @@ export const SOURCE_VISUAL_TEXT = {
 } as const;
 const ruleBoxTone = (params: unknown): RuleBoxTone => { const t = (params as { tone?: unknown } | null)?.tone; return t === "warning" || t === "tip" ? t : "rule"; };
 
-export const TRY_LABELS: Readonly<Record<string, string>> = { dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd" };
+export const TRY_LABELS: Readonly<Record<string, string>> = {
+  dragSort: "Rendezd sorba", fillBlank: "Egészítsd ki", match: "Párosítsd",
+  // V2a
+  trueFalseSeries: "Igaz vagy hamis?", highlight: "Jelöld ki", categorize: "Csoportosítsd", numberLine: "Helyezd el a számegyenesen", estimate: "Becsüld meg",
+};
 
 /** Spec 2026-11-08-tartalmi-fejlecek-2: az ellenőrző kérdés IQ-formája a kérdés szövegéből (az első egyező). */
 export const CHECK_FORMS: ReadonlyArray<readonly [RegExp, string]> = [

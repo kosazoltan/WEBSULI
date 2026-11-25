@@ -1,3 +1,4 @@
+import { readCategorize, readHighlight, readTrueFalse } from "../../shared/try-scoring";
 import type { MapConcept } from "./coverage";
 import { renderedVisualTexts } from "../../shared/lesson-visual-params";
 import { containsFormula, formulaKey } from "../../shared/formula-text";
@@ -289,6 +290,11 @@ export function blockText(block: Record<string, unknown>): string {
     if (block.tryKind === "dragSort" && Array.isArray(spec.items)) {
       parts.push(...spec.items.filter((x): x is string => typeof x === "string"));
     }
+    // V2a: a megjelenített szövegek (állítás, kiemelendő szöveg, kategória és elem, utasítás) bizonyítékok; a helyes válasz nem.
+    if (block.tryKind === "trueFalseSeries") parts.push(...readTrueFalse(spec).statements.map((s) => s.text));
+    if (block.tryKind === "highlight") { const h = readHighlight(spec); parts.push(h.text, ...(h.prompt ? [h.prompt] : [])); }
+    if (block.tryKind === "categorize") { const c = readCategorize(spec); parts.push(...c.categories, ...c.items.map((i) => i.text)); }
+    if ((block.tryKind === "numberLine" || block.tryKind === "estimate") && typeof spec.prompt === "string") parts.push(spec.prompt);
     if (block.tryKind === "match" && Array.isArray(spec.pairs)) {
       for (const pair of spec.pairs) {
         if (pair && typeof pair.left === "string" && typeof pair.right === "string") parts.push(pair.left, pair.right);

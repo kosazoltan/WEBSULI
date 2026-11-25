@@ -1,14 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
-/** V-kompat (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): újabb blokkfajta → a lecke megjelenik, az ismeretlen blokk kimarad. */
+/** V-kompat (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): újabb blokkfajta → a lecke megjelenik, az ismeretlen blokk kimarad.
+ *  SPEC-VÁLTOZÁS 2026-11-25 (V2a): a numberLine ismert tryKind lett, ezért a próbabeli „ismeretlen” feladat a holoSlider. */
 test.use({ serviceWorkers: "block" });
 
 test("új kind és új tryKind a leckében: a lecke nem sérült, az ismert blokk látszik, az ismeretlen nem", async ({ page }) => {
   const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: Array<{ coversConceptIds?: string[] }> }> };
   const concept = lesson.sections[0].blocks.find(b => b.coversConceptIds?.length)!.coversConceptIds!.slice(0, 1);
   lesson.sections[0].blocks.unshift({ kind: "flipCard", front: "ISMERETLEN-KARTYA", back: "x", coversConceptIds: concept } as never);
-  lesson.sections[0].blocks.push({ kind: "try", tryKind: "numberLine", spec: { prompt: "ISMERETLEN-FELADAT" }, coversConceptIds: concept } as never);
+  lesson.sections[0].blocks.push({ kind: "try", tryKind: "holoSlider", spec: { prompt: "ISMERETLEN-FELADAT" }, coversConceptIds: concept } as never);
   lesson.sections[0].blocks.push({ kind: "explain", text: "Ez az ismert blokk látszik.", depth: "core", readAloud: false, coversConceptIds: concept } as never);
   await page.route("**/api/**", async route => {
     const path = new URL(route.request().url()).pathname;

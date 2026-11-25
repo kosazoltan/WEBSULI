@@ -27,7 +27,7 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
   assert.match(report, /resultTimes: times/, "az időbélyegek külön opcióként mennek az apiRequest-nek");
   const client = read("client/src/lib/queryClient.ts");
   // B5b (dokumentált spec-változás: docs/specs/2026-11-25-eredmeny-email-b5b.md 1. pont): a token a pillanatkép jelzését is hordozza.
-  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\), ownerBinding: data\.resultOwnerBinding === true, partial: data\.resultPartial === true \};/);
+  assert.match(client, /return \{ token: data\.csrfToken, resultApi: supportsResultApi\(data\), ownerBinding: data\.resultOwnerBinding === true, partial: data\.resultPartial === true, roundAlias: data\.resultRoundAlias === true \};/);
   assert.match(client, /capable && addsFields \?/, "a mezők csak képes szervernél olvadnak a törzsbe");
   assert.match(client, /await sendOnce\(capable, controller\.signal\)/);
   assert.match(client, /await sendOnce\(newCsrfToken\.resultApi, retryController\.signal\)/, "a CSRF-újrapróba a friss token jelzését követi");
@@ -36,6 +36,16 @@ test("B3: a végleges törzs új mezői (startedAt, lastAnsweredAt) csak jelzés
 
 test("B3: a szerver még nem hirdeti a V2-t (a hirdetés a B5a elfogadási feltétele)", () => {
   assert.doesNotMatch(read("server/routes.ts"), /resultApi\s*:/);
+});
+
+test("review #613: a legacyRoundId csak a szerver resultRoundAlias hirdetésére kerül a vezetékre", () => {
+  const client = read("client/src/lib/queryClient.ts");
+  assert.match(client, /roundAlias: data\.resultRoundAlias === true/);
+  assert.match(client, /resultBodyForServer\(/);
+  const routes = read("server/routes.ts");
+  const csrf = routes.slice(routes.indexOf("app.get('/api/csrf-token'"), routes.indexOf("app.get('/api/csrf-token'") + 1200);
+  assert.match(csrf, /resultRoundAlias: true/);
+  assert.match(read("client/src/lib/queryClient.ts"), /resultBodyForServer\(d as Record<string, unknown>, roundAlias\)/, "a szerializáló a jelzés szerint formálja a törzset");
 });
 
 test("B5b: a szerver a pillanatkép képességét CSAK a RESULT_PARTIAL_EMAIL kapcsolóval hirdeti (resultPartial: true)", () => {

@@ -49,7 +49,8 @@ test("minden kérdés megválaszolva: a kvíz a lezáró gomb nélkül, pontosan
   await quiz.nth(24).locator("button.lesson-option").first().click();
   await expect.poll(() => quizPosts(posts).length).toBe(1);
   const sent = quizPosts(posts)[0];
-  expect(sent.roundId).toMatch(/^round-[a-z0-9]+$/);
+  // B8 (dokumentált spec-változás, docs/specs/2026-11-25-eredmeny-email-b8.md 1. pont): az új kör azonosítója r2-<128 bit>.
+  expect(sent.roundId).toMatch(/^r2-[0-9a-f]{32}$/);
   const picks = sent.picks as Record<string, number>;
   expect(Object.keys(picks)).toHaveLength(25);
   expect(Object.values(picks).every(pick => Number.isInteger(pick) && pick >= 0), "minden kérdésre valódi válasz").toBe(true);
