@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type ElementHandle, type Page } from "@playwright/test";
 
 /**
  * J4a — „Neon védőtorony” valódi érintéssel (végrehajtás J4a 6.; terv J1, J4, J5, J9, J16; K.4/13–18, 23–25).
@@ -48,6 +48,8 @@ async function recordRound(page: Page): Promise<void> {
     // drónonként (helye szerint: `sq-drone-<i>`) egyszer — a React újrarajzolása új elemet adhat ugyanarra a drónra
     const seen = new Set<string>();
     // a felvétel előtti (előző feladatból maradt) státusz nem kimenetel — csak az utána megjelenő számít
+    // Review #576: csak UGYANANNAK a státuszelemnek a kezdeti szövege nem kimenetel — a kérdésazonosítóval kulcsolt kártya
+    // kérdésenként új elemet hoz (InlineQuestion.tsx), így a következő kérdés azonos „Lejárt az idő” szövege már számít.
     const statusEl0 = document.querySelector('[data-testid="play-question-status"]');
     const initial = `${statusEl0?.getAttribute("data-tone") ?? ""}|${statusEl0?.textContent ?? ""}`;
     const drone = (el: Element) => {
@@ -64,7 +66,7 @@ async function recordRound(page: Page): Promise<void> {
       const el = document.querySelector('[data-testid="play-question-status"]');
       const tone = el?.getAttribute("data-tone");
       const text = el?.textContent ?? "";
-      if (`${tone ?? ""}|${text}` === initial) return;
+      if (el === statusEl0 && `${tone ?? ""}|${text}` === initial) return;
       if (tone === "good") rec.outcome = "correct";
       else if (tone === "bad") rec.outcome = /Lejárt az idő/.test(text) ? "timeout" : "wrong";
     };
@@ -74,6 +76,9 @@ async function recordRound(page: Page): Promise<void> {
         if (m.type === "childList") m.addedNodes.forEach(n => { if (n instanceof Element) { if (n.hasAttribute("data-correct")) drone(n); n.querySelectorAll("[data-correct]").forEach(drone); } });
       }
       status();
+      // Review #576: a kimenetel után a felvétel lezárul (a mostani csomag drónállapotai már feldolgozva) — a későbbi kérdések
+      // drónjai nem számolódnak a rögzített kimenetelhez.
+      if (rec.outcome) obs.disconnect();
     });
     obs.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["data-state", "data-tone"] });
     w.__sqObs = obs;
@@ -86,7 +91,7 @@ const recorded = (page: Page) => page.evaluate(() => (window as unknown as { __s
  * ablakán túl érkezett (terhelt futtató: „Lejárt az idő” — a játék helyes viselkedése, nem a koppintás hibája), a következő feladaton
  * újra próbálja, legfeljebb háromszor; a kimenetelt adja vissza (a hívó állít rá).
  */
-async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promise<void>): Promise<Recorded> {
+async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promise<void>): Promise<Recorded & { wave: ElementHandle<Element>[] }> {
   const selector = `[data-testid="sq-answers"] [data-correct="${correct}"]`;
   for (let attempt = 1; ; attempt++) {
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
@@ -96,7 +101,8 @@ async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promi
     await tapCenter(page, selector);
     await expect.poll(async () => (await recorded(page)).outcome, { timeout: 10_000, message: "a feladat kimenetele (státuszsor)" }).not.toBeNull();
     const rec = await recorded(page);
-    if (rec.outcome !== "timeout" || attempt >= 3) { await Promise.all(wave.map(n => n.dispose())); return rec; }
+    // Review #576: a TÉNYLEGESEN megválaszolt feladat drónjait adja vissza — a hívó ezek eltűnését várja (újrapróba után nem a lejártét).
+    if (rec.outcome !== "timeout" || attempt >= 3) return { ...rec, wave };
     // a lejárt feladat kijelzése után új négy drón jön — a régi négy elem eltűnése tartósan ellenőrizhető
     await expect.poll(() => page.evaluate(nodes => nodes.filter(node => node.isConnected).length, wave), { timeout: 15_000 }).toBe(0);
     await Promise.all(wave.map(n => n.dispose()));
@@ -157,10 +163,9 @@ test.describe("valódi érintés", () => {
 
     // 1. feladat: a JÓ drón érintéssel → a pont nő, a drón zöld.
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
-    const firstWave = await drones(page).elementHandles();
-    expect(firstWave).toHaveLength(4);
     await expect(page.getByTestId("play-question-more"), "a feladat koppintás nélkül olvasható").toHaveCount(0);
     const first = await answerRound(page, true);
+    const firstWave = first.wave;
     expect(first.outcome, "a jó drón érintése helyes válasz").toBe("correct");
     expect(first.correctDrone, "a jó drón zöldre vált").toBe(1);
     expect(first.wrongDrones, "jó válasznál egyik rossz drón sem vált pirosra").toBe(0);
@@ -177,6 +182,7 @@ test.describe("valódi érintés", () => {
     expect(second.outcome, "a rossz drón érintése hibás válasz").toBe("wrong");
     expect(second.correctDrone, "a helyes drón zölden látszik").toBe(1);
     expect(second.wrongDrones, "pontosan a koppintott rossz drón vált pirosra").toBe(1);
+    await Promise.all(second.wave.map(node => node.dispose()));
     expect(await page.locator('[role="dialog"]').count(), "a hibás válasz nem nyit blokkoló kártyát").toBe(0);
     await shot(page, "touch-wrong.jpg");
     await page.getByTestId("play-why").tap();
@@ -208,6 +214,7 @@ test.describe("valódi érintés", () => {
     const third = await answerRound(page, false, armReveal);
     expect(third.outcome, "a rossz drón érintése hibás válasz").toBe("wrong");
     expect(third.wrongDrones, "pontosan a koppintott rossz drón vált pirosra").toBe(1);
+    await Promise.all(third.wave.map(node => node.dispose()));
     await expect.poll(async () => (await reveal()).start !== null, { timeout: 5_000 }).toBe(true);
     await expect.poll(async () => (await reveal()).end !== null, { timeout: 20_000 }).toBe(true);
     const r = await reveal();
