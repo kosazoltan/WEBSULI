@@ -66,7 +66,8 @@ test("szünet: a render-ciklus, a játékóra és a vezérlés szünetben áll",
   // szünet (és a „Miért?” kártya) is benne van.
   has(code, /const shouldRun = phase === "play" && !paused && !why\b[^;]*;/, "a shouldRun feltételből hiányzik a paused / a „Miért?”");
   has(code, /if \(phase !== "play" \|\| paused\) return;\s*const id = setInterval/, "a játékóra szünetben is jár");
-  has(code, /<PauseMenu\b[\s\S]{0,80}open=\{paused && inRun\}/, "nincs PauseMenu a szünethez");
+  // Review #484: a WebGL-helyreállító réteg idejére a menü rejtve (a játék ettől még szünetben áll) — különben eltakarná a gombot.
+  has(code, /<PauseMenu\b[\s\S]{0,80}open=\{paused && inRun && !glLost\}/, "nincs PauseMenu a szünethez");
   has(code, /<GameShell\b[\s\S]{0,120}onAutoPause=\{pauseGame\}/, "nincs automatikus szünet (GameShell onAutoPause)");
   has(code, /exitPointerLock/, "szünetkor nem enged el a pointer lock");
   // A kvízréteg eltakarja a HUD szünetgombját — a kvízen is kell egy (#426 review-lelet).
