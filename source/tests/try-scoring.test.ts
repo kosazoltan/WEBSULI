@@ -76,3 +76,25 @@ test("séma: a helyes specifikáció átmegy, a hibás elutasítva; a modellnek 
     assert.equal(lessonSchema.safeParse(l).success, false, `${k}: hibás séma`);
   }
 });
+
+test("review #609/#615/#617: a séma elutasítja a megoldhatatlan csúszkát — a lépésközzel legalább egy teljes pontot érő érték elérhető legyen", () => {
+  const unsolvable: Array<[string, unknown]> = [
+    ["numberLine", { min: 0, max: 10, step: 4, target: 6, tolerance: 0.1 }],
+    ["numberLine", { min: 0, max: 10, step: 2, target: 5, tolerance: 0.1 }],
+    ["numberLine", { min: 0, max: 10, step: 3, target: 7, tolerance: 0.1 }],
+    ["estimate", { min: -1, max: 1, step: 0.3, answer: 0 }],
+    ["estimate", { min: 0, max: 100, answer: 0.1 }],
+    ["estimate", { min: 0, max: 100, step: 10, answer: 1 }],
+    ["estimate", { min: 0, max: 1000, step: 10, answer: 1 }],
+  ];
+  for (const [k, s] of unsolvable) assert.ok(trySpecProblems(k, s).some((m) => /lépésköz/.test(m)), `${k} ${JSON.stringify(s)}: megoldhatatlan`);
+  const solvable: Array<[string, unknown]> = [
+    ["numberLine", { min: 0, max: 10, step: 1, target: 7, tolerance: 0.5 }],
+    ["numberLine", { min: 0, max: 10, target: 7, tolerance: 0.5 }],
+    ["numberLine", { min: 0, max: 10, step: 4, target: 8, tolerance: 0.1 }],
+    ["estimate", { min: 0, max: 1000, step: 10, answer: 400 }],
+    ["estimate", { min: 0, max: 1000, answer: 400, unit: "m" }],
+    ["estimate", { min: -1, max: 1, step: 0.5, answer: 0 }],
+  ];
+  for (const [k, s] of solvable) assert.deepEqual(trySpecProblems(k, s), [], `${k} ${JSON.stringify(s)}: megoldható`);
+});
