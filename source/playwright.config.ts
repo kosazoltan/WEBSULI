@@ -68,9 +68,14 @@ export default defineConfig({
             WEBSULI_E2E: '1',
             // JM7c-1 (tests/admin-allowlist.spec.ts): az admin-engedélylista tesztértéke (kitalált cím), és csonk
             // Google-kliensazonosító — a Google-oldalt a teszt a böngészőben elfogja, valódi Google-hívás nem megy ki.
-            ADMIN_ALLOWLIST: 'e2e-allowlisted-admin@websuli.example',
+            // A második cím az adventi admin-előnézet saját fixtúrája (tests/advent-calendar.spec.ts), hogy ne ütközzön az
+            // admin-allowlist.spec.ts adminjával (#562 Thread 10 / Vercel-szál).
+            ADMIN_ALLOWLIST: 'e2e-allowlisted-admin@websuli.example,e2e-advent-preview-admin@websuli.example',
             GOOGLE_CLIENT_ID: 'e2e-google-client-id',
             GOOGLE_CLIENT_SECRET: 'e2e-google-client-secret',
+            // Adventi naptár (terv 16.5): a flag be van kapcsolva, de e2e-módban a naptár CSAK az X-Advent-Test-Now fejléccel
+            // érkező kérésekre él — a többi teszt (fejléc nélkül) decemberben is változatlan főoldalt lát.
+            ADVENT_CALENDAR: 'on',
         },
     },
 });

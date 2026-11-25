@@ -8,7 +8,7 @@ import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { decideWebResearchGatherResult, HTML_START, webResearchGatherParts, WEB_SEARCH_TOOL, WEB_FETCH_TOOL, type WebResearchChatRequest, type WebResearchEvent, type WebSource } from "./web-research-agent";
 import { fetchedTeachingSources, type TeachingReviewEvidence, type FetchedTeachingSource, type TeachingReview } from "./web-teaching-review";
 import { type ExperienceCheckpoint } from "./experience-builder";
-import { gatherWebSourcesGpt, gptGatherCheckpointInput, gptGatherRequest } from "./web-gather-gpt";
+import { enrichWithVisuals, gatherWebSourcesGpt, gptGatherCheckpointInput, gptGatherRequest } from "./web-gather-gpt";
 import { withSupportSkill } from "./support-skills";
 import { cachedSystem } from "../ai/prompt-cache";
 
@@ -60,7 +60,10 @@ export async function gatherWebSources(input: WebResearchChatRequest, observer: 
   const savedGpt = fallback ? workflowSavedCheckpoint<FetchedTeachingSource[]>("web-gather-gpt", gptGatherCheckpointInput(input, fallback)) : undefined;
   if (savedGpt?.length) return { downloaded: savedGpt, topicSeed: gptGatherRequest(input).topicSeed };
   try {
-    return await gatherWebSourcesClaude(input, observer);
+    const gathered = await gatherWebSourcesClaude(input, observer);
+    // Review #593: az elsődleges gyűjtés képei / szkennelt PDF-jei a védett dokumentum-móddal, ugyanazokkal a keretekkel.
+    const downloaded = await enrichWithVisuals(gathered.downloaded, gathered.searched ?? [], { signal: observer.signal }).catch(() => gathered.downloaded);
+    return { downloaded, topicSeed: gathered.topicSeed };
   } catch (error) {
     // Review #222: elveszett workflow-lease (WorkflowConflict) nem modellhiba — nincs fizetős tartalékhívás.
     if (error instanceof WorkflowConflict) throw error;
@@ -79,7 +82,7 @@ export async function gatherWebSources(input: WebResearchChatRequest, observer: 
   }
 }
 
-async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string }> {
+async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, onEvent, onCandidate }: Pick<ResearchObserver, "signal" | "onEvent" | "onCandidate">): Promise<{ downloaded: FetchedTeachingSource[]; topicSeed: string; searched?: string[] }> {
   const key = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
   if (!key?.trim()) throw new WebResearchFailure("Az Anthropic API kulcs nincs beállítva.");
   const controller = new AbortController();
@@ -215,7 +218,7 @@ async function gatherWebSourcesClaude(input: WebResearchChatRequest, { signal, o
     stopIdle();
     const downloaded = [...fetched.values()];
     if (!downloaded.length) throw new WebResearchFailure("Nincs letöltött forrásszöveg. A web_fetch eszközzel olvasd el a forrásokat, majd készíts teljes tananyagot.");
-    return { downloaded, topicSeed };
+    return { downloaded, topicSeed, searched: sources.map(s => s.url) };
   } catch (error) {
     if (error instanceof WebResearchFailure || error instanceof WorkflowConflict) throw error;
     logger.error("[WEB-RESEARCH] gather failure", { name: error instanceof Error ? error.name : "unknown", message: error instanceof Error ? error.message.slice(0, 400) : String(error), timedOut });

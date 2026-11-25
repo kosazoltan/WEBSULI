@@ -5,7 +5,29 @@ cogni:
   name: websuli-decisions
   generated: 2026-11-22
 
-  decisions: []
+  decisions:
+  - id: 2026-11-23-sql-feladat-nyilvantartas
+    date: 2026-11-23
+    decision: "A feladatok mestere az SQL feladat.tasks (Docker Postgres); a kanban tükör; a záró hurok szinkronizál és takarít"
+    reason: "kanban nem megbízható, feladatok elvesztek (főterv csak ágon)"
+    ref: D:/repo/Hermes-agent/docs/feladat-nyilvantartas.md
+  - id: 2026-11-23-vak-kor-kivezetes
+    date: 2026-11-23
+    decision: "Felhős vak kör (alügynök-review minden fejre) kivezetve; helyette local-review.mjs (helyi Ollama, angol prompt)"
+    reason: "45 PR / 342 felhős kör (~7,6/PR); helyi futás ~16 s/PR, 0 token"
+    ref: docs/specs/2026-11-23-vak-kor-kivezetes.md
+  - id: 2026-11-23-p057-p064-p065
+    date: 2026-11-23
+    decision: "P-064: néma TTS-próbakimondás nincs + abszolút 80 MB hangtárplafon marad; P-065: Stúdió költség/hiba korlátnál csak jelzés, vészleállítás kizárólag a 30 USD próbakereten (SK3-ba nincs új éles futásidő- / összesített javítókör-megállító); P-057: .claude/settings.json verziókezelt, szűk matcherek, hook hibája csak a saját lépését tiltja"
+    reason: "tulajdonosi döntés 2026-11-23; a fő ág (ccc5e99f) kódja már megfelelt, a tervek átvezetve, P-057 őr-teszt: scripts/qa/hooks/hook-scope.test.mjs"
+    ref: "docs/specs/2026-11-23-h0-dontesek-atvezetese.md"
+    pr: 548
+  - id: 2026-11-23-p010-kupon-hatarido
+    date: 2026-11-23
+    decision: "Kupon módban a hibázott lecke-tétel a hiba utáni legfeljebb LATE_RETURN_MAX (10.) kérdésként visszajön, ha a menetben még nem tért vissza MAX_RETURNS_PER_RUN-szor; a határidős visszatérés a 30%-os ismétlési arány előtt jön. A plafon fölötti hiba a körforgással jön (mért ≤ 3n)."
+    reason: "plafon nélküli határidővel csupa rossz válasznál 12+ tételes lecke nem halad (minden hely visszatérés); 10–12 tételnél a régi rangsor-sáv 11–16+ kérdéses késést adott"
+    ref: "docs/specs/2026-11-23-kuponos-ismetles-hatarido.md"
+    pr: 558
   # - id: D-001
   #   date: ÉÉÉÉ-HH-NN
   #   title: "..."

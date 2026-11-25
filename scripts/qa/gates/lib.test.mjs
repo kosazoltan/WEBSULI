@@ -90,3 +90,106 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
 });
+
+// ---- docs/specs/2026-11-22-kitakaro-elovagas.md: elővágás a főági kitakaró előtt ------------------------------------
+
+const leak6 = (out, body) => { for (let i = 0; i + 6 <= body.length; i++) if (out.includes(body.slice(i, i + 6))) return body.slice(i, i + 6); return null; };
+
+test('elővágás: 300 000 és 20 M karakteres ellenséges bemenet — nem dob, bemenetenként < 1 s', () => {
+  for (const s of ['a'.repeat(300_000), `x${at}${'a.'.repeat(150_000)}`, 'a'.repeat(20_000_000), `ghp_${'a'.repeat(20_000_000)}_`,
+    `Bearer x${'a'.repeat(20_000_000)}`, `sk-${'-'.repeat(20_000_000)}`, `x${at}${'a.'.repeat(10_000_000)}`]) {
+    const t0 = performance.now();
+    assert.doesNotThrow(() => redact(s), s.slice(0, 10));
+    const ms = performance.now() - t0;
+    assert.ok(ms < 1000, `${s.slice(0, 10)}…: ${ms.toFixed(0)} ms`);
+  }
+});
+
+test('elővágás: a kapu vágási pontján átnyúló titok egyetlen 6 karakteres darabja sem marad (sorral és sor nélkül)', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const secrets = [
+    ['Bearer ', 'Ab12Cd34Ef56Gh78Ij90Kl12'], ['', `ghp_${'A1b2C3d4E5f6'.repeat(3)}`], ['', `fiok.tulaj${at}pelda.hu`],
+    ['', ['postgres', '://admin:', 'titok123', at, 'ep-pelda.neon.tech/db'].join('')],
+  ];
+  for (const sep of [' ', '\n']) {
+    for (const [pre, body] of secrets) {
+      const raw = pre + body;
+      for (const back of [3, Math.floor(raw.length / 2), raw.length - 2]) {
+        // a vágás (hossz − REDACT_CAP) pontosan a titok vége előtt `back` karakterre esik
+        const tailLen = REDACT_CAP - back;
+        const s = `q${sep}`.repeat(2500) + raw + `${sep}z`.repeat(tailLen).slice(0, tailLen);
+        assert.equal(s.length - REDACT_CAP, 5000 + raw.length - back);
+        const out = redact(s);
+        assert.equal(leak6(out, body), null, `${JSON.stringify(sep)} ${body.slice(0, 8)} vissza ${back}`);
+        assert.ok(out.length > 1000 && out.length <= REDACT_CAP + 100);
+      }
+    }
+  }
+});
+
+test('elővágás: a korláton belül a kimenet bájtra a főági redact-é; a korlát felett a megtartott rész is', async () => {
+  const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const samples = [
+    `cím ${fakeMail}, db ${fakeDb}, gh ${fakeGh}, ant ${fakeAnt}, aws ${fakeAws}, Authorization: Bearer abcdefgh12345678`,
+    'HTTP 503: Service Unavailable — lib.mjs:192, árvíztűrő tükörfúrógép', `${'a'.repeat(64)}${at}pelda.hu`, `x${at}${'a.'.repeat(3000)}hu`,
+  ];
+  // A minták a korláton belül vannak (a 8 KB-os korlát óta a régi 10 004 karakteres minta már vágódna).
+  for (const s of samples) assert.ok(s.length <= REDACT_CAP, `${s.length} > ${REDACT_CAP}`);
+  for (const s of samples) assert.equal(redact(s), mainRedact(s));
+  const big = `${'n '.repeat(REDACT_CAP)}\nvége ${fakeMail} ${fakeGh}`;
+  const out = redact(big);
+  assert.ok(out.endsWith(mainRedact(`vége ${fakeMail} ${fakeGh}`)), out.slice(-60));
+});
+
+// ---- 1. vak kör (9effab11) -------------------------------------------------------------------------------------------
+
+test('vak L1 (9effab11): ANSI-színezett DB-URL a kapu vágási pontján — a writeLog naplója a főághoz hasonlóan titokmentes', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const E = String.fromCharCode(27);
+  const url = ['postgres', '://', `${E}[1m`, 'admin', `${E}[0m:`, `${E}[33m`, 'titok123', `${E}[0m`, at, `${E}[36m`, 'db.sample.invalid', `${E}[0m`, '/prod'].join('');
+  const dir = mkdtempSync(join(tmpdir(), 'elovagas-l1-'));
+  for (const back of [url.length - 2, url.length - 8, url.length - 15, url.length - 30]) {
+    const tailLen = REDACT_CAP - back;
+    const s = 'q '.repeat(2500) + url + ' z'.repeat(tailLen).slice(0, tailLen);
+    const got = readFileSync(writeLog(dir, 'stage', 'ansi', s), 'utf8');
+    for (const frag of ['titok1', 'sample.inv', 'admin']) assert.ok(!got.includes(frag), `vissza ${back}: ${frag}`);
+  }
+});
+
+test('vak L4 (9effab11): korlátközeli, nehezen maszkolható farok a két kihagyott szó után — < 1 s, a farok megmarad', async () => {
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const s = 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(REDACT_CAP - 30);
+  const t0 = performance.now();
+  const out = redact(s);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 1000, `${ms.toFixed(0)} ms`);
+  assert.ok(out.includes('a'.repeat(REDACT_CAP - 30)), 'a korlátközeli farok megmarad (a regex ténylegesen ezen fut)');
+});
+
+test('elővágás: a korlát a 32 KB-os főági futáshoz képest legalább 8× olcsóbb legrosszabb esetet ad (gépfüggetlen arány)', async () => {
+  // A 32 KB-os korlát legrosszabb esete a gate:pr párhuzamos futásában 1109 ms lett; a 16 KB-os a CI-futón (ubuntu) 451–485 ms —
+  // az abszolút ms-korlát gépfüggő, ezért ugyanazon a gépen, ugyanakkor mért ARÁNY a mérce: a korlátos `redact` és a változatlan
+  // főági kitakaró 32 KB-os, szóköz nélküli farkon (3 mérés legjobbja mindkettőn).
+  const { REDACT_CAP } = await import('./lib.mjs');
+  const { mainRedact } = await import('./kitakaro-main-baseline.mjs');
+  // A korlátos út legrosszabb esete a korlátközeli farok (a korlát feletti egyszavas futást a vágás teljesen elhagyja).
+  const tail = (n) => 'q'.repeat(200) + ' w1 w2 ' + 'a'.repeat(n - 30);
+  const best = (fn) => {
+    let b = Infinity;
+    for (let i = 0; i < 3; i++) { const t0 = performance.now(); fn(); b = Math.min(b, performance.now() - t0); }
+    return b;
+  };
+  const capped = best(() => redact(tail(REDACT_CAP)));
+  const main32 = best(() => mainRedact(tail(32 * 1024)));
+  assert.ok(REDACT_CAP < 32 * 1024, `REDACT_CAP = ${REDACT_CAP}`);
+  assert.ok(capped * 8 < main32, `korlátos: ${capped.toFixed(0)} ms, főági 32 KB: ${main32.toFixed(0)} ms (legalább 8× kell)`);
+});
+
+test('vak L3 (9effab11): az első hibasor a hosszú stderr-ből — a csonkolásjelző nem helyettesíti', async () => {
+  const { redactFirstLine, REDACT_CAP } = await import('./lib.mjs');
+  const stderr = `HTTP 404: Not Found (repos/x/y) ${fakeMail}\n` + 'd '.repeat(REDACT_CAP);
+  assert.equal(redactFirstLine(stderr), 'HTTP 404: Not Found (repos/x/y) <email>');
+  const long = 'e '.repeat(REDACT_CAP) + 'gh: rate limit exceeded';
+  assert.ok(redactFirstLine(long).endsWith('gh: rate limit exceeded'), 'túl hosszú első sornál a sor vége (a lényeg) látszik');
+});

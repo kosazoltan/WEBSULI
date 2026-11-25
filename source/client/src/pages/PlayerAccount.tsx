@@ -20,6 +20,7 @@ import { AVATARS } from "@shared/player-avatars";
 import { PLAYER_NICK_MAX, checkPlayerNickname, NICKNAME_MESSAGES } from "@shared/player-nickname";
 import { ACHIEVEMENT_BY_ID } from "@/lib/achievements";
 import { getLearnerToken } from "@/lib/learnerProfile";
+import { clearAdventCache } from "@/advent/sync";
 import { levelFromXp, readLocalProgress, type LocalProgress } from "@/lib/localGameProgress";
 import {
   PLAYER_ME_KEY, clearPlayerCache, deletePlayerAccount, requestDeleteCode, playerAccountKey, exportPlayerData, fetchNicknameSuggestions, linkLearnerProfile, logoutPlayer,
@@ -110,7 +111,8 @@ function AccountView({ playerId }: { playerId: string }) {
       <StatsCard local={local} />
       <RecordsCard local={local} />
       <BadgesCard local={local} />
-      <LearnerCard account={account} onChanged={async (msg) => { setNotice(msg); await refresh(); }} />
+      {/* A tanulói kapcsolat változása alanyváltás: az adventi állapot (más tanuló ablakai, keresztneve) törlődik (PR-C vak L3). */}
+      <LearnerCard account={account} onChanged={async (msg) => { setNotice(msg); await clearAdventCache(queryClient); await refresh(); }} />
       <AccountActions maskedEmail={account.maskedEmail} googleLinked={account.googleLinked} local={local} />
     </Shell>
   );

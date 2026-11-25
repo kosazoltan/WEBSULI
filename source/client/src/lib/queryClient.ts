@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supportsResultApi } from "@shared/result-compat";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 import { isRetryableRequestError } from "@shared/request-retry";
@@ -27,13 +28,19 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
   }
 }
 
+/** Eredmény-e-mail B2 (#510 R37): a CSRF-token lekérésének saját határideje (a válasz törzsének olvasásával együtt). */
+const CSRF_TOKEN_TIMEOUT_MS = 15_000;
+
+/** B4b: `ownerBinding` — a szerver hirdeti a kör-kilét kötését (a B4 kapcsolója, `resultOwnerBinding: true`). */
+type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean };
+
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
 class CSRFTokenManager {
-  private token: string | null = null;
-  private fetchPromise: Promise<string> | null = null;
+  private token: TokenInfo | null = null;
+  private fetchPromise: Promise<TokenInfo> | null = null;
   
-  async getToken(): Promise<string> {
+  async getToken(): Promise<TokenInfo> {
     // Return cached token if available
     if (this.token) {
       return this.token;
@@ -54,17 +61,27 @@ class CSRFTokenManager {
     }
   }
   
-  private async fetchTokenFromServer(): Promise<string> {
-    const res = await fetch('/api/csrf-token', {
-      credentials: 'include',
-    });
-    
-    if (!res.ok) {
-      throw new Error('Failed to fetch CSRF token');
+  private async fetchTokenFromServer(): Promise<TokenInfo> {
+    // B2 (#510 R37): a megakadt tokenlekérés nem tarthatja végtelenül a várakozó írást. Időzített AbortController (nem
+    // `AbortSignal.timeout`): a határidő így a már kezelt, újrapróbálhatónak ismert `AbortError`-t adja, nem `TimeoutError`-t
+    // (PR #556 review) — és a törzs olvasását is fedi.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CSRF_TOKEN_TIMEOUT_MS);
+    try {
+      const res = await fetch('/api/csrf-token', {
+        credentials: 'include',
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to fetch CSRF token');
+      }
+
+      const data = await res.json();
+      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true };
+    } finally {
+      clearTimeout(timer);
     }
-    
-    const data = await res.json();
-    return data.csrfToken;
   }
   
   // Invalidate cached token (e.g., when CSRF error occurs)
@@ -124,11 +141,15 @@ async function retryWithBackoff<T>(
 export async function apiRequest<T = unknown>(
   method: string,
   url: string,
-  data?: unknown | undefined,
-  options?: { retries?: number; timeout?: number }
+  /** B4b (PR #574 review): függvény is lehet — minden tényleges `fetch` előtt hívódik a token képességeivel (pl. kilét-szűrés). */
+  data?: unknown | ((ctx: { ownerBinding: boolean }) => unknown) | undefined,
+  options?: { retries?: number; timeout?: number; keepalive?: boolean; resultTimes?: { startedAt?: number; lastAnsweredAt?: number } }
 ): Promise<T> {
   const retries = options?.retries ?? 0; // No automatic retries for write operations (causes duplicates)
   const timeout = options?.timeout ?? 60000; // 60 second default timeout
+  // Eredmény-e-mail B2 (#510 R8 / R4): `keepalive` — a kérés (és a 403 utáni ismétlése) a lap bezárása után is célba ér; csak kis
+  // törzsű írásnál használható (64 KB a böngésző kerete).
+  const keepalive = options?.keepalive ? { keepalive: true } : {};
   
   return retryWithBackoff(
     async () => {
@@ -138,30 +159,41 @@ export async function apiRequest<T = unknown>(
       }, timeout);
 
       try {
-        debugLog(`[API REQUEST] ${method} ${url}, size: ${data ? JSON.stringify(data).length : 0} bytes`);
+        let ownerBinding = false;
+        const body = (): unknown => (typeof data === "function" ? (data as (ctx: { ownerBinding: boolean }) => unknown)({ ownerBinding }) : data);
+        debugLog(`[API REQUEST] ${method} ${url}`);
         
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
+        const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && (typeof data === "object" || typeof data === "function"));
+        const serialize = (capable: boolean) => { const d = body(); return d ? JSON.stringify(capable && addsFields ? { ...(d as object), ...options!.resultTimes } : d) : undefined; };
+        // #510 R10 / R12 (PR #564 review): ha a V2-t hirdető token után a kérés egy régi, szigorú sémájú példányhoz ér, az új mezőkre
+        // 400 jön — ilyenkor EGY ismétlés a régi alakkal (ugyanazzal a tokennel). Jelzés vagy új mező nélkül változatlanul egy kérés.
+        const sendOnce = async (capable: boolean, signal: AbortSignal) => {
+          const init = { method, headers, credentials: "include" as const, signal, ...keepalive };
+          const first = await fetch(url, { ...init, body: serialize(capable) });
+          if (first.status !== 400 || !capable || !addsFields) return first;
+          debugLog(`[API REQUEST] ${method} ${url} → 400 az új mezőkre, ismétlés a régi alakkal`);
+          return fetch(url, { ...init, body: serialize(false) });
+        };
+        let capable = false;
         const headers: Record<string, string> = { "X-Websuli-Scoring": String(LESSON_SCORING_VERSION), ...(data ? { "Content-Type": "application/json" } : {}) };
         if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
           try {
             const csrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = csrfToken;
+            headers['X-CSRF-Token'] = csrfToken.token;
+            capable = csrfToken.resultApi;
+            ownerBinding = csrfToken.ownerBinding;
           } catch (error) {
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
           }
         }
         
-        const res = await fetch(url, {
-          method,
-          headers,
-          body: data ? JSON.stringify(data) : undefined,
-          credentials: "include",
-          signal: controller.signal,
-        });
+        const res = await sendOnce(capable, controller.signal);
 
-        clearTimeout(timeoutId);
+        // B2 (#510 R37): az időzítő a válasz törzsének beolvasásáig él (a lenti `finally` törli) — a fejlécek után megakadó választest
+        // sem vonja ki a kérést az időkorlát alól.
         debugLog(`[API REQUEST] ${method} ${url} → ${res.status} ${res.statusText}`);
 
         // SECURITY: If CSRF token invalid (403 Forbidden), refresh token and retry ONCE
@@ -177,21 +209,18 @@ export async function apiRequest<T = unknown>(
             
             // Retry with new token (fresh controller in case original timed out)
             const newCsrfToken = await csrfTokenManager.getToken();
-            headers['X-CSRF-Token'] = newCsrfToken;
+            headers['X-CSRF-Token'] = newCsrfToken.token;
+            ownerBinding = newCsrfToken.ownerBinding;
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);
             
             try {
-              const retryRes = await fetch(url, {
-                method,
-                headers,
-                body: data ? JSON.stringify(data) : undefined,
-                credentials: "include",
-                signal: retryController.signal,
-              });
+              const retryRes = await sendOnce(newCsrfToken.resultApi, retryController.signal);
               
               debugLog(`[API REQUEST RETRY] ${method} ${url} → ${retryRes.status} ${retryRes.statusText}`);
+              // B2 (#510 R23): ha a friss token is 403-at kap, az sem marad a gyorsítótárban — a következő írás megint frisset kér.
+              if (retryRes.status === 403) csrfTokenManager.invalidate();
               await throwIfResNotOk(retryRes);
               
               if (retryRes.status === 204) {
@@ -215,8 +244,6 @@ export async function apiRequest<T = unknown>(
         const result = await res.json();
         return result;
       } catch (error) {
-        clearTimeout(timeoutId);
-        
         if (error instanceof Error && error.name === 'AbortError') {
           logger.error('[API REQUEST] Timeout after', timeout, 'ms');
           throw new Error(`A kérés túllépte az időkorlátot (${timeout / 1000}s). Kérlek ellenőrizd az internetkapcsolatot!`, { cause: error });
@@ -229,6 +256,8 @@ export async function apiRequest<T = unknown>(
         }
         
         throw error;
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
     retries,

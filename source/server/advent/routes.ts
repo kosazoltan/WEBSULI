@@ -8,7 +8,7 @@
 import { Router, type NextFunction, type Request, type RequestHandler, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import {
-  buildAdventPlan, findAdventItem, gradePick, optionOrder, repairPlanDoor, toClientQuestion,
+  adventLayout, buildAdventPlan, findAdventItem, gradePick, optionOrder, repairPlanDoor, toClientQuestion,
   type AdventBankItem, type AdventItem, type AdventPlan, type ChristmasItem,
 } from "../../shared/advent/assignment";
 import { adventNow, isAdventWritable, isDoorUnlocked, type AdventNow } from "../../shared/advent/calendar";
@@ -24,7 +24,7 @@ import { clientIpKeyGenerator } from "../lib/client-ip";
 import { logger } from "../lib/logger";
 import type { AdventResolution, AdventResolvedSubject } from "./identity";
 import { ADVENT_LIMITS, createWindowCounter, type AdventLimits } from "./limits";
-import { createAdoptionContext, mergeAdoption, orderKeyFor, planGradeOf, usedInEarlierRounds, withPlanMeta, type AdoptionContext } from "./adoption";
+import { createAdoptionContext, mergeAdoption, orderKeyFor, planGradeOf, usedForRepair, usedInEarlierRounds, withPlanMeta, type AdoptionContext } from "./adoption";
 import type { AdoptionRequest, AdventRow, AdventStore, AdventSubject } from "./store";
 
 
@@ -37,10 +37,18 @@ export type AdventRouterDeps = {
   /** A naptár órája; `null` = a naptár kikapcsoltként viselkedik (e2e-mód tesztidő nélkül). */
   clock: (req: Request) => Date | null;
   resolve: (req: Request, input: { learnerToken?: unknown; device?: unknown }) => Promise<AdventResolution>;
+  /**
+   * Ha az óra nem ad időt (`clock` → null), a „nem létezik” (404) helyett EZ a válasz — a végső kezelőben, hogy a köztes lépések
+   * (és az admin-őr mátrixtesztje) változatlanok maradjanak. Az admin-előnézet használja (érvénytelen dátum → 400; terv 16.5).
+   */
+  invalidClock?: { status: number; message: string };
   /** A kéréskorlátok (alap: `ADVENT_LIMITS`); tesztben kisebb értékkel adható meg. */
   limits?: AdventLimits;
-  /** Minden rögzített válasz után (nem várjuk meg): az S5 innen dönt a szülői levélről. */
-  onAnswer?: (event: { row: AdventRow; subject: AdventResolvedSubject; summary: AdventSummary; maxRounds: number }) => void;
+  /**
+   * Minden rögzített válasz és minden átvétel után (nem várjuk meg): az S5 innen dönt a szülői levélről (terv 18.1). Az előnézeti
+   * routerben nincs bekötve.
+   */
+  onResult?: (event: { row: AdventRow; subject: AdventResolvedSubject; summary: AdventSummary; maxRounds: number; phase: AdventNow["phase"] }) => void;
 };
 
 class AdventHttpError extends Error {
@@ -48,7 +56,7 @@ class AdventHttpError extends Error {
 }
 
 /**
- * A tárolt sor alakja ép-e (vak ellenőr k3): a körönkénti terv objektum \`doors\` objektummal és \`layout\` tömbbel, a próbák
+ * A tárolt sor alakja ép-e (vak ellenőr k3): a körönkénti terv objektum \`doors\` objektummal és \`layout\` (1…24 permutáció) tömbbel, a próbák
  * tömbök. Felhasználói bemenettel ilyen sor nem állítható elő; sérült sornál 500 helyett érthető 409 megy ki.
  */
 export function adventRowIsSound(row: AdventRow | null): boolean {
@@ -58,6 +66,16 @@ export function adventRowIsSound(row: AdventRow | null): boolean {
   for (const plan of Object.values(row.plan)) {
     if (!isObject(plan) || !isObject(plan.doors) || !Array.isArray(plan.layout) || !isObject(plan.subjects)) return false;
     if (!Object.values(plan.subjects).every((subject) => typeof subject === "string")) return false;
+    // Az ablakrács az 1…24 permutációja (PR-C 3. vak L4): a kliens a `layout` minden elemére egy ablakot rajzol a teljes ablaklistából —
+    // tartományon kívüli, ismétlődő vagy hiányzó elem renderhibát / eltűnő rácsot okozna.
+    const layout = plan.layout as unknown[];
+    if (layout.length !== ADVENT_DOORS || new Set(layout).size !== ADVENT_DOORS) return false;
+    if (!layout.every((d) => typeof d === "number" && Number.isInteger(d) && d >= 1 && d <= ADVENT_DOORS)) return false;
+    // Minden nap kulcsa megvan, legalább egy kérdéssel (PR-B 4. kör L5): a hiányzó nap megnyitáskor 500-at okozna.
+    for (let day = 1; day <= ADVENT_DOORS; day++) {
+      const ids = (plan.doors as Record<string, unknown>)[String(day)];
+      if (!Array.isArray(ids) || ids.length === 0) return false;
+    }
     for (const ids of Object.values(plan.doors)) if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string")) return false;
   }
   // A próbák belső alakja is (GPT-vak L4): egy [null] vagy hiányos elem a pontozásnál 500-at okozna.
@@ -92,8 +110,12 @@ function doorView(day: number, at: AdventNow, grade: number | null, plan: Advent
   return { day, state, subject, repairsLeft: state === "repairable" ? maxRepairs - attempts.length + 1 : 0 };
 }
 
-/** A naptár teljes állapota egy alanynak (írás nélkül számolható). */
-export function buildAdventState(at: AdventNow, resolution: AdventResolution, row: AdventRow | null): AdventState {
+/**
+ * A naptár teljes állapota egy alanynak (írás nélkül számolható). \`adoptionPending\`: párosított eszközön a nézet egy még nem mentett
+ * átvétel előnézete (PR-C vak L2); \`nextRoundAvailable: false\`: a következő kör ismétlés nélkül már nem építhető fel, ezért nem
+ * ajánljuk fel (PR-C vak L1) — a router méri a valódi bankkal.
+ */
+export function buildAdventState(at: AdventNow, resolution: AdventResolution, row: AdventRow | null, extra: { adoptionPending?: boolean; nextRoundAvailable?: boolean; version?: number; asOf?: number } = {}): AdventState {
   const subject = resolution.subject;
   const grade = subject ? effectiveGrade(subject, row) : null;
   const round = row?.round ?? 1;
@@ -105,16 +127,22 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
   const waiting = doors.filter((d) => d.state === "open").length;
   return {
     enabled: true,
-    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, daysUntilStart: at.daysUntilStart,
+    season: at.season, phase: at.phase, today: at.today, openDay: at.openDay, nextOpensAt: at.nextOpensAt, nextOpensInMs: at.nextOpensInMs, refreshInMs: at.refreshInMs, daysUntilStart: at.daysUntilStart,
     identity: subject?.kind ?? null,
     pairing: resolution.pairing,
     firstName: subject?.firstName ?? null,
     grade,
     needsGrade: subject != null && grade == null,
     round, maxRounds: limits.maxRounds,
-    layout: plan?.layout ?? ALL_DAYS,
+    // Terv nélkül is a végleges (kevert) elrendezés: a rács az első megnyitás után sem rendeződik át (vak ellenőr S1).
+    layout: plan?.layout ?? (subject && grade != null ? adventLayout(at.season, round, subjectKeyOf(subject), grade) : ALL_DAYS),
     doors, summary,
-    closing: adventClosing(summary, { round, maxRounds: limits.maxRounds, phase: at.phase, waiting }),
+    closing: adventClosing(summary, { round, maxRounds: extra.nextRoundAvailable === false ? round : limits.maxRounds, phase: at.phase, waiting }),
+    adoptionPending: extra.adoptionPending ?? false,
+    // A szerververzió (PR-C 3. vak L1): a tárolt sor utolsó módosítása; az átvétel előnézeténél a két tárolt sor újabbika.
+    version: extra.version ?? (row ? row.updatedAt.getTime() : 0),
+    // A válasz szerverpillanata (S5/S6 1. vak L4): egyenlő sorverziónál a régebbi pillanat (pl. zárás előtti válasz) a régebbi.
+    asOf: extra.asOf ?? 0,
   };
 }
 
@@ -124,9 +152,9 @@ export function buildAdventState(at: AdventNow, resolution: AdventResolution, ro
  * Egy (tárolt vagy friss) próba eredménye. Ha a kérdés közben eltűnt a bankból (`item` null), a tárolt próba alapján csak az
  * eredmény megy ki: helyes válasz és magyarázat nélkül (`correctIndex: -1`) — hiba helyett (review C5).
  */
-function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState): AdventAnswerResult {
+function answerResult(item: AdventItem | null, attempt: DoorAttempt, orderKey: string, season: number, door: AdventDoorView, state: AdventState, recorded = true): AdventAnswerResult {
   const correctIndex = item ? gradePick(item, optionOrder(item.id, orderKey, season), attempt.pick).correctIndex : -1;
-  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", door, summary: state.summary, closing: state.closing };
+  return { correct: attempt.correct, correctIndex, explanation: item?.explanation ?? "", pick: attempt.pick, recorded, door, doors: state.doors, summary: state.summary, closing: state.closing, version: state.version, asOf: state.asOf };
 }
 
 type Locals = { at: AdventNow; now: Date; resolution: AdventResolution; body: Record<string, unknown>; pairedDevice?: string | null };
@@ -189,6 +217,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   };
   /** Végpont: a válasz elküldése a függvény dolga; a hibát egységesen kezeljük (Express 4 nem továbbítja az async hibát). */
   const wrap = (fn: (req: Request, res: Response) => Promise<void>): RequestHandler => (req, res, next) => {
+    if (res.locals.adventClockInvalid === true && deps.invalidClock) { res.status(deps.invalidClock.status).json({ message: deps.invalidClock.message }); return; }
     fn(req, res).catch((error: unknown) => fail(req, res, next, error));
   };
   /** Köztes lépés: siker esetén továbblép. */
@@ -200,6 +229,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   const gate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     const now = deps.enabled() ? deps.clock(req) : null;
+    // Érvénytelen óra a beállított válasszal (admin-előnézet: 400) — a végső kezelő adja ki (`wrap`).
+    if (!now && deps.invalidClock && deps.enabled()) { res.locals.adventClockInvalid = true; next(); return; }
     if (!now) { res.status(404).json({ message: "Not found" }); return; }
     res.locals.adventNow = now;
     next();
@@ -207,6 +238,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
 
   /** Az alany feloldása: olvasásnál fejlécből, írásnál a törzsből. */
   const identify = (source: "headers" | "body"): RequestHandler => step(async (req, res) => {
+    if (res.locals.adventClockInvalid === true) return;
     const now = res.locals.adventNow as Date;
     const body = (source === "body" && req.body && typeof req.body === "object" ? req.body : {}) as Record<string, unknown>;
     if (source === "body" && !adventIdentityBody.safeParse(body).success) throw new AdventHttpError(400, "Érvénytelen kérés.");
@@ -230,6 +262,34 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     return createAdoptionContext({ bank, christmas, season: locals.at.season, learnerId: learner.id, learnerGrade: learner.grade ?? 1, deviceId, now: locals.now });
   };
   /**
+   * A következő kör terve a valódi bankkal (PR-C vak L1). A kizárólista a megmutatott kérdésekből áll; ha ismétlés nélkül nem telne
+   * ki, a hiányzó helyekre a legrégebben látott kérdések kerülnek (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”).
+   * \`null\` csak védőhálóként (hiányos / sérült bank), szabályos játékban nem fordul elő.
+   */
+  const nextRoundPlan = (row: AdventRow, grade: number, key: string, season: number): AdventPlan | null => {
+    const round = row.round + 1;
+    try {
+      return withPlanMeta(buildAdventPlan({ bank, christmas, grade, season, round, subjectKey: key, ...usedInEarlierRounds({ ...row, round }, round, bank, christmas) }), grade, key);
+    } catch (error) {
+      if (error instanceof RangeError) return null;
+      throw error;
+    }
+  };
+  /** Az állapot a végpontokból: végigjátszott, új kört kérhető körnél megméri, felépíthető-e a következő kör (L1). */
+  const stateOf = (locals: Locals, row: AdventRow | null, adoptionPending = false, version?: number): AdventState => {
+    const subject = locals.resolution.subject;
+    const grade = subject ? effectiveGrade(subject, row) : null;
+    let nextRoundAvailable: boolean | undefined;
+    if (subject && row && grade != null) {
+      const { maxRepairs, maxRounds } = limitsForGrade(grade);
+      const summary = adventSummary(row.doors[row.round] ?? {}, maxRepairs);
+      if (summary.answered === ADVENT_DOORS && !summary.passed && summary.repairable === 0 && row.round < maxRounds) {
+        nextRoundAvailable = nextRoundPlan(row, grade, subjectKeyOf(subject), locals.at.season) !== null;
+      }
+    }
+    return buildAdventState(locals.at, locals.resolution, row, { adoptionPending, nextRoundAvailable, version, asOf: locals.now.getTime() });
+  };
+  /**
    * Az átvétel kérése a módosításhoz (GPT-vak L2): csak párosított eszközön és írható fázisban. A végpont a nap- / fázis- / bemenet-
    * ellenőrzést ELŐTTE végzi; a DB-függő ellenőrzés és az átvétel a store.mutate EGY tranzakciójában fut — elutasításnál mindkét sor
    * érintetlen. Sérült sor (L4) az átvételben is 409 corrupt.
@@ -244,6 +304,13 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
         return mergeAdoption(learner, device, ctx);
       },
     };
+  };
+  /** A szülői levél döntése egy írás után, amely átvétellel véglegessé tehette az eredményt (megnyitás, átvétel; 18.1). */
+  const notifyResult = (locals: Locals, subject: AdventResolvedSubject, row: AdventRow): void => {
+    if (!deps.onResult) return;
+    const { maxRepairs, maxRounds } = limitsForGrade(effectiveGrade(subject, row) ?? 5);
+    try { deps.onResult({ row, subject, summary: adventSummary(row.doors[row.round] ?? {}, maxRepairs), maxRounds, phase: locals.at.phase }); }
+    catch (error) { logger.error(`[ADVENT] átvétel utáni teendő hiba: ${errorClass(error)}`); }
   };
   const subjectOr400 = (res: Response): { locals: Locals; subject: AdventResolvedSubject } => {
     const locals = res.locals.advent as Locals;
@@ -294,6 +361,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   router.get("/status", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const now = deps.enabled() ? deps.clock(req) : null;
+    // Érvénytelen óra a beállított válasszal (admin-előnézet: 400 — S5/S6 1. vak L8), mint a többi végponton.
+    if (!now && deps.invalidClock && deps.enabled()) { res.status(deps.invalidClock.status).json({ message: deps.invalidClock.message }); return; }
     if (!now) { res.json({ enabled: false }); return; }
     const at = adventNow(now);
     res.json({ enabled: true, season: at.season, phase: at.phase, openDay: at.openDay, daysUntilStart: at.daysUntilStart, nextOpensAt: at.nextOpensAt });
@@ -302,15 +371,23 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
   router.get("/state", gate, identify("headers"), ipReadLimiter, wrap(async (_req, res) => {
     const locals = res.locals.advent as Locals;
     const { at, resolution } = locals;
-    let row = resolution.subject ? await store.read(at.season, resolution.subject) : null;
-    // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz.
-    if (locals.pairedDevice && adventRowIsSound(row)) {
-      const deviceRow = await store.read(at.season, { kind: "device", id: locals.pairedDevice });
+    const pairedLearner = locals.pairedDevice && resolution.subject?.kind === "learner" && isAdventWritable(at.phase) ? resolution.subject : null;
+    // Párosított eszközön a két sor EGY lekérdezésből (PR-B 4. kör L2): egy közben commitolt átvétel nem adhat átmenetileg üres nézetet.
+    const pair = pairedLearner && locals.pairedDevice ? await store.readPair(at.season, pairedLearner.id, locals.pairedDevice) : null;
+    let row = pair ? pair.learner : resolution.subject ? await store.read(at.season, resolution.subject) : null;
+    let adoptionPending = false;
+    let version: number | undefined;
+    // Párosított eszközön az átvétel előnézete (írás nélkül): azt mutatjuk, ami az első írásnál a tanulónál lesz. Csak írható
+    // fázisban (élesítés előtti L3): lezárás után átvétel nincs, ezért a mentett tanulói állás látszik (nincs mentetlen ajándéküzenet).
+    if (pair && locals.pairedDevice && adventRowIsSound(row)) {
+      const deviceRow = pair.device;
       if (deviceRow && !adventRowIsSound(deviceRow)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
-      if (deviceRow) row = mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) ?? row;
+      const merged = deviceRow ? mergeAdoption(row, deviceRow, adoptionContext(locals, locals.pairedDevice)) : null;
+      // Az előnézet verziója a két TÁROLT sor újabbika (nem a kérés órája — L1): egy későbbi írás mindig újabb nála.
+      if (merged) { version = Math.max(row ? row.updatedAt.getTime() : 0, deviceRow!.updatedAt.getTime()); row = merged; adoptionPending = true; }
     }
     if (!adventRowIsSound(row)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
-    res.json(buildAdventState(at, resolution, row));
+    res.json(stateOf(locals, row, adoptionPending, version));
   }));
 
   // Előbb a bemenet és az alany (az érvénytelen kérés itt megáll, a hálózati keretet nem éri), utána a keretek.
@@ -331,7 +408,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       // Válasz nélküli sorban az évfolyam váltása az addigi (még meg nem válaszolt) tervet eldobja.
       return { patch: { grade: parsed.data.grade, plan: {}, doors: {} }, result: null };
     }));
-    res.json(buildAdventState(locals.at, locals.resolution, row));
+    res.json(stateOf(locals, row));
   }));
 
   router.post("/doors/:day/open", ...write, wrap(async (req, res) => {
@@ -341,7 +418,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
     if (!isDoorUnlocked(day, locals.at)) throw new AdventHttpError(403, "Ez az ablak még nem nyitható.", { opensDay: day });
     const key = subjectKeyOf(subject);
     const adopt = adoptionFor(locals);
-    const { result } = await creatingDeviceRow(req, locals.at.season, subject, () => store.mutate<AdventOpenResult>(locals.at.season, subject, (row) => {
+    const { row, result } = await creatingDeviceRow(req, locals.at.season, subject, () => store.mutate<AdventOpenResult>(locals.at.season, subject, (row) => {
       sound(row);
       const grade = effectiveGrade(subject, row);
       if (grade == null) throw new AdventHttpError(409, "Előbb add meg, hányadikos vagy.", { needsGrade: true });
@@ -358,7 +435,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       }
       const attempts = row.doors[round]?.[day]?.attempts ?? [];
       // E14: a bankból eltűnt, még meg nem válaszolt kérdés pótlása (a megválaszolt kérdés védett).
-      const fixed = repairPlanDoor(plan, day, { bank, christmas, grade, ...usedInEarlierRounds(row, round, bank, christmas), protectedIds: new Set(attempts.map((a) => a.questionId)) });
+      // Az aktuális kör lecserélt (`retired`) kérdései sem jöhetnek vissza pótlásként (PR #544 review).
+      const fixed = repairPlanDoor(plan, day, { bank, christmas, grade, ...usedForRepair(row, round, plan, bank, christmas), protectedIds: new Set(attempts.map((a) => a.questionId)) });
       if (fixed.changed) { plan = fixed.plan; changed = true; }
       const state = doorState({ unlocked: true, attempts, maxRepairs });
       const readOnly = state === "solved" || state === "failed";
@@ -367,7 +445,7 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       // Megválaszolt ablaknál a kérdés hiánya nem hiba: a tárolt eredmény megy ki kérdés nélkül (review C5).
       if (!item && !readOnly) throw new RangeError("advent: a kiosztott kérdés nem található");
       const nextRow: AdventRow = { ...row, plan: { ...row.plan, [round]: plan } };
-      const view = buildAdventState(locals.at, locals.resolution, nextRow);
+      const view = stateOf(locals, nextRow);
       const orderKey = orderKeyFor(plan, day, key);
       const answered = readOnly ? answerResult(item, attempts[attempts.length - 1]!, orderKey, locals.at.season, view.doors[day - 1]!, view) : null;
       return {
@@ -375,6 +453,8 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
         result: { day, question: item ? toClientQuestion(item, optionOrder(item.id, orderKey, locals.at.season)) : null, answered },
       };
     }, adopt));
+    // Az átvétel a megnyitás tranzakciójában is véglegessé teheti az eredményt (S5/S6 1. vak L5): a levél döntése ugyanaz, mint válasz után.
+    if (adopt) notifyResult(locals, subject, row);
     res.json(result);
   }));
 
@@ -401,17 +481,17 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       const profileGrade = effectiveGrade(subject, current);
       const plannedGrade = planGradeOf(plan);
       if (current.grade == null && profileGrade != null && plannedGrade !== undefined && plannedGrade !== profileGrade) {
-        throw new AdventHttpError(409, "Az évfolyamod közben megváltozott — frissítjük a naptárat.", { state: buildAdventState(locals.at, locals.resolution, current), refresh: true });
+        throw new AdventHttpError(409, "Az évfolyamod közben megváltozott — frissítjük a naptárat.", { state: stateOf(locals, current), refresh: true });
       }
       const { maxRepairs, maxRounds } = limitsForGrade(grade);
       const attempts = current.doors[round]?.[day]?.attempts ?? [];
-      const viewOf = (r: AdventRow) => buildAdventState(locals.at, locals.resolution, r);
+      const viewOf = (r: AdventRow) => stateOf(locals, r);
       // Ugyanarra a kérdésre a második beküldés (újraküldés, dupla koppintás, másik lap): a tárolt eredmény, változás nélkül.
       const stored = attempts.find((a) => a.questionId === parsed.data.questionId);
       if (stored) {
         const item = findAdventItem(stored.questionId, bank, christmas);
         const view = viewOf(current);
-        return { patch: null, result: { answer: answerResult(item, stored, orderKeyFor(plan, day, key), locals.at.season, view.doors[day - 1]!, view), recorded: false, maxRounds } };
+        return { patch: null, result: { answer: answerResult(item, stored, orderKeyFor(plan, day, key), locals.at.season, view.doors[day - 1]!, view, false), recorded: false, maxRounds } };
       }
       const state = doorState({ unlocked: true, attempts, maxRepairs });
       const expected = state === "open" || state === "repairable" ? plan.doors[day]![attempts.length] : undefined;
@@ -437,11 +517,12 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
         result: { answer: answerResult(item, attempt, orderKey, locals.at.season, view.doors[day - 1]!, view), recorded: true, maxRounds },
       };
     }, adopt);
-    if (result.recorded && deps.onAnswer) {
-      try { deps.onAnswer({ row, subject, summary: result.answer.summary, maxRounds: result.maxRounds }); }
+    if (result.recorded && deps.onResult) {
+      try { deps.onResult({ row, subject, summary: result.answer.summary, maxRounds: result.maxRounds, phase: locals.at.phase }); }
       catch (error) { logger.error(`[ADVENT] válasz utáni teendő hiba: ${errorClass(error)}`); }
     }
-    res.json(result.answer);
+    // A válasz az írás UTÁNI szerververziót viszi (a mentett sor módosítási ideje — L1).
+    res.json({ ...result.answer, version: row.updatedAt.getTime(), asOf: locals.now.getTime() } satisfies AdventAnswerResult);
   }));
 
   router.post("/round", ...write, wrap(async (_req, res) => {
@@ -457,9 +538,36 @@ export function createAdventRouter(deps: AdventRouterDeps): Router {
       const summary = adventSummary(current.doors[current.round] ?? {}, maxRepairs);
       const allowed = summary.answered === ADVENT_DOORS && !summary.passed && summary.repairable === 0 && current.round < maxRounds && !current.passedAt;
       if (!allowed) throw new AdventHttpError(409, "Új kör csak akkor kérhető, ha végigértél, nincs javítható ablakod, és van még kör.");
-      return { patch: { round: current.round + 1, finishedAt: null }, result: null };
+      // A következő kör terve a körváltással EGY tranzakcióban készül és mentődik (L1). Védőháló: ha mégsem építhető fel (hiányos bank),
+      // a kör nem vált (nincs játszhatatlan kör, nincs 503 az első megnyitáskor) — a gyerek eredménye változatlan marad.
+      const plan = nextRoundPlan(current, grade, subjectKeyOf(subject), locals.at.season);
+      if (!plan) throw new AdventHttpError(409, "Idén már minden kérdést láttál ebből a naptárból — büszke lehetsz magadra!", { noMoreQuestions: true });
+      return { patch: { round: current.round + 1, finishedAt: null, plan: { ...current.plan, [current.round + 1]: plan } }, result: null };
     }, adopt);
-    res.json(buildAdventState(locals.at, locals.resolution, row));
+    res.json(stateOf(locals, row));
+  }));
+
+  /**
+   * Kifejezett átvétel a megtekintési útról (PR-C vak L2): a végigjátszott vendégnaptárnál nincs más író kérés, ezért a kliens az
+   * összesítés megnyitásakor ezzel menti el a GET-en előnézetként mutatott egyesítést. CSRF-védett író kérés (a GET mellékhatás nélkül
+   * marad), idempotens: ha nincs átvehető vendégsor, változás nélkül a mentett állapotot adja.
+   */
+  router.post("/adopt", ...write, wrap(async (_req, res) => {
+    const { locals, subject } = subjectOr400(res);
+    requireWritable(locals.at);
+    if (subject.kind !== "learner") throw new AdventHttpError(409, "Átvenni csak személyes linkkel lehet.");
+    const adopt = adoptionFor(locals);
+    const device = adopt ? await store.read(locals.at.season, { kind: "device", id: adopt.deviceId }) : null;
+    if (!adopt || !device) {
+      const current = await store.read(locals.at.season, subject);
+      if (current && !adventRowIsSound(current)) throw new AdventHttpError(409, CORRUPT_MESSAGE, { corrupt: true });
+      res.json(stateOf(locals, current));
+      return;
+    }
+    const { row } = await store.mutate(locals.at.season, subject, (current) => { sound(current); return { patch: null, result: null }; }, adopt);
+    // Az átvett (kész) vendégeredmény is lehet végleges (18.1): a szülői levél döntése ugyanaz, mint válasz után.
+    notifyResult(locals, subject, row);
+    res.json(stateOf(locals, row));
   }));
 
   return router;

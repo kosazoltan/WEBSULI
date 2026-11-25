@@ -16,6 +16,11 @@ import { ticketSecret } from "./realtime/ticket";
 import { startPlayerCodeSweeper } from "./player/sweeper";
 import { createPlayerStore } from "./player/store";
 import { banMaintenanceEnabled } from "./player/account-store";
+import { startAdventSweeper } from "./advent/sweeper";
+import { createAdventStore } from "./advent/store";
+import { adventEnabled } from "./advent/clock";
+import { deliverAdventMail } from "./advent/result-email";
+import { adventNow } from "../shared/advent/calendar";
 import { setupVite, serveStatic, log } from "./vite";
 import { dbPool } from "./db";
 import { setupScheduledPublishing } from "./scheduledPublishing";
@@ -28,6 +33,7 @@ import { setupLearnerReports } from "./learner-reports";
 import { startAutoBackupJob } from "./autoBackup";
 import { setupCleanupImprovedFiles } from "./cleanupImprovedFiles";
 import { GAME_SCORE_IP_MAX, GAME_SCORE_LIMIT_MESSAGE, GAME_SCORE_WINDOW_MS } from "./lib/game-score-limits";
+import { lessonsWriteGate } from "./lesson-result-limits";
 import { runMigrations } from "./migrate";
 import { startSkillLearningAudit } from "./workflows/learning-worker";
 import { requestIdMiddleware } from "./middleware/request-id";
@@ -427,14 +433,9 @@ app.use("/api/push/unsubscribe", publicWriteLimiter);
 // (képernyőidőt) osztanak — a szórásos újrapróbálkozást itt is fojtjuk. A GET
 // /coupons/active minden HUD-frissítéskor lefut, ezért az kimarad.
 app.use("/api/lessons/arbiter", arbiterLimiter);
-app.use("/api/lessons", (req, res, next) => {
-  const isSafeMethod =
-    req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS";
-  if (isSafeMethod) return next();
-  // Review #268: a bejelentkezett tanuló ismétlése saját, tanulónkénti keretet kap (server/rewards/review-router.ts).
-  if (req.path.startsWith("/review/")) return next();
-  return publicWriteLimiter(req, res, next);
-});
+// Review #268 (ismétlés: saját keret) és eredmény-e-mail B2 / #510 R46 (eredmény-POST: saját két keret) — a kivételek a közös kapuban:
+// server/lesson-result-limits.ts.
+app.use("/api/lessons", lessonsWriteGate(publicWriteLimiter));
 
 // Public comment/like writes live under /api/materials/*. Only real writes are throttled:
 // safe methods and the two read-only POST lookups (likes/check and likes/batch, used on
@@ -646,6 +647,18 @@ app.use((req, res, next) => {
       // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
       const playerStore = createPlayerStore(dbPool);
       startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      // U4c: az összevont eredménylevél söprője (lejárt rész jelölt levele, kézbesítetlen pótlása) — kapcsolótól függetlenül, E2E-ben nem.
+      const { startLessonResultSweeper } = await import("./lesson-result-sweeper");
+      startLessonResultSweeper();
+      // Adventi naptár (terv E23, 16.6; végrehajtás S6): a régi névtelen / előnézeti sorok és a korábbi évadok értesítő-foglalásainak
+      // takarítása induláskor és 24 óránként — a kapcsolótól függetlenül, E2E-ben nem.
+      const adventStore = createAdventStore(dbPool);
+      startAdventSweeper({
+        sweep: (now, season) => adventStore.sweep(now, season),
+        // S5 (terv 18.1; S5/S6 1. vak L1): a szülői levelek tartós pótlása (leállás / részleges siker után; lezárt évadban a levél
+        // nélküli, megkezdett tanulói sorok) — csak bekapcsolt naptárnál.
+        resumeMail: async (now) => (adventEnabled() ? deliverAdventMail(adventStore, adventNow(now)) : 0),
+      });
       if (banMaintenanceEnabled() && !process.env.PLAYER_BAN_KEY) {
         logger.info("[PLAYER] PLAYER_BAN_KEY nincs beállítva — a törölt fiókok tiltás-ujjlenyomata a SESSION_SECRET-ből levezetett kulccsal készül (rotációja ezeket érvényteleníti)");
       }

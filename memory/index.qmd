@@ -32,3 +32,34 @@ Minden hivatkozás a repón belülre mutat.
 
 TRAP → memóriák (YAML, QMD, Cogni, vector) → kanban → skill-ellenőrzés → higiénia → tiszta fa.
 Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <út> --since <ISO> --json`.
+
+# Kód-review (2026-11-23)
+
+- Kötelező PR előtti ellenőr: `node scripts/qa/gates/local-review.mjs` (helyi GPU, angol prompt). A felhős „vak kör” kivezetve —
+  terv és mérés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`; skill: `.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md`.
+- Mem0 memória: helyi Docker pgvector (`hermes-mem0-pg`). Záró push: `zaro-hurok.mjs push` (inkrementális vector-frissítéssel).
+- Feladat-nyilvántartás (mester): `node D:/repo/Hermes-agent/scripts/feladat.mjs list --repo D:/repo/WEBSULI` (Docker Postgres);
+  a kanban csak tükör. A 2026-11-23-i főterv (ág `docs/foterv-2026-11-23`) tételei bent vannak.
+- A helyi ellenőr nagy diffen (PR-C, 4900 sor) sok zajos medium/low leletet ad; a high leletet mindig kódból ellenőrizd.
+- PR-kapu böngészős út: 556 teszt / 27 spec egy workerrel >60 perc → WEBSULI_E2E_TIMEOUT_MIN (PR #542). Merge-kapu futásőr: DATABASE_URL a környezetből elsőbbséget kap.
+- Helyi e2e: CDP-swipe után a koppintás nem ad click-et (fling) — a swipe végén álló touchMove kell (PR #543).
+- Teljes hiányleltár (2026-11-23): `docs/specs/2026-11-23-teljes-hianyleltar.md` — hullámok H0–H8, mester: SQL feladat.tasks.
+- 2026-11-23: #542, #543 beolvadt; #544 (advent PR-C) és #545 (hiányleltár) nyitva.
+- P-010 kuponos ismétlés (PR #558, nyitva): a `LATE_RETURN_MAX` kupon módban határidő (nem csak rangsor-sáv); a megszakított
+  visszatérés nem számít a menetenkénti plafonba. Terv: `docs/specs/2026-11-23-kuponos-ismetles-hatarido.md` (K1–K6).
+  A `brainrot-play.spec.ts:113` „kampó nélkül … elkapás” e2e a PR-kapu hosszú futásában ingadozó (önállóan 21/21 zöld).
+
+# Eredmény-e-mail B2 (2026-11-24)
+
+- PR #556: keepalive kvíz-POST, CSRF-403 kezelés, egyszintű újrapróba (3 / kör / lap), törzsig élő időkorlát, 60 + 60-as IP-keret
+  (`source/server/lesson-result-limits.ts`). Végrehajtás: `docs/specs/2026-11-22-eredmeny-email-bontas-vegrehajtas.md` 2. pont.
+- WEBSULI e2e helyben csak `npm run test:e2e -- <spec>` harnesszel (eldobható DB); lapon belüli állapotot mérő lépések között nincs navigáció.
+<!-- zaro-hurok: 2026-11-24T01:35:38.457Z nincs-uj -->
+
+# Advent A2 levél, B3, kapuk (2026-11-24)
+
+- #562: legfeljebb egy levél / évad / címzett — `try:` az első kísérlet idejével, 23 órás ablak, utána `check:`; Resend `invalid_idempotent_request` (→ `ResendIdempotencyConflict`) = kézbesítve — más 409 / hiba NEM;
+  a pótlás és a küldés futó órája a befecskendezett `nowMs`-től halad. Advent-változásnál push előtt `test:learning-db`.
+- #564: B3 képesség-jelzés (`resultApi: 2`), jelzés nélkül régi alak; V2 + 400 → egy régi alakú ismétlés.
+- #565: a PR előtti kapu ítélete csak helyi bizonyíték. #566: lesson-fusion ritka indexcsere-bukás javítva.
+- Tulajdonosi utasítás: zöld CI + pre-merge után merge/deploy engedély nélkül.
