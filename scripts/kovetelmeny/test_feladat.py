@@ -23,6 +23,7 @@ sys.path.insert(0, str(HERE))
 
 import feladat as F  # noqa: E402
 from gyujt import SCHEMA as KOV_SCHEMA  # noqa: E402
+import gyujt as G  # noqa: E402
 
 REGI_TABLAK = ("sources", "requirements", "requirement_links", "flags", "revisions", "findings", "meta")
 
@@ -532,6 +533,26 @@ class ReviewSzalLapozas(unittest.TestCase):
     def test_hianyos_valasz_hiba(self):
         with self.assertRaises(RuntimeError):
             F.gh_open_threads(5, run=lambda args, **kw: self.valasz([{"isResolved": False}], info=False))
+
+
+
+
+class GyujtFelsorolasosKapcsolo(unittest.TestCase):
+    """2026-11-25 revízió: a felsorolásos kapcsoló (ADVENT_RESULT_EMAIL_MODE) élő értéke mérhető, a többi érték rejtett marad."""
+
+    def test_felsorolt_ertek_nyilt_mas_rejtett(self):
+        self.assertEqual(G.live_value("ADVENT_RESULT_EMAIL_MODE", "Send "), "send")
+        self.assertEqual(G.live_value("ADVENT_RESULT_EMAIL_MODE", "dry-run"), "dry-run")
+        self.assertEqual(G.live_value("ADVENT_RESULT_EMAIL_MODE", "sk-titok-123"), G.REJTETT)
+        self.assertEqual(G.live_value("VALAMI_MAS_KULCS", "send"), G.REJTETT)
+        self.assertEqual(G.live_value("MP_MODE", "on"), "on")
+        self.assertEqual(G.live_value("PORT", "10000"), "10000")
+
+    def test_allapot(self):
+        rule = G.FLAG_RULES["ADVENT_RESULT_EMAIL_MODE"]
+        self.assertEqual(G.flag_state("send", rule, ""), "be")
+        self.assertEqual(G.flag_state("dry-run", rule, ""), "ki")
+        self.assertEqual(G.flag_state(G.REJTETT, rule, ""), "nem_logikai")
 
 
 if __name__ == "__main__":
