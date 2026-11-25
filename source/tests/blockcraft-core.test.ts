@@ -24,6 +24,7 @@ import {
   RUNE_CHECK_MS,
   RUNE_LOOT_CORRECT,
   RUNE_LOOT_WRONG,
+  RUNE_MAX,
   RUNE_NEAR_RADIUS,
   RUNE_REVEAL_GAP_MS,
   RUNE_SLOW_MO,
@@ -695,4 +696,51 @@ test("vak K5 (review #484): az újrahasznált (képkockánként átírt) célobj
   assert.ok(st.lock);
   aim.x = 1; // a célobjektum átírása nem mozdítja a zár ércét
   assert.deepEqual(st.lock.ore, { x: ore.x, y: ore.y, z: ore.z });
+});
+
+test("review #484 (core.ts:600): a felfedezéssel előbukkanó érc is a RUNE_MAX kapacitáson belül marad — a legtávolabbi érc runeGone-nal távozik", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const w = st.world;
+  // A lista feltöltése a kapacitásig a játékostól távol (a közeli érc miatt az ensureRuneNear nem bontana).
+  for (let i = 0; st.ores.length < RUNE_MAX; i++) {
+    const o = { x: 2 + (i % 30), y: 5, z: 2 + Math.floor(i / 30) };
+    if (vGet(w, o.x, o.y, o.z) === RUNE_ORE) continue;
+    vSet(w, o.x, o.y, o.z, RUNE_ORE);
+    st.ores.push(o);
+  }
+  assert.equal(st.ores.length, RUNE_MAX);
+  r.tick(RUNE_REVEAL_GAP_MS);
+  r.events.length = 0;
+  vSet(w, 21, 5, 20, GRASS);
+  r.mine.aim({ x: 21, y: 5, z: 20 });
+  r.mine.press();
+  r.tick(450);
+  assert.equal(vGet(w, 21, 5, 20), RUNE_ORE, "felfedezés történt");
+  assert.ok(st.ores.length <= RUNE_MAX, `ércek: ${st.ores.length} (max ${RUNE_MAX})`);
+  const gone = r.events.filter((e) => e.type === "runeGone");
+  assert.equal(gone.length, 1, "a legtávolabbi érc runeGone eseménnyel távozott");
+  const g = (gone[0] as Extract<RuneMineEvent, { type: "runeGone" }>).ore;
+  assert.equal(vGet(w, g.x, g.y, g.z), AIR, "a távozó érc helye levegő");
+  assert.ok(!(g.x === 21 && g.y === 5 && g.z === 20), "nem az új érc távozott");
+});
+
+test("review #484 (core.ts:645): a kijelzés alatt elutasított érintés elfogyasztja a tartást — a kijelzés után új lenyomás nélkül nem nyílik kérdés", () => {
+  const r = rig();
+  const st = r.mine.state();
+  const [a, b] = st.ores;
+  r.mine.hit(a!);
+  const p = r.ui!.active()!;
+  r.tick(p.windowMs + 50);
+  assert.equal(st.lock?.resolved, "timeout", "kijelzés fut");
+  r.mine.aim({ ...b! });
+  r.mine.press();
+  assert.equal(st.pendingOre, null, "a kijelzés alatt nincs kérés");
+  assert.equal(st.mining.pressing, false, "az elutasított érintés elfogyasztotta a tartást");
+  r.tick(REVEAL_WRONG_MS + 300);
+  assert.ok(!st.lock || st.lock.resolved !== null || !(st.lock.ore.x === b!.x && st.lock.ore.z === b!.z), "a tartott ujj alatt nem nyílt meg magától a következő zár");
+  r.mine.release();
+  r.mine.press();
+  const reopened = st.lock;
+  assert.ok(reopened && reopened.resolved === null, "új lenyomásra a zár megnyílik");
 });
