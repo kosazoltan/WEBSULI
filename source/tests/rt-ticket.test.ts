@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { createTicketService, ticketSecret } from "../server/realtime/ticket";
+import { withDifferentChar } from "./support/tamper";
 
 /**
  * JM2 — belépőjegy (végrehajtás JM2 4. lépés; terv 10.3 6. pont): aláírt, ≤ 60 s, egyszer használatos, szándékhoz kötött.
@@ -42,7 +43,8 @@ describe("JM2 belépőjegy", () => {
     assert.deepEqual(other.consume(ticket), { ok: false, reason: "SIGNATURE" });
     const forgedBody = Buffer.from(JSON.stringify({ ...JSON.parse(Buffer.from(body!, "base64url").toString()), kind: "admin" })).toString("base64url");
     assert.deepEqual(svc.consume(`${forgedBody}.${sig}`), { ok: false, reason: "SIGNATURE" });
-    assert.deepEqual(svc.consume(`${body}.${sig!.slice(0, -2)}AA`), { ok: false, reason: "SIGNATURE" });
+    // Az aláírás ELSŐ karaktere mindig eltérőre cserélve (a régi `…AA` ~1/1024 eséllyel azonos jegyet adott — kanban #209).
+    assert.deepEqual(svc.consume(`${body}.${withDifferentChar(sig!, 0)}`), { ok: false, reason: "SIGNATURE" });
     for (const bad of ["", "abc", "a.b.c", `${body}.`, 42, null, "x".repeat(2000)]) assert.equal(svc.consume(bad).ok, false);
   });
 

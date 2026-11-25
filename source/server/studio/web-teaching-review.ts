@@ -3,10 +3,13 @@ import { createHash } from "node:crypto";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 
-export type FetchedTeachingSource = { url: string; title: string; text: string };
+/** W1a (review #592): a dokumentum-mód formátuma, megőrzött képei és a szövegréteg nélküli rész jele a W1b-nek is megmarad. */
+export type FetchedTeachingSource = { url: string; title: string; text: string; format?: import("./web-document").WebFormat; images?: import("./web-document").WebImage[]; needsOcr?: boolean; scan?: import("./web-document").WebScan };
 export class TeachingReviewFailure extends Error {}
-export const sourceIsErrorPage = (source: FetchedTeachingSource) => /^(the url .* blocked|access denied|just a moment\.*|web page blocked!?|403 forbidden|404 not found)$/i.test(source.title.trim())
-  || /^\s*(block\s+)?Web Page Blocked!/i.test(source.text);
+// W1a (A6): a „Korlátozva” / „Hozzáférés megtagadva” / „Access restricted” oldal is hibaoldal (a címe, vagy a szöveg eleje ezt mondja).
+export const sourceIsErrorPage = (source: FetchedTeachingSource) => /^(the url .* blocked|access denied|access restricted|restricted|korlátozva|korlátozott hozzáférés|hozzáférés megtagadva|just a moment\.*|web page blocked!?|403 forbidden|404 not found)$/i.test(source.title.trim())
+  || /^\s*(block\s+)?Web Page Blocked!/i.test(source.text)
+  || /^\s*(ez az oldal |a tartalom )?(korlátozva érhető el|csak regisztrált|hozzáférés megtagadva|access (is )?restricted)/i.test(source.text);
 const fetchResult = z.object({ type: z.literal("web_fetch_tool_result"), content: z.object({
   type: z.literal("web_fetch_result"), url: z.string().url(), content: z.object({
     title: z.string().nullish(), source: z.object({ type: z.literal("text"), data: z.string().min(80) }),

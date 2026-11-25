@@ -1,0 +1,71 @@
+# Önátanuló tábla (WEBSULI): minden munka közben elkövetett hiba és a megoldása, hogy mindig elérhető legyen.
+# Forrás-minta: otthon_automatizalas kanban/experience.yaml (session-close loop, 2026-11-22).
+# status: observed -> fixed -> rule (a "rule" a TRAP-táblába / skillbe / AGENTS.md-be is bekerül)
+# Új kártya: node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs experience add --repo . --observed ... --fix ... --rule ...
+cards:
+  - id: 1
+    status: rule
+    date: "2026-11-23"
+    observed: "Felhős vak kör minden javító pushra: 342 kör / 45 PR"
+    fix: "local-review.mjs helyi GPU-ellenőr, angol prompt"
+    rule: "Kód-review helyben; felhős vélemény csak kockázatos fájlnál, egyszer"
+  - id: 2
+    status: rule
+    date: "2026-11-23"
+    observed: "vector-index elavult a záró commit után"
+    fix: "vector újraépítés az utolsó commit után"
+    rule: "vector mindig utolsó lépés, háttérben"
+  - id: 3
+    status: rule
+    date: "2026-11-23"
+    observed: "feladatok elvesztek kanban/ágak között"
+    fix: "SQL feladat-nyilvántartás + szinkron a higiéniában"
+    rule: "minden teendő azonnal feladat.mjs add"
+  - id: 4
+    status: rule
+    date: "2026-11-24"
+    observed: "P-010: a 'felső határ' konstans csak rangsorolt, nem kényszerített; plafon nélküli kényszerítésnél csupa rossz válasznál a lecke megállt"
+    fix: "határidő a 30%-os arány előtt, de csak a menetenkénti plafon alatti hibára; mérés 400 seeden a döntés előtt"
+    rule: "ütemező-garanciát előbb seedelt próba-szkripttel mérj (több leckeméret × pontosság), és nézd a mellékhatást (haladás) is, mielőtt szerződést írsz"
+  - id: 9
+    status: rule
+    date: "2026-11-24"
+    observed: "Ritka e2e-bukás indexelt hangelemen (lesson-fusion): a napló sorrendje az előtöltési feloldástól függött"
+    fix: "a lista az első valódi lejátszás szerint rendezve; terhelt reprodukció --repeat-each=60 --workers=20 + nyers diagnosztikai napló"
+    rule: "flaky e2e-nél előbb terhelt ismétléssel reprodukálj és naplózd a nyers állapotot; indexre csak determinisztikus sorrendben hivatkozz"
+  - id: 8
+    status: rule
+    date: "2026-11-24"
+    observed: "Advent levélküldés: a befecskendezett nowMs-t a Date.now() felülírta (Thread 8), a DB-integrációs teszt csak a CI-ben bukott"
+    fix: "futó óra: (nowMs ?? start) + eltelt idő; a pótlás is saját futó órát visz; advent-változásnál push előtt test:learning-db"
+    rule: "befecskendezhető időt sosem cserélj Date.now()-ra; tároló/levél-változásnál a DB-integrációs kör a push előtt kötelező"
+  - id: 7
+    status: rule
+    date: "2026-11-24"
+    observed: "Évadonként egy levél szerződés: elfogadás után kiesett jelölés + 24 h-s Resend-ablak lejárta = második levél"
+    fix: "try:<h>@<első ms> jelölő, 23 órás újrapróba-ablak, utána check:; Resend 409 invalid_idempotent_request = kézbesítve"
+    rule: "idempotencia-kulcsos küldésnél az ELSŐ kísérlet idejét őrizd; az ablakon túl automatikus ismétlés helyett kézi egyeztetés"
+  - id: 11
+    status: rule
+    date: "2026-11-24"
+    observed: "Duplikátum-válasz korai return-je a levéltől független mellékhatást (feladatmérés) is kihagyta; üres pontozás lefoglalta a kört (PR #571 review)"
+    fix: "duplicate jelző, a független ág előtte fut; üres graded.rows → queued:false a jelző előtt"
+    rule: "dedup-ágnál a korai return csak azt tiltsa, amit dedupál; foglalás csak érdemi (nem üres) tartalomra"
+  - id: 10
+    status: rule
+    date: "2026-11-24"
+    observed: "DB-teszt hamis bukás: az előző teszt késői aszinkron levele a következő teszt számlálójába esett"
+    fix: "minden teszt megvárja a saját háttér-mellékhatását, a számlálás tárgy szerint szűr"
+    rule: "202-es háttérmunkát indító tesztben a teszt végéig várd meg a saját mellékhatást; a waitFor lejárta nem bukás — utána assert"
+  - id: 6
+    status: rule
+    date: "2026-11-24"
+    observed: "e2e teszt a főágon hamisan zöld: két lépés között navigált, elveszett a lapon belüli állapot"
+    fix: "navigáció nélküli segédfüggvény (answerAllHere), RED újramérve a főágon"
+    rule: "lapon belüli állapotot mérő e2e-ben nincs page.goto a lépések között; RED mindig mérve"
+  - id: 5
+    status: rule
+    date: "2026-11-24"
+    observed: "Időkorlátos teszt abszolút ms-küszöbbel gépenként/terhelésenként eltérő eredményt adott (#557)"
+    fix: "Gépfüggetlen arány-teszt a főági referenciához mérve; REDACT_CAP 8 KB"
+    rule: "Teljesítménytesztben ugyanazon a gépen mért arány, ne abszolút ms-küszöb"

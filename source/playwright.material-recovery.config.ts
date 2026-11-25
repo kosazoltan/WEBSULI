@@ -7,7 +7,7 @@ export default defineConfig({
   fullyParallel: true,
   workers: 2,
   // Playwright route mocks cannot intercept service-worker-owned fetches.
-  use: { ...devices["Desktop Chrome"], channel: "chrome", serviceWorkers: "block", baseURL: "http://127.0.0.1:5178", screenshot: "only-on-failure" },
+  use: { ...devices["Desktop Chrome"], serviceWorkers: "block", baseURL: "http://127.0.0.1:5178", screenshot: "only-on-failure" },
   webServer: {
     command: "npx vite --host 127.0.0.1 --port 5178 --strictPort",
     url: "http://127.0.0.1:5178",

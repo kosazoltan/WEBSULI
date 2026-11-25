@@ -12,8 +12,9 @@ import { createDrizzlePipelineStore } from "../pipeline-store";
 import { createLessonConversation, type ConversationState, type SingleRunEffort } from "./conversation";
 import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable, singleRunSystemPrompt, type SingleRunMap, type SingleRunPhase, type SingleRunResult } from "./engine";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import { SOURCE_VISUALS_SCHEMA_VERSION } from "../../../shared/source-visuals";
+import { sourceImagesEnabled } from "../../../shared/source-image";
 
 
 /**
@@ -73,29 +74,89 @@ export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFil
 }
 
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
-export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled()): string {
+export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled(), sourceImages: boolean = sourceImagesEnabled()): string {
   // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
   // A leltár funkciókapcsolója: KI állapotban a lenyomat a kapcsoló előttivel azonos (a régi térkép változatlanul visszajön).
   // Review J4 (S1a), BE állapotban: a lenyomat része a vizuális leltár sémaverziója — a leltár előtti, a KI állapotban kinyert vagy a
   // régi sémájú térképet ugyanarra a fájlra nem adja vissza jelzés nélkül; a séma változásakor új kinyerés készül.
-  return createHash("sha256").update(JSON.stringify(["single-run-map-2", ...(sourceVisuals ? [`source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`] : []), title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
+  // Review #596: a képkapcsoló BE állapotában a leltár photo + crop mezőket is kér — a régi (kivágás nélküli) térkép nem jöhet vissza.
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", ...(sourceVisuals ? [`source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`] : []), ...(sourceVisuals && sourceImages ? ["source-images-1"] : []), title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
 }
 
 /**
- * Különálló tudástár-kinyerés (S4a): az egyfutásos 1. állomás (forrás és tudásbank) önállóan, egy beszélgetésben; az eredmény
- * draft térkép a tanári jóváhagyáshoz. Idempotens a tartalmi lenyomaton.
+ * A tárolt lenyomat gazda-kötött változata (#264): két tanár ugyanarra a tartalomra két külön térképet kap (az `input_hash` egyedi),
+ * és egyik sem kaphatja vissza a másikét. A `singleRunMapHash` értéke változatlan (a prompt-ujjlenyomat rögzíti).
  */
-export async function extractMapSingleRun(input: { files: ExtractorFile[]; title?: string; ownerId: string }): Promise<{ mapId: string; cached: boolean }> {
-  const inputHash = singleRunMapHash(input.files, input.title);
-  const [existing] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps).where(eq(knowledgeMaps.inputHash, inputHash)).limit(1);
-  if (existing) return { mapId: existing.id, cached: true };
-  const files = await prepareFiles(input.files);
+export function ownerMapHash(contentHash: string, ownerId: string): string {
+  return createHash("sha256").update(JSON.stringify(["owner-map-1", ownerId, contentHash])).digest("hex");
+}
+
+/** A forrás-állomás (fizetős modellhívás) cserélhető pontja: élesben az egyfutásos beszélgetés; a teszt determinisztikus csonkot ad. */
+export type ExtractReadSource = (files: ExtractorFile[]) => Promise<{ read: SingleRunMap; model: string }>;
+
+const liveReadSource: ExtractReadSource = async (files) => {
   const conversation = createLessonConversation(singleRunSystemPrompt(), {
     onFallback: (reason) => logger.warn(`[EGYFUTÁS] Tartalékmodell (kinyerés): ${reason}`),
   });
   const read = await readSourceStation({ conversation, log: (m) => logger.info(m) }, files);
-  const mapId = await saveSingleRunMap({ ...read, title: input.title?.trim() || read.title }, files, input.ownerId, conversation.model, { draft: true, inputHash });
-  return { mapId, cached: false };
+  return { read, model: conversation.model };
+};
+
+/**
+ * Különálló tudástár-kinyerés (S4a): az egyfutásos 1. állomás (forrás és tudásbank) önállóan, egy beszélgetésben; az eredmény
+ * draft térkép a tanári jóváhagyáshoz. Idempotens a gazda-kötött lenyomaton (`ownerMapHash`), azaz ugyanaz a hívó ugyanarra a
+ * tartalomra a saját térképét kapja vissza; a javítás előtti, tartalmi lenyomatú (`singleRunMapHash`) térkép csak a saját gazdájának jön vissza.
+ */
+export async function extractMapSingleRun(input: { files: ExtractorFile[]; title?: string; ownerId: string }, deps: { readSource?: ExtractReadSource } = {}): Promise<{ mapId: string; cached: boolean }> {
+  // #264 (Kanban #11): a gyorsítótár csak a hívó SAJÁT térképét adhatja vissza — korábban ugyanaz a tartalom más tanár térképét adta.
+  // Új térkép a gazda-kötött lenyomattal mentődik; a javítás előtti (tartalmi lenyomatú) térkép csak a saját gazdájának jön vissza.
+  const contentHash = singleRunMapHash(input.files, input.title);
+  const inputHash = ownerMapHash(contentHash, input.ownerId);
+  // PR #550 review: ugyanannak a gazdának egyidejű, azonos kinyerése ebben a folyamatban a már futó munkához csatlakozik (egy modellmunka).
+  // A kulcs gazda-kötött, így két tanár kérése sosem fonódik össze. Az ellenőrzés és a bejegyzés között nincs `await`.
+  const running = extractionsInFlight.get(inputHash);
+  if (running) return { mapId: (await running).mapId, cached: true };
+  const run = extractOwnMap(input, contentHash, inputHash, deps.readSource ?? liveReadSource).finally(() => extractionsInFlight.delete(inputHash));
+  extractionsInFlight.set(inputHash, run);
+  return run;
+}
+
+/** Az épp futó kinyerések a gazda-kötött lenyomat szerint (folyamaton belüli összevonás). */
+const extractionsInFlight = new Map<string, Promise<{ mapId: string; cached: boolean }>>();
+
+async function extractOwnMap(input: { files: ExtractorFile[]; title?: string; ownerId: string }, contentHash: string, inputHash: string, readSource: ExtractReadSource): Promise<{ mapId: string; cached: boolean }> {
+  const existing = await findOwnMap(inputHash, contentHash, input.ownerId);
+  if (existing) return { mapId: existing, cached: true };
+  const files = await prepareFiles(input.files);
+  const { read, model } = await readSource(files);
+  try {
+    const mapId = await saveSingleRunMap({ ...read, title: input.title?.trim() || read.title }, files, input.ownerId, model, { draft: true, inputHash });
+    return { mapId, cached: false };
+  } catch (error) {
+    // PR #550 review: egy másik folyamat (vagy példány) ugyanarra a gazda-kötött lenyomatra közben már mentett — az egyedi `input_hash`
+    // ütközése nem hiba (502), hanem a saját, már elkészült térkép; azt adjuk vissza.
+    if (!isInputHashConflict(error)) throw error;
+    const saved = await findOwnMap(inputHash, contentHash, input.ownerId);
+    if (!saved) throw error;
+    logger.info(`[EGYFUTÁS] Párhuzamos kinyerés: a már mentett saját térkép jön vissza (${saved}).`);
+    return { mapId: saved, cached: true };
+  }
+}
+
+/** Az `input_hash` egyedi kulcsának ütközése (Postgres 23505); a Drizzle a meghajtó hibáját a `cause`-ba csomagolja. */
+function isInputHashConflict(error: unknown): boolean {
+  for (let e: unknown = error, depth = 0; e && typeof e === "object" && depth < 4; e = (e as { cause?: unknown }).cause, depth++) {
+    const pg = e as { code?: string; constraint?: string };
+    if (pg.code === "23505") return !pg.constraint || pg.constraint === "knowledge_maps_input_hash_unique";
+  }
+  return false;
+}
+
+/** A hívó saját térképe: gazda-kötött lenyomat, vagy a javítás előtti tartalmi lenyomat a saját `created_by`-jával. */
+async function findOwnMap(inputHash: string, contentHash: string, ownerId: string): Promise<string | undefined> {
+  const [row] = await db.select({ id: knowledgeMaps.id }).from(knowledgeMaps)
+    .where(or(eq(knowledgeMaps.inputHash, inputHash), and(eq(knowledgeMaps.inputHash, contentHash), eq(knowledgeMaps.createdBy, ownerId)))).limit(1);
+  return row?.id;
 }
 
 export type SingleRunProgress = { phase: SingleRunPhase | "ocr" | "error"; detail?: string | null; error?: string; mapId?: string; jobId?: string; lessonId?: string };

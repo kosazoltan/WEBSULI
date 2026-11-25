@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { checkFetchUrl, fetchPublicPage, htmlToText, isPublicAddress, type RawRequest, type RawResponse } from "../server/studio/safe-fetch";
-import { candidateUrls, gatherWebSourcesGpt, usableSource } from "../server/studio/web-gather-gpt";
+import { candidateUrls, enrichWithVisuals, fitVisualBudget, GATHER_VISUAL_BUDGET, gatherWebSourcesGpt, usableSource } from "../server/studio/web-gather-gpt";
 
 /*
  * Spec 2026-10-15-tartalek-b4-webgyujtes (tulajdonosi döntés): a webes forrásgyűjtés GPT-6.1 Sol tartaléka — a GPT keres, a
@@ -104,7 +104,9 @@ test("gatherWebSourcesGpt: a keresés URL-jeiből a Claude-úttal azonos szabál
 test("gatherWebSources: a Claude-gyűjtés hibájánál (külső megszakítás és kulcs nélkül nem) a GPT-6.1 Sol tartalék gyűjt", () => {
   // A Claude-gyűjtés élő SDK-útja nem mockolható hálózat nélkül — a feltételek forrás-szinten rögzítve (meglévő R1-minta).
   const src = readFileSync(new URL("../server/studio/web-research-runner.ts", import.meta.url), "utf8");
-  assert.match(src, /return await gatherWebSourcesClaude\(input, observer\);/);
+  assert.match(src, /const gathered = await gatherWebSourcesClaude\(input, observer\);/);
+  // Review #593: a sikeres elsődleges gyűjtés is megkapja a vizuális kiegészítést (hibatűrően).
+  assert.ok(src.includes("await enrichWithVisuals(gathered.downloaded, gathered.searched ?? [], { signal: observer.signal }).catch(() => gathered.downloaded)"));
   // Review #222: a lease-hiba (WorkflowConflict) nem indít tartalékot; a kulcs és a külső megszakítás feltétele marad.
   assert.match(src, /if \(error instanceof WorkflowConflict\) throw error;\s*if \(observer\.signal\?\.aborted \|\| !fallback \|\| !studioModelReady\(fallback\)\) throw error;/);
   assert.match(src, /if \(error instanceof WebResearchFailure \|\| error instanceof WorkflowConflict\) throw error;/, "a Claude-út nem fedi el a lease-hibát");
@@ -171,4 +173,77 @@ test("review #222: folytatáskor a mentett GPT-forrás nyer (nincs új hálózat
   assert.equal(fetches, 0, "a mentett tartalék-forrás mellett nincs új Claude-/GPT-hívás");
   const record = await store.read("web-resume", "a");
   assert.equal(hasSavedResearchTurn(record!, input), true);
+});
+
+// W1a (A4, A5): dokumentum-mód — a PDF / kép elfogadva, a régi (hírlevél) alapmód változatlanul csak szöveget fogad.
+test("A4: fetchPublicPage dokumentum-módban a PDF-et és a képet is elfogadja (képpel), alapból elutasítja", async () => {
+  const pdfBytes = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [] /Count 0 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n", "latin1");
+  await assert.rejects(fetchPublicPage("https://www.nkp.hu/a.pdf", { lookup: publicLookup, request: async () => response(200, { "content-type": "application/pdf" }, pdfBytes) }), /Nem szöveges/);
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082", "hex");
+  const img = await fetchPublicPage("https://www.nkp.hu/k.png", { documents: true, lookup: publicLookup, request: async () => response(200, { "content-type": "image/png" }, png) });
+  assert.equal(img.format, "image");
+  assert.equal(img.images?.length, 1);
+});
+
+test("A5: a gyűjtő dokumentum-módban tölt; szöveg nélküli (kép / szkennelt) forrás W1b nélkül nem kerül a listába", () => {
+  assert.equal(usableSource({ url: "https://a.hu/k.png", title: "k", text: "", format: "image", images: [] }), undefined);
+  // Review #592: az elfogadott dokumentum képei, formátuma és szkennelt-jele a W1b-nek megmarad.
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 1, sourceUrl: "https://a.hu/d.pdf" };
+  const kept = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "pdf", images: [img], needsOcr: true });
+  assert.deepEqual({ format: kept?.format, images: kept?.images, needsOcr: kept?.needsOcr }, { format: "pdf", images: [img], needsOcr: true });
+  const src = readFileSync(new URL("../server/studio/web-gather-gpt.ts", import.meta.url), "utf8");
+  assert.match(src, /fetchPublicPage\(url, \{ signal, documents: true \}\)/);
+});
+
+// W1b (B2): a kép / szkennelt forrás szöveg nélkül is forrás; forrásonként legfeljebb 3 kép, egyenként ≤ 1 MB.
+test("B2: usableSource — kép és szkennelt PDF szöveg nélkül elfogadva, hibaoldal nem; képkeret forrásonként", () => {
+  const img = (bytes: number) => ({ mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes, sourceUrl: "https://a.hu/k.png" });
+  const photo = usableSource({ url: "https://a.hu/k.png", title: "Térkép", text: "", format: "image", images: [img(10)], needsOcr: true });
+  assert.equal(photo?.format, "image");
+  assert.equal(photo?.images?.length, 1);
+  const scan = usableSource({ url: "https://a.hu/s.pdf", title: "Szkennelt", text: "", format: "pdf", images: [], needsOcr: true, scan: { mime: "application/pdf" as const, dataUrl: "data:application/pdf;base64,JVBERg==" } });
+  assert.equal(scan?.scan?.mime, "application/pdf");
+  assert.equal(usableSource({ url: "https://a.hu/x", title: "Korlátozva", text: "", format: "image", images: [img(10)] }), undefined, "hibaoldal-cím");
+  const many = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "docx", images: [img(10), img(2_000_000), img(20), img(30), img(40)] });
+  assert.deepEqual(many?.images?.map(i => i.bytes), [10, 20, 30]);
+});
+
+test("B2: a gyűjtés vizuális kerete — fölötte a szöveges forrás szövegként marad, a csak vizuális kimarad", () => {
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 1_000_000, sourceUrl: "https://a.hu/k.png" };
+  const textual = { url: "https://a.hu/d", title: "d", text: "x".repeat(400), images: [img] };
+  assert.equal(fitVisualBudget(textual, 0), textual);
+  assert.deepEqual(fitVisualBudget(textual, GATHER_VISUAL_BUDGET), { url: "https://a.hu/d", title: "d", text: "x".repeat(400) });
+  assert.equal(fitVisualBudget({ url: "https://a.hu/k.png", title: "k", text: "", format: "image", images: [img] }, GATHER_VISUAL_BUDGET), undefined);
+});
+
+test("review #593: a csak beágyazott képet tartalmazó (rövid szövegű) DOCX / PPTX is vizuális forrás", () => {
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 10, sourceUrl: "https://a.hu/d.docx" };
+  assert.equal(usableSource({ url: "https://a.hu/d.docx", title: "Ábrák", text: "", format: "docx", images: [img] })?.images?.length, 1);
+  assert.equal(usableSource({ url: "https://a.hu/p.pptx", title: "Diák", text: "Rövid", format: "pptx", images: [img] })?.format, "pptx");
+  assert.equal(usableSource({ url: "https://a.hu/d.docx", title: "Üres", text: "", format: "docx", images: [] }), undefined);
+});
+
+test("review #593: az elsődleges gyűjtés vizuális kiegészítése — csak dokumentum-/képcím, a meglévőhöz csatolva, új csak vizuális forrás, keretek", async () => {
+  const img = (n: number, bytes = 100) => ({ mime: "image/png", dataUrl: `data:image/png;base64,AA${n}`, bytes, sourceUrl: `https://a.hu/${n}.png` });
+  const textual = { url: "https://a.hu/tankonyv.pdf", title: "Tankönyv", text: "x".repeat(400) };
+  const html = { url: "https://a.hu/cikk", title: "Cikk", text: "y".repeat(400) };
+  const asked: string[] = [];
+  const pages: Record<string, unknown> = {
+    "https://a.hu/tankonyv.pdf": { url: "https://a.hu/tankonyv.pdf", title: "Tankönyv", text: "x".repeat(400), format: "pdf", images: [img(1), img(2)] },
+    "https://a.hu/szken.pdf": { url: "https://a.hu/szken.pdf", title: "Szkennelt", text: "", format: "pdf", images: [], needsOcr: true, scan: { mime: "application/pdf", dataUrl: "data:application/pdf;base64,JVBERg==" } },
+    "https://a.hu/hiba.png": { url: "https://a.hu/hiba.png", title: "Korlátozva", text: "", format: "image", images: [img(3)] },
+  };
+  const download = async (url: string) => { asked.push(url); if (!pages[url]) throw new Error("nincs"); return pages[url] as never; };
+  const out = await enrichWithVisuals([textual, html], ["https://a.hu/cikk", "https://a.hu/szken.pdf", "https://a.hu/hiba.png", "https://a.hu/nincs.docx"], { download });
+  assert.deepEqual(asked.sort(), ["https://a.hu/hiba.png", "https://a.hu/nincs.docx", "https://a.hu/szken.pdf", "https://a.hu/tankonyv.pdf"], "HTML-oldalt nem tölt újra");
+  assert.equal(out[0].images?.length, 2, "a szöveges forráshoz csatolva");
+  assert.equal(out[0].text, textual.text, "a szöveg a Claude-gyűjtésé marad");
+  assert.equal(out[1], html);
+  assert.deepEqual(out.slice(2).map(s => s.url), ["https://a.hu/szken.pdf"], "csak vizuális új forrás; a hibaoldal kiesik");
+  // Keret: a 12 MB fölött a szöveges forrás szöveg marad, a csak vizuális nem kerül be.
+  const big = { "https://a.hu/tankonyv.pdf": { ...(pages["https://a.hu/tankonyv.pdf"] as object), images: [img(4, GATHER_VISUAL_BUDGET)] } };
+  const capped = await enrichWithVisuals([textual], [], { download: async url => big[url as keyof typeof big] as never });
+  assert.equal(capped[0].images, undefined);
+  // Hibatűrő: minden letöltés hibázik → változatlan.
+  assert.deepEqual(await enrichWithVisuals([textual], ["https://a.hu/x.pdf"], { download: async () => { throw new Error("le"); } }), [textual]);
 });

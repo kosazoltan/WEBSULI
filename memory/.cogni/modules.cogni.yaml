@@ -1,0 +1,11 @@
+# Cogni-format modulonkénti memória: modul → forrás, API, adat, gyakori hibák
+
+cogni:
+  kind: module_index
+  name: websuli-modules
+  generated: 2026-11-22
+
+  modules:
+    # 2026-11-23 P-010
+    - path: source/client/src/game-engine/play/questionDirector.ts
+      note: "couponDeadline(): kupon-mód határidős visszatérés (LATE_RETURN_MAX); abort a menetközi ismétlés returns-ét visszaveszi (PR #558)"

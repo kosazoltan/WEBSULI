@@ -16,7 +16,7 @@ export async function readDocxText(content: string): Promise<string> {
   return sections.join("\n");
 }
 
-type MimePart = { headers: Map<string, string>; body: string };
+export type MimePart = { headers: Map<string, string>; body: string };
 
 /** RFC 822 style header block → lower-cased name map (folded continuation lines joined). */
 function parseMimeHeaders(block: string): Map<string, string> {
@@ -28,17 +28,17 @@ function parseMimeHeaders(block: string): Map<string, string> {
   return headers;
 }
 
-function splitMimeEntity(raw: string): MimePart {
+export function splitMimeEntity(raw: string): MimePart {
   const match = /\r?\n\r?\n/.exec(raw);
   if (!match) return { headers: parseMimeHeaders(raw), body: "" };
   return { headers: parseMimeHeaders(raw.slice(0, match.index)), body: raw.slice(match.index + match[0].length) };
 }
 
-const mimeParam = (header: string | undefined, name: string) =>
+export const mimeParam = (header: string | undefined, name: string) =>
   header ? new RegExp(`(?:^|;)\\s*${name}\\s*=\\s*(?:"([^"]*)"|([^;\\s]+))`, "i").exec(header)?.slice(1).find(v => v !== undefined) : undefined;
 
 /** Transfer-decoded bytes of one part; `body` is a latin1 (byte-preserving) string. */
-function decodeTransfer(body: string, encoding: string | undefined): Buffer {
+export function decodeTransfer(body: string, encoding: string | undefined): Buffer {
   switch ((encoding ?? "").toLowerCase()) {
     case "base64": return Buffer.from(body.replace(/[^A-Za-z0-9+/=]/g, ""), "base64");
     case "quoted-printable": return Buffer.from(body.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16))), "latin1");

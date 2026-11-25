@@ -10,6 +10,7 @@
 //   git push <remote> --delete <ág>                               → kapu nélkül (távoli ág törlése)
 //   gh pr create [ismert kapcsolók]                               → zöld `pre-pr-<fej>`                            (npm run gate:pr)
 //   gh pr merge [<szám>|<URL>|<ág>] [ismert kapcsolók]            → zöld, ≤ 15 perces `merge-<n>-<PR-fej>`        (npm run gate:merge -- <n>)
+//     (a bizonyíték `runId`-je = a `merge-run-<n>` jelölőé, és nincs fennálló `merge-lock-<n>.lock` zár — Copilot #513)
 // A bizonyíték a közös git-könyvtárban van (`<git-common-dir>/websuli-qa-evidence/`): a fő checkout és minden munkafa ugyanazt látja.
 // A hook NEM biztonsági határ a szándékos megkerülés ellen (pl. a hook kikapcsolása) — a figyelmetlen hibát fogja meg; a megkerülés
 // tilos, és az orkesztrátor a pre-merge-gate-et mindenképp lefuttatja.
@@ -433,6 +434,16 @@ export function checkAction(plan, cwd, { now = Date.now(), ghView, raw = '', run
     const ev = readEv(info.evDir, `merge-${view.number}-${view.headRefOid}`);
     if (!ev || ev.ok !== true) {
       return `A merge előtti kapu nem zöld a #${view.number} jelenlegi fejére (${view.headRefOid.slice(0, 12)})${ev ? ' — az utolsó futás BUKOTT' : ''}. Futtasd közvetlenül a merge előtt: npm run gate:merge -- ${view.number}.`;
+    }
+    // Copilot #513: beragadt / fennálló zár mellett egy kapufutás félbemaradt vagy még tart → nincs merge. A zöld csak a PR-ra
+    // LEGUTÓBB indított futásé lehet (a bizonyíték `runId`-je = a `merge-run-<n>` jelölőé); egy később indult, érvénytelenítés előtt
+    // megszakadt futás után a régi zöld így nem érvényes.
+    if (existsSync(join(info.evDir, `merge-lock-${view.number}.lock`))) {
+      return `A #${view.number} merge-kapujának zárja fennáll (merge-lock-${view.number}.lock) — egy kapufutás tart vagy félbemaradt. Ha nem fut kapu, töröld a zárat, és futtasd újra: npm run gate:merge -- ${view.number}.`;
+    }
+    const marker = readEv(info.evDir, `merge-run-${view.number}`);
+    if (typeof ev.runId !== 'string' || !ev.runId || ev.runId !== marker?.runId) {
+      return `A #${view.number} zöld merge-bizonyítéka nem a legutóbb indított kapufutásé (futásazonosító-eltérés). Futtasd újra: npm run gate:merge -- ${view.number}.`;
     }
     const age = (now - Date.parse(ev.at)) / 60000;
     if (!(age <= info.maxMin)) return `A #${view.number} merge-bizonyítéka ${Number.isFinite(age) ? Math.round(age) : '?'} perces (legfeljebb ${info.maxMin} perc; a futásőr „közvetlenül előtte” szabálya). Futtasd újra: npm run gate:merge -- ${view.number}.`;
