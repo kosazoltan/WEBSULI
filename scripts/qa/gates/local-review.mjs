@@ -226,7 +226,7 @@ export function classifyModelResponse(status, body) {
 
 /** Egy darab ellenőrzése: 2 próbálkozás; ha a válasz így is értelmezhetetlen (a 9B modell nagy darabon ismétlő hurokba esik és a
  * korlát levágja), a darab hunk-határon felezve, legfeljebb 2 szintig (2026-11-23, PR-C: AdventCalendar.tsx). */
-async function reviewChunk(url, model, chunk, depth) {
+export async function reviewChunk(url, model, chunk, depth) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const parsed = parseFindings(await callModel(url, model, buildPrompt(chunk)), chunk.file);
     if (parsed !== null) return parsed;
