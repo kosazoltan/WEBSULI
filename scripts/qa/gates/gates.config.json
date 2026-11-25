@@ -66,7 +66,8 @@
     "websuli-push-elotti-kapu",
     "websuli-pr-elotti-kapu",
     "websuli-merge-elotti-kapu",
-    "websuli-kovetelmeny-revizio"
+    "websuli-kovetelmeny-revizio",
+    "websuli-feladat-nyilvantartas"
   ],
   "mergeEvidenceMaxMinutes": 15,
   "$hookTimeouts": "A check-quality-gates hook korlátai (kanban #100): git- és gh-hívásonként, és a teljes keret. A keret a .claude/settings.json hook-időkorlátja (60 s) alatt marad; ha a git / gh nem válaszol, a hook TILT (fail-closed), nem enged.",
