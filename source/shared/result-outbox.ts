@@ -101,3 +101,16 @@ export function createOutboxStore(getStorage: () => OutboxStorage | null) {
     },
   };
 }
+
+/**
+ * Review #608: a sikertelen végleges beküldés besorolása. Végleges elutasítás („reject”: a bejegyzés kikerül, a kör elutasítás-jelzőt
+ * kap, újra nem megy) CSAK ismert, végleges HTTP-4xx-nél; a 408 / 429, az 5xx és minden besorolhatatlan hiba (státusz nélküli `Error`,
+ * pl. a CSRF-frissítés továbbított 503-a, hálózati hiba) a korlátos újrapróbára marad.
+ */
+export function outboxFailureAction(error: unknown): "reject" | "retry" {
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status === "number" && status >= 400 && status < 500 && status !== 408 && status !== 429) return "reject";
+  return "retry";
+}
+/** Review #608: a véglegesen elutasított kör jelzője (a „már elküldve” jelzőtől külön állapot). */
+export const rejectedKeyOf = (sentFlag: string) => `${sentFlag}:rejected`;

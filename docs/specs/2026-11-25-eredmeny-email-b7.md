@@ -36,3 +36,7 @@ R32) ezt oldja meg — a #510 kilét-modellje (fiókcímke, szerveroldali claim,
 
 ## Visszavonás
 A kapcsoló KI (alapállás). A megmaradt bejegyzéseket KI állásban senki nem olvassa; ártalmatlanok.
+
+## Review #608 (2026-11-25)
+- A hiba besorolása közös függvényben (`outboxFailureAction`): végleges elutasítás csak ismert, végleges HTTP-4xx-nél (a 408 / 429 kivételével); az 5xx, a 408 / 429 és minden besorolhatatlan hiba (pl. a CSRF-frissítés státusz nélkül továbbított 503-a, hálózati hiba) korlátos újrapróbán marad.
+- A véglegesen elutasított kör külön, tartós jelzőt kap (`…:sent:<kör>:rejected`, memóriában is); a hook a sorba vétel előtt, a sor ürítése küldés előtt ellenőrzi — a lecke újranyitásakor sem megy újra, a háromkísérletes korlát nem kerülhető meg.

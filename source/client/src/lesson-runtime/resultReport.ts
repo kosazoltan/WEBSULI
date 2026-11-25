@@ -7,7 +7,7 @@ import { attemptDeadline } from "@shared/attempt-deadline";
 import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { isRetryableRequestError } from "@shared/request-retry";
 import { createRoundOwners, isFreshRound, roundHasActivity } from "@shared/round-owner";
-import { createOutboxStore, outboxEntryExpired, type OutboxEntry } from "@shared/result-outbox";
+import { createOutboxStore, outboxEntryExpired, outboxFailureAction, rejectedKeyOf, type OutboxEntry } from "@shared/result-outbox";
 import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
@@ -51,12 +51,16 @@ const outbox = createOutboxStore(() => (resultOutboxEnabled() ? localStorage : n
 const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
 const outboxInFlight = new Set<string>();
 const flagSet = (flag: string) => { if (sentInMemory.has(flag)) return true; try { return !!localStorage.getItem(flag); } catch { return false; } };
+/** Review #608: a véglegesen elutasított körök (memóriában is, ha a tároló írása hibázik). */
+const rejectedInMemory = new Set<string>();
+const isRejected = (flag: string) => { if (rejectedInMemory.has(flag)) return true; try { return !!localStorage.getItem(rejectedKeyOf(flag)); } catch { return false; } };
+const markRejected = (flag: string) => { rejectedInMemory.add(flag); try { localStorage.setItem(rejectedKeyOf(flag), "1"); } catch { /* a memóriabeli jelző véd a lapon */ } };
 class OutboxEntryExpired extends Error {}
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várják egymást, R20). Sosem dob. */
 export function drainResultOutbox(): void {
   const now = Date.now();
   for (const entry of outbox.read()) {
-    if (flagSet(entry.flag)) { outbox.remove(entry.id); continue; }
+    if (flagSet(entry.flag) || isRejected(entry.flag)) { outbox.remove(entry.id); continue; }
     // R30: a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül.
     if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
     const state = outboxAttempts.get(entry.id);
@@ -84,9 +88,10 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     outboxAttempts.delete(entry.id);
     outbox.remove(entry.id);
   } catch (error) {
-    const status = (error as { status?: unknown } | null)?.status;
-    const retryable = error instanceof OutboxEntryExpired ? false : isRetryableRequestError(error) || status === 429;
-    if (!retryable) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
+    // R30: a lejárt bejegyzés küldés nélkül kikerül. Review #608: végleges elutasítás csak ismert, végleges HTTP-4xx-nél — akkor a kör
+    // elutasítás-jelzőt kap (újranyitáskor sem kerül újra sorba); minden más (besorolhatatlan hiba is) korlátos újrapróbán marad.
+    if (error instanceof OutboxEntryExpired) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
+    if (outboxFailureAction(error) === "reject") { markRejected(entry.flag); outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
     const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
     const delay = RESULT_REPORT_RETRY_DELAYS_MS[Math.min(attempts, RESULT_REPORT_RETRY_DELAYS_MS.length) - 1];
     outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });
@@ -137,6 +142,8 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const ownerKey = ownerKeyOf(storageKey, kind, roundId);
     const owner = roundOwners.bind(ownerKey, seenFresh.current.has(experienceFingerprint({ ids: round.ids })));
     if (resultOutboxEnabled()) {
+      // Review #608: a véglegesen elutasított kör újra nem kerül sorba (a lecke újranyitásakor sem).
+      if (isRejected(flag)) return;
       // B7 (R24): BE állásban a kör törzse várakozás nélkül a tartós sorba kerül, és a sor azonnal ürül (a küldést a sor végzi).
       const times = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
       const body = kind === "tasks"
