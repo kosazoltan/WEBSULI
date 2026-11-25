@@ -26,3 +26,8 @@ A tanuló a helyi kvíz végén lássa, hány jó leckét teljesített egymás u
 
 ## Visszavonás
 A kapcsoló kikapcsolása (Vercel env) — a tárolt kulcs ártalmatlan.
+
+## Review #606 (2026-11-25)
+- A sorozat a beszámított leckék listáját (`lessons`) is tárolja: a sorozatban már szereplő lecke (nem csak a legutóbbi) újra nem növel (A → B → A = 2); nullázáskor a lista üres. Régi tárolt érték: a legutóbbi lecke beszámítottnak számít.
+- Tárolás memóriabeli tartalékkal (`createStreakStore`): íráshiba után a következő betöltés a memóriából folytat, sikeres mentés után újra a tárolóból.
+- A rögzítés a `LocalStreak` komponensben, amely csak a helyi kvíz ágában (PracticeAccess children) renderelődik: bejelentkezve, illetve az azonosítás betöltése / hibája alatt nem rögzül vendégkör.

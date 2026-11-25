@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { parseStreak, recordLessonResult, streakBadge, streakNext, type StreakState } from "@shared/lesson-streak";
+import { createStreakStore, recordLessonResult, streakBadge, streakNext, type StreakState } from "@shared/lesson-streak";
 
 /**
  * V5c — sorozatjelvény (docs/specs/2026-11-25-v5c-sorozatjelveny.md). A kapcsoló a kliens-buildbe égetett (Vercel:
@@ -13,11 +13,7 @@ export function streakBadgeEnabled(): boolean {
   return TEST_HOOKS && typeof window !== "undefined" && (window as unknown as { __websuliStreakBadge?: unknown }).__websuliStreakBadge === true;
 }
 
-const STORAGE_KEY = "websuli:lesson-streak:v1";
-let memory: StreakState | null = null;
-function load(): StreakState {
-  try { return parseStreak(localStorage.getItem(STORAGE_KEY)); } catch { return memory ?? parseStreak(null); }
-}
+const store = createStreakStore(() => (typeof localStorage === "undefined" ? null : localStorage));
 const article = (word: string) => (/^[aáeéiíoóöőuúüű]/i.test(word) ? "az" : "a");
 
 /**
@@ -27,12 +23,9 @@ export function useLessonStreak(enabled: boolean, done: boolean, lessonKey: stri
   const [view, setView] = useState<{ state: StreakState; good: boolean } | null>(null);
   useEffect(() => {
     if (!enabled || !done) { setView(null); return; }
-    const before = load();
+    const before = store.load();
     const after = recordLessonResult(before, { lessonKey, roundKey, percent });
-    if (after !== before) {
-      memory = after;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(after)); } catch { /* a memóriából jelenik meg */ }
-    }
+    if (after !== before) store.save(after);
     setView({ state: after, good: percent >= 80 });
   }, [enabled, done, lessonKey, roundKey, percent]);
   return view;
@@ -48,4 +41,13 @@ export function StreakBand({ view }: { view: { state: StreakState; good: boolean
       : <p>A sorozat újraindul — a következő jó leckével kezdődik.</p>}
     {view.good && next && <p>Még {next.missing} {article(next.name)} {next.name} jelvényig.</p>}
   </div>;
+}
+
+/**
+ * Review #606: a rögzítés és a sáv EGY komponensben, amelyet a lap csak a helyi kvíz ágában (PracticeAccess `children`) renderel —
+ * bejelentkezve (mentett kvíz), illetve az azonosítás betöltése / hibája alatt nem fut, így a helyben tárolt vendégkör nem rögzül.
+ */
+export function LocalStreak({ done, lessonKey, roundKey, percent }: { done: boolean; lessonKey: string; roundKey: string; percent: number }) {
+  const view = useLessonStreak(streakBadgeEnabled(), done, lessonKey, roundKey, percent);
+  return view ? <StreakBand view={view} /> : null;
 }

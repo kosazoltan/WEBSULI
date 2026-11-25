@@ -54,7 +54,8 @@ test("V5c: sérült / idegen tároló → üres állapot", () => {
   for (const raw of [null, "", "{", "[]", JSON.stringify({ count: -1, last: null, rounds: [] }), JSON.stringify({ count: 2, last: 5, rounds: [] }), JSON.stringify({ count: 2, last: "a", rounds: "x" })]) {
     assert.deepEqual(parseStreak(raw), EMPTY_STREAK, String(raw));
   }
-  assert.deepEqual(parseStreak(JSON.stringify({ count: 2, last: "a", rounds: ["a|1"] })), { count: 2, last: "a", rounds: ["a|1"] });
+  // review #606: a régi (leckelista nélküli) érték a legutóbbi leckét beszámítottnak veszi
+  assert.deepEqual(parseStreak(JSON.stringify({ count: 2, last: "a", rounds: ["a|1"] })), { count: 2, last: "a", rounds: ["a|1"], lessons: ["a"] });
 });
 
 test("review #606: A → B → A — a sorozatban már beszámított lecke újra nem növel (különböző leckékből épül)", () => {
