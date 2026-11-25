@@ -10,7 +10,7 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
-import { applySectionShapes, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
+import { applySectionShapes, numericSubject, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
 import { visualKindCounts, withKindShareNotes } from "../../../shared/visual-kind-plan";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
@@ -754,7 +754,8 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   const shapedNow = planned === undefined && varietyOn;
   // S6b 1. vak kör (L1): a terv eredetét a tisztítás ELŐTT állapítjuk meg — a mentett, program által kiosztott terv `tryKind`-ja megmarad.
   const savedAssigned = varietyOn && resumed?.outline !== undefined && output.sectionShapes === true;
-  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined, savedAssigned);
+  // V2b: a számegyenes és a becslés csak számtárgyban kerül a kiosztásba.
+  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined, savedAssigned, { numeric: numericSubject(promptMap.subject) });
   // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
   // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
   // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
