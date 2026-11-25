@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gateQuestionProblems, hasFigureReference, questionKey, quizDuplicateKey, scoringVersionFor } from "../../shared/lesson-experience";
+import { gateQuestionProblems, hasFigureReference, questionKey, quizDuplicateKey, quizFormatProblems, scoringVersionFor } from "../../shared/lesson-experience";
 import { normalizeBankPacket } from "./bank-normalize";
 import { logger } from "../lib/logger";
 import { z } from "zod";
@@ -563,7 +563,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // előtt gyártott bank így nem kerül át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
     const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
-    const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, language });
+    // V4: a kvíztípusok és a keverés csak változatosság BE mellett szerződés.
+    const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, quizFormats: effectiveLessonVariety(), language });
     const signRules = needsSignedNumberRules(lesson.subject, teaching.section) ? `${SIGNED_NUMBER_RULES_HU}\n` : "";
     const unitCatalogText = catalogOf(unitIndex) ? `${unitCatalogBlock(catalogOf(unitIndex)!)}\n` : "";
     const memoryText = deps.memory ? `${deps.memory}\n` : "";
@@ -599,6 +600,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       // Spec 2026-10-21-nyelvlecke-kiejtes (review #360): nyelvleckén a csomag szószedete a kiejtésgyakorló alapja — legalább 4 elem.
       if (language && (packet.glossary?.length ?? 0) < GLOSSARY_MIN_PER_PACKET) problems.push(`glossary: nyelvleckén legalább ${GLOSSARY_MIN_PER_PACKET} szószedet-elem kell (most ${packet.glossary?.length ?? 0}) — a fejezet tanított idegen szavai / kifejezései, példamondattal.`);
       problems.push(...quizCorrectIndexProblems(packet.quiz));
+      // V4: ≥ 6 kérdésnél legalább 2 kvíztípus (változatosság BE).
+      if (effectiveLessonVariety()) problems.push(...quizFormatProblems(packet.quiz));
       problems.push(...arithmeticClaimProblems(packet));
       // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
       problems.push(...lessonSingleChoiceProblems({ experience: packet }).flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));

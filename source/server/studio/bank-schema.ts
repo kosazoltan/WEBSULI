@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { zodResponseFormat } from "openai/helpers/zod";
-import { METHOD_KINDS } from "../../shared/lesson-experience";
+import { METHOD_KINDS, QUIZ_FORMATS } from "../../shared/lesson-experience";
 import type { ResponseFormatJsonSchema } from "../ai/AIProvider";
 
 /**
@@ -44,6 +44,8 @@ const strictQuiz = z.object({
   id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: ids, question: text(1500),
   options: z.array(text(500)).min(3).max(4), correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
   intent: z.enum(["recall", "apply"]),
+  // V4: a kvízkérdés típusa (index-alapú; docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md).
+  format: z.enum(QUIZ_FORMATS),
 });
 const strictGlossary = z.object({ word: text(160), translation: text(300), partOfSpeech: text(80), example: text(500), exampleTranslation: text(500) });
 

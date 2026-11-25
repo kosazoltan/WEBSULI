@@ -12,7 +12,10 @@ test("kiegészítésnél a választott opció a hiányba kerül; a kakukktojás 
   const first = gap.locator(".lesson-option").first();
   const text = (await first.textContent())!.trim();
   await first.click();
-  await expect(gap.getByTestId("quiz-gap")).toHaveText(text);
+  await expect(gap.getByTestId("quiz-gap")).not.toHaveText("___");
+  const fill = (await gap.getByTestId("quiz-gap").textContent())!.trim();
+  expect(fill.length).toBeGreaterThan(0);
+  expect(text).toContain(fill); // a gomb szövege a betűjelet (A/B/C) is tartalmazza
   await expect(page.locator('[data-quiz-format="oddOneOut"]').first()).toContainText("Kakukktojás");
   await expect(page.locator('[data-quiz-format="number"]').first()).toContainText("Számolós kérdés");
 });

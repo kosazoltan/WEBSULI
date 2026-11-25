@@ -40,6 +40,15 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
   </section>;
 }
 
+
+/** V4: a kvíztípusok címkéje (a sima egyválasztósnak nincs). */
+const QUIZ_FORMAT_LABEL: Record<string, string> = { fillGap: "Egészítsd ki!", oddOneOut: "Kakukktojás: melyik nem illik a sorba?", number: "Számolós kérdés" };
+/** V4: kiegészítő kérdés — a hiányba a választott opció kerül. */
+function GapQuestion({ text, fill }: { text: string; fill?: string }) {
+  const [before, after = ""] = text.split(/_{3,}/);
+  return <>{before}<span data-testid="quiz-gap" className="fusion-gap" style={{ borderBottom: "2px solid currentColor", padding: "0 .25em", fontWeight: 700 }}>{fill ?? "___"}</span>{after}</>;
+}
+
 export function LessonExperienceView({ experience: e, storageKey, reviewKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; reviewKey?: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
   const cards = useMemo(() => lessonFlashcards({ experience: e }), [e]);
@@ -165,7 +174,9 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Helyi önellenőrzés</span><h2>Kvíz</h2><p>{quizRound} kérdés a {e.quiz.length}-ből · {Object.keys(quizState.round.picks).length} megválaszolva · {quizPoints} pont</p></div><div className="learning-round-actions"><button className="lesson-outline-btn" onClick={() => setResetTarget("quiz")}><RotateCcw size={17} /> Új kvíz</button></div></div>
       {quiz.map((q, index) => {
         const pick = quizState.round.picks[q.id];
-        return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés</span><h3>{q.question}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display order, `i` stays the stored index. */}{(quizLayout.get(choiceSeed(q.question, q.options)) ?? displayOrder(choiceSeed(q.question, q.options), q.options, q.feedbackPerOption)).map((i, position) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i }, lastAnsweredAt: Date.now() }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[i]}</button>)}</div>
+        // V4: a kvíztípus címkéje és a kiegészítés hiánya (index-alapú; docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md).
+        const format = q.format ?? "choice";
+        return <section className="lesson-block fusion-quiz" key={q.id} data-quiz-id={q.id} data-quiz-format={format} tabIndex={-1} ref={element => { if (element) quizElements.current.set(q.id, element); else quizElements.current.delete(q.id); }}><span className="fusion-eyebrow">{index + 1}. kérdés{QUIZ_FORMAT_LABEL[format] ? ` · ${QUIZ_FORMAT_LABEL[format]}` : ""}</span><h3>{format === "fillGap" ? <GapQuestion text={q.question} fill={pick !== undefined ? q.options[pick] : undefined} /> : q.question}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display order, `i` stays the stored index. */}{(quizLayout.get(choiceSeed(q.question, q.options)) ?? displayOrder(choiceSeed(q.question, q.options), q.options, q.feedbackPerOption)).map((i, position) => <button className="lesson-option" key={i} disabled={pick !== undefined || !!quizState.round.finishedAt} aria-pressed={pick === i} data-state={pick === i ? i === q.correctIndex ? "right" : "wrong" : undefined} onClick={() => quizState.setRound(old => old.picks[q.id] !== undefined ? old : ({ ...old, picks: { ...old.picks, [q.id]: i }, lastAnsweredAt: Date.now() }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[i]}</button>)}</div>
           {pick !== undefined && <VerdictFeedback right={pick === q.correctIndex} text={q.feedbackPerOption[pick]} question={{ text: q.question, options: q.options }} />}
           {quizState.round.finishedAt && pick === undefined && <p>Nem válaszoltál · 0 pont. Helyes válasz: {q.options[q.correctIndex]}. {stripVerdictPrefix(q.feedbackPerOption[q.correctIndex], true)}</p>}
         </section>;

@@ -46,6 +46,7 @@ test("a szerződés a típusokat és a keverést kéri (változatosság BE); a s
   assert.doesNotMatch(bankPacketContract({ sectionIndex: 0, conceptIds: ["c1"], methodKinds: ["gate"], taskCount: 1, taskTarget: 1, quizCount: 6, quizTarget: 6 }), /oddOneOut/);
   const schema = strictPacketSchema({ methodMin: 0, taskCount: 0, taskTarget: 0, taskMax: 0, quizCount: 1, quizTarget: 1, quizMax: 1, language: false });
   const quizItem = { id: "q1", sectionIndex: 0, coversConceptIds: ["c1"], question: "Mennyi 2 + 3?", options: ["5", "6", "4"], correctIndex: 0, feedbackPerOption: ["a", "b", "c"], intent: "recall" };
-  assert.equal(schema.safeParse({ methods: [], tasks: [], quiz: [{ ...quizItem, format: "number" }], glossary: [] }).success, true);
-  assert.equal(schema.safeParse({ methods: [], tasks: [], quiz: [quizItem], glossary: [] }).success, false, "a strict séma a mezőt kéri");
+  const strictQuiz = schema.shape.quiz.element;
+  assert.equal(strictQuiz.safeParse({ ...quizItem, format: "number" }).success, true);
+  assert.equal(strictQuiz.safeParse(quizItem).success, false, "a strict séma a mezőt kéri");
 });
