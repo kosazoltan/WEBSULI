@@ -1262,6 +1262,8 @@ export default function BlockCraftQuiz() {
   const [showHint, setShowHint] = useState(false);
   /** A WebGL-kontextus elveszett (K.4/7): szünet + „Grafika újraindítása” gomb. */
   const [glLost, setGlLost] = useState(false);
+  /** A helyreállítási kísérlet nem hozta vissza a kontextust (natív vesztés): a réteg az oldal újratöltését kínálja. */
+  const [glRestoreFailed, setGlRestoreFailed] = useState(false);
   const restoreGlRef = useRef<() => void>(() => {});
   const [hud, setHud] = useState<HudSnap>(EMPTY_HUD);
   const hudRef = useRef<HudSnap>(EMPTY_HUD);
@@ -1990,12 +1992,27 @@ export default function BlockCraftQuiz() {
     };
     const onContextRestored = () => {
       setGlLost(false);
+      setGlRestoreFailed(false);
       worldFullRef.current = true;
       worldVersionRef.current++;
     };
     canvas.addEventListener("webglcontextlost", onContextLost);
     canvas.addEventListener("webglcontextrestored", onContextRestored);
-    restoreGlRef.current = () => renderer.forceContextRestore();
+    // Review #484 (Vercel): a renderer.forceContextRestore() a WEBGL_lose_context kiterjesztést az ELVESZETT kontextustól kérné —
+    // ott null, a gomb hatástalan. A kiterjesztést ezért az élő kontextustól, előre kérjük le. Natív vesztésnél a böngésző a
+    // preventDefault után magától állítja vissza (webglcontextrestored); ha a kísérlet után sem jön vissza, a réteg az oldal
+    // újratöltését kínálja (nincs néma, hatástalan gomb).
+    const loseExt = renderer.getContext().getExtension("WEBGL_lose_context");
+    restoreGlRef.current = () => {
+      try {
+        loseExt?.restoreContext();
+      } catch {
+        /* natív vesztés: a restoreContext nem alkalmazható — a lenti időzítő dönt */
+      }
+      window.setTimeout(() => {
+        if (renderer.getContext().isContextLost()) setGlRestoreFailed(true);
+      }, 2500);
+    };
     // Az árnyék-térkép típusa (PCFShadowMap) a közös applyRendererLook-ból jön (S13 / E21).
     // A világ statikus (csak bányászáskor/lerakáskor változik) → az árnyék-térképet
     // csak újraépítéskor rajzoljuk újra, nem minden frame-ben.
@@ -4124,17 +4141,28 @@ export default function BlockCraftQuiz() {
 
             {glLost && inRun && (
               <div className="bc-gl-lost" role="alert" data-testid="bc-gl-lost">
-                <p className="text-base font-bold text-white">A grafika leállt. Indítsd újra, és folytathatod.</p>
-                <button
-                  type="button"
-                  className="game-btn game-btn-primary"
-                  onClick={() => {
-                    restoreGlRef.current();
-                  }}
-                >
-                  <RefreshCw className="h-5 w-5" aria-hidden="true" />
-                  Grafika újraindítása
-                </button>
+                <p className="text-base font-bold text-white">
+                  {glRestoreFailed
+                    ? "A grafika nem indult újra. Töltsd újra az oldalt."
+                    : "A grafika leállt. Indítsd újra, és folytathatod."}
+                </p>
+                {glRestoreFailed ? (
+                  <button type="button" className="game-btn game-btn-primary" onClick={() => window.location.reload()}>
+                    <RefreshCw className="h-5 w-5" aria-hidden="true" />
+                    Oldal újratöltése
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="game-btn game-btn-primary"
+                    onClick={() => {
+                      restoreGlRef.current();
+                    }}
+                  >
+                    <RefreshCw className="h-5 w-5" aria-hidden="true" />
+                    Grafika újraindítása
+                  </button>
+                )}
               </div>
             )}
 
@@ -4300,8 +4328,9 @@ export default function BlockCraftQuiz() {
       {/* „Miért?”: a magyarázókártya (G-1) — szünetben a kártya a menü alá nem kerülhet (z-90 > z-80): addig elrejtjük. */}
       {why && !paused && <QuizFeedbackCard card={why} onDismiss={closeWhy} />}
 
+      {/* Review #484: a helyreállító réteg idejére a szünetmenü rejtve (különben eltakarná és inert-té tenné a gombot). */}
       <PauseMenu
-        open={paused && inRun}
+        open={paused && inRun && !glLost}
         onResume={resumeGame}
         onRestart={startGame}
         onExit={endRun}
