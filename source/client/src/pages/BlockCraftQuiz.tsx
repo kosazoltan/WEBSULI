@@ -3154,6 +3154,11 @@ export default function BlockCraftQuiz() {
     }
     const root = document.documentElement;
     const MIN_BAND = 84; // két kősor (≥ 30 px) + rések
+    // CI #484 (betűkészlet-függés): a `data-long` fokozat karakterszámból becsül; szélesebb tartalék betűkészlettel (pl. a
+    // Linux DejaVu Sans) a hosszú válaszok több sorba törnek, a gombsor a minimális (2 soros) kártyába nő. Ilyenkor a mért
+    // ütközés alapján a gombok betűmérete lépcsőzetesen csökken (kérdésenként csak lefelé — nincs oda-vissza ugrálás).
+    const RUNE_MIN_FS = 11;
+    let runeFit: { key: string; fs: number | null } = { key: "", fs: null };
     const measure = () => {
       const canvas = canvasRef.current;
       const card = document.querySelector<HTMLElement>(".play-question[data-skin=\"mine\"] .play-question-card");
@@ -3222,6 +3227,22 @@ export default function BlockCraftQuiz() {
         const room = bottomLimit - reserve - pr.top - Math.max(0, chromeBelow);
         const lines = Math.max(2, Math.min(7, Math.floor(room / lh)));
         if (root.style.getPropertyValue("--bc-pq-lines") !== String(lines)) root.style.setProperty("--bc-pq-lines", String(lines));
+        if (!landscape) {
+          const key = runes.map((el) => el.textContent ?? "").join("\u0001");
+          if (runeFit.key !== key) {
+            runeFit = { key, fs: null };
+            for (const el of runes) el.style.removeProperty("font-size");
+          }
+          const overlap = card.getBoundingClientRect().bottom - Math.min(...rr.map((r) => r.top));
+          if (lines === 2 && overlap > -2) {
+            const cur = runeFit.fs ?? (parseFloat(getComputedStyle(runes[0]!).fontSize) || 16);
+            const next = Math.max(RUNE_MIN_FS, Math.floor(cur) - 1);
+            if (next < cur) {
+              runeFit.fs = next;
+              for (const el of runes) el.style.setProperty("font-size", `${next}px`);
+            }
+          }
+        }
       }
       const cardRect = card.getBoundingClientRect();
       const cardBottom = cardRect.bottom;
