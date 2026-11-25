@@ -276,6 +276,20 @@ for (const viewport of VIEWPORTS) {
       await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
       await expect(page.getByTestId("tornado-nitro")).toBeVisible({ timeout: 3_000 });
     });
+
+    test("review #610 (Vercel P1): a megoldás-kijelzés alatti menetvég nem akasztja meg a futást — a kijelzés kifut, utána jön az eredmény", async ({ page }) => {
+      await startPlaying(page);
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true }));
+      const quiz = page.getByTestId("tornado-quiz");
+      await expect(quiz).toHaveAttribute("data-mode", "buttons");
+      const wrong = quiz.locator('[data-correct="false"]').first();
+      const box = (await wrong.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      // a rossz válasz megoldás-kijelzése (≥ 1,8 s) alatt ér véget a menet
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ phase: "result_win" }));
+      await expect(page.getByTestId("th-result"), "a kijelzés közben még nincs eredmény").toHaveCount(0);
+      await expect(page.getByTestId("th-result"), "a kijelzés lefutása után az eredményképernyő megnyílik").toBeVisible({ timeout: 6_000 });
+    });
   });
 }
 
