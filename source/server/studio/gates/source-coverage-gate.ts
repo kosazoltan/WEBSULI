@@ -285,6 +285,9 @@ function kindFits(kind: SourceVisualKind, block: RawBlock): boolean {
   return typeof block.kind === "string" && target.blockKinds.includes(block.kind);
 }
 
+/** Review #596: mért, de nem kötelező fajták (a metrikában és a tételek között szerepelnek, hiányuk nem bukás). */
+export const MEASURED_ONLY_KINDS = ["photo"] as const;
+
 /** D1H-2: a kivágott forráskép magát a forrásrészt mutatja — a hivatkozó, érvényes `sourceImage` blokk a tétel egészét lefedi. */
 const sourceImageShown = (blocks: RawBlock[]) => blocks.some((b) => b.kind === "animate" && b.animKind === "sourceImage" && sourceImageParamsSchema.safeParse(b.params).success);
 
@@ -387,7 +390,8 @@ export function sourceCoverageGate(lesson: GateLesson, visuals: ReadonlyArray<So
   const must = group(T.must, T.mustShare);
   const should = group(T.should, T.shouldShare);
   // A számolt, de egyik csoportba sem sorolt (ismeretlen) fajta szigorúan számít: hiánya bukás.
-  const other = group([...new Set(counted.map((v) => v.kind).filter((k) => !(T.must as readonly string[]).includes(k) && !(T.should as readonly string[]).includes(k)))], 1);
+  // Review #596: a `photo` csak MÉRT fajta (a kivágás elmaradása — KI kapcsoló, PDF, korlát — nem bukás): kimarad a kötelező csoportból.
+  const other = group([...new Set(counted.map((v) => v.kind).filter((k) => !(T.must as readonly string[]).includes(k) && !(T.should as readonly string[]).includes(k) && !(MEASURED_ONLY_KINDS as readonly string[]).includes(k)))], 1);
   const line = (v: SourceVisual) => `${v.id} (${v.kind}): ${[skipProblems.get(v.id), whyMissing.get(v.id)].filter(Boolean).join("; ")}`;
   const ok = must.ok && should.ok && other.ok;
   const problems = [

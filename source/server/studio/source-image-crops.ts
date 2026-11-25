@@ -11,7 +11,7 @@ import type { SourceImageMeta } from "../source-images";
  * kivágjuk, tároljuk, és `sourceImage` blokkként a fogalmait tanító fejezetbe illesztjük — forrásmegjelöléssel. PDF-oldal: D1H-3.
  * Kapcsoló: `STUDIO_SOURCE_IMAGES=on` (alapból KI → a gyártás változatlan).
  */
-export const sourceImagesEnabled = (env: NodeJS.ProcessEnv = process.env) => env.STUDIO_SOURCE_IMAGES === "on";
+export { sourceImagesEnabled } from "../../shared/source-image";
 export const SOURCE_IMAGES_PER_LESSON = 6;
 const MAX_EDGE = 1600;
 const MIN_EDGE = 24;
@@ -20,10 +20,15 @@ export type SourceImageStore = (bytes: Buffer, meta: SourceImageMeta) => Promise
 type CropFile = { name: string; kind: string; content: string };
 type PlaceResult = { lesson: Lesson; placed: string[]; skipped: Array<{ id: string; reason: string }> };
 
-/** A W1b forrásfejléce („Forrás: URL\nCím: …”) a fájlhoz tartozó szövegből; feltöltött fájlnál a fájlnév. */
+/**
+ * A W1b forrásfejléce („Forrás: URL\nCím: …”) a fájlhoz tartozó szövegből; feltöltött fájlnál a fájlnév. Review #596: a W1b névszerződése
+ * szerint (`<forrás>-kep-N.<kit>` / `<forrás>-szkennelt.pdf`, ütközésnél `-2`…) a TELJES szülőnévvel párosít, nem előtaggal.
+ */
+const W1B_VISUAL_NAME = /^(.+)-(?:kep-\d+\.[a-z0-9]+|szkennelt\.pdf)(?:-\d+)?$/i;
 function creditFor(fileName: string, files: CropFile[], page: number, pdf: boolean): Pick<SourceImageMeta, "credit" | "sourceUrl" | "page"> {
-  const header = files
-    .filter((f) => f.kind === "text" && f.name !== fileName && fileName.startsWith(f.name.replace(/-forras\.txt$/, "")))
+  const parent = W1B_VISUAL_NAME.exec(fileName)?.[1];
+  const header = parent === undefined ? undefined : files
+    .filter((f) => f.kind === "text" && (f.name === parent || f.name === `${parent}-forras.txt`))
     .map((f) => /^Forrás: (https:\/\/\S+)\r?\nCím: ([^\r\n]*)/.exec(f.content))
     .find((m): m is RegExpExecArray => !!m);
   if (header) return { sourceUrl: header[1].slice(0, 2000), credit: (header[2].trim() || new URL(header[1]).hostname).slice(0, 200) };
@@ -65,7 +70,8 @@ function targetSection(lesson: Lesson, conceptIds: string[]): { index: number; c
 export async function placeSourceImages(lesson: Lesson, visuals: ReadonlyArray<SourceVisual>, files: ReadonlyArray<CropFile>, deps: { store: SourceImageStore; log?: (line: string) => void }): Promise<PlaceResult> {
   const placed: string[] = [];
   const skipped: PlaceResult["skipped"] = [];
-  const referenced = new Set(lesson.sections.flatMap((s) => s.blocks.map((b) => (b as { sourceVisualId?: string }).sourceVisualId).filter(Boolean)));
+  // Review #596: csak az ÁBRA-blokk (animate) hivatkozása jelent rajzot — a szöveges (example / try / check) hivatkozás nem.
+  const referenced = new Set(lesson.sections.flatMap((s) => s.blocks.filter((b) => b.kind === "animate").map((b) => (b as { sourceVisualId?: string }).sourceVisualId).filter(Boolean)));
   let current = lesson;
   for (const v of visuals) {
     if (v.kind !== "photo" && v.kind !== "diagram") continue;
@@ -103,6 +109,35 @@ export async function placeSourceImages(lesson: Lesson, visuals: ReadonlyArray<S
     }
   }
   return { lesson: current, placed, skipped };
+}
+
+type AnyBlock = Lesson["sections"][number]["blocks"][number];
+const isSourceImage = (b: AnyBlock) => b.kind === "animate" && (b as { animKind?: string }).animKind === "sourceImage";
+
+/** Review #596: a lecke kivágott forrásképei (a tanítás cseréje előtt megőrzendők). */
+export const sourceImageBlocks = (lesson: Lesson): AnyBlock[] => lesson.sections.flatMap((s) => s.blocks.filter(isSourceImage));
+
+/**
+ * Review #596: a lektori tanításjavítás a teljes leckét a szerző új válaszára cseréli — a program által beillesztett képek (amelyeket
+ * a válasz nem hozott vissza) duplikálás nélkül visszakerülnek a fogalmaikat tanító fejezetbe. Sémahiba → az adott kép kimarad.
+ */
+export function restoreSourceImages(lesson: Lesson, kept: ReadonlyArray<AnyBlock>): Lesson {
+  const present = new Set(sourceImageBlocks(lesson).map((b) => (b as { params?: { imageId?: string } }).params?.imageId));
+  let current = lesson;
+  for (const block of kept) {
+    if (present.has((block as { params?: { imageId?: string } }).params?.imageId)) continue;
+    const { index, concepts } = targetSection(current, conceptsOf(block));
+    if (!concepts.length) continue;
+    const next = structuredClone(current);
+    const blocks = next.sections[index].blocks;
+    const after = blocks.findIndex((b) => b.kind === "explain" && conceptsOf(b).some((c) => concepts.includes(c)));
+    let at = after >= 0 ? after + 1 : blocks.length;
+    while (at < blocks.length && isSourceImage(blocks[at])) at++;
+    blocks.splice(at, 0, { ...structuredClone(block), coversConceptIds: concepts } as AnyBlock);
+    const checked = lessonSchema.safeParse(next);
+    if (checked.success) { current = checked.data; present.add((block as { params?: { imageId?: string } }).params?.imageId); }
+  }
+  return current;
 }
 
 /**

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { SOURCE_VISUALS_CONTRACT_IMAGES } from "../shared/source-visuals";
 import { cleanModelMultilineText, cleanModelText, sanitizeSourceVisuals, SOURCE_VISUAL_KINDS, SOURCE_VISUAL_LIMITS, SOURCE_VISUAL_MAX_PAGE, SOURCE_VISUAL_TABLE, SOURCE_VISUALS_CONTRACT, sourceVisualSchema, sourceVisualTexts, splitPageTexts, visualsOfSourceFiles, type SourceDecisionNode, type SourceVisualKind } from "../shared/source-visuals";
 import { sourceFileSchema } from "../shared/knowledge-map-schema";
 
@@ -160,7 +161,9 @@ test("mentés és betöltés: a source_files eleme hordozza a tételeket; régi 
 });
 
 test("a kérés szövege minden fajtát megnevez (az alak egy helyen él a sémával)", () => {
-  for (const kind of SOURCE_VISUAL_KINDS) assert.ok(SOURCE_VISUALS_CONTRACT.includes(`- ${kind}: `), kind);
+  // D1H-2 (review #596): a photo csak a képkapcsolós szerződésben; a KI állapotú (régi) szerződés változatlan.
+  for (const kind of SOURCE_VISUAL_KINDS) assert.equal(SOURCE_VISUALS_CONTRACT.includes(`- ${kind}: `), kind !== "photo", kind);
+  for (const kind of SOURCE_VISUAL_KINDS) assert.ok(SOURCE_VISUALS_CONTRACT_IMAGES.includes(`- ${kind}: `), kind);
   assert.match(SOURCE_VISUALS_CONTRACT, /"visuals": \[\]/);
 });
 

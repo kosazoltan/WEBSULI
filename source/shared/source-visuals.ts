@@ -78,6 +78,26 @@ export type SourceVisual = z.infer<typeof sourceVisualSchema>;
 export const SOURCE_VISUALS_CONTRACT = [
   'A FORRÁS VIZUÁLIS LELTÁRA — a válasz JSON-jába "visuals": [...] kulcs is kerüljön. A forrás MINDEN táblázatáról, folyamatáról (lépéssoráról),',
   "döntési ábrájáról, kiemelt szabálydobozáról, képes kártyájáról, színkódjáról, feladatáról és egyéb ábrájáról adj egy tételt:",
+  '{"id": "v1", "v2", … (egyedi), "kind": "table" | "process" | "decisionTree" | "ruleBox" | "pictureCard" | "colorCode" | "exercise" | "diagram",',
+  ' "sourceFile": a forrásfájl neve, "page": oldalszám (1-től; képnél 1), "role": mit tanít a tétel (legfeljebb 200 karakter), "title"?: a tétel címe a forrásban,',
+  ' "conceptIds": a hozzá tartozó fogalmak "id"-i a concepts listából, "data": a fajta szerinti adat}',
+  "A data alakja fajtánként:",
+  `- table: {"headers": string[1–8], "rows": string[][] (1–40 sor, soronként a fejléc sorrendjében; egy cella legfeljebb ${SOURCE_VISUAL_TABLE.cellChars} karakter), "headerTones"?: ("a" | "b" | "c" | "neutral")[]}`,
+  '- process: {"steps": string[2–12]}',
+  `- decisionTree: {"root": Node}, ahol Node = {"text": string, "branches"?: [{"label": az ág felirata, "node": Node}] (legfeljebb 4 ág)}; legfeljebb ${SOURCE_VISUAL_TREE_DEPTH} szint`,
+  '- ruleBox: {"tone": "rule" | "warning" | "tip", "heading"?: string, "items": string[1–8]}',
+  '- pictureCard: {"cards": [{"label": a kártya felirata, "depicts": mit ábrázol a kép, "caption"?: string, "example"?: példamondat}] (1–16)}',
+  '- colorCode: {"entries": [{"color": a szín neve, "tone": "a" | "b" | "c" | "neutral", "meaning": mit jelöl a szín}] (2–6)}',
+  '- exercise: {"instruction": string, "items": string[] (legfeljebb 20), "answerKey"?: string[], "pictures"?: string[] (mit ábrázol egy-egy kép; legfeljebb 8)}',
+  '- diagram: {"description": mit mutat az ábra, "parts": [{"label": string, "meaning": string}] (legfeljebb 12)}',
+  "A kép TARTALMÁT írd le (depicts, pictures) — ne azt, hogy „kép”; a táblázatot ADATKÉNT add (fejléc és sorok), ne mondatokban; a színt JELENTÉSKÉNT",
+  "(ugyanaz a jelentés ugyanaz a tónus az egész forrásban). A szövegek a forrás saját szavai legyenek. Ha a forrásban nincs ilyen elem: \"visuals\": [].",
+  `Legfeljebb ${SOURCE_VISUAL_LIMITS.maxItems} tétel. A hibás alakú tételt a program kihagyja.`,
+].join("\n");
+/** D1H-2 (review #596): a kivágott forrásképes szerződés (photo + crop) — CSAK `STUDIO_SOURCE_IMAGES=on` mellett kerül a kérésbe. */
+export const SOURCE_VISUALS_CONTRACT_IMAGES = [
+  'A FORRÁS VIZUÁLIS LELTÁRA — a válasz JSON-jába "visuals": [...] kulcs is kerüljön. A forrás MINDEN táblázatáról, folyamatáról (lépéssoráról),',
+  "döntési ábrájáról, kiemelt szabálydobozáról, képes kártyájáról, színkódjáról, feladatáról és egyéb ábrájáról adj egy tételt:",
   '{"id": "v1", "v2", … (egyedi), "kind": "table" | "process" | "decisionTree" | "ruleBox" | "pictureCard" | "colorCode" | "exercise" | "diagram" | "photo",',
   ' "sourceFile": a forrásfájl neve, "page": oldalszám (1-től; képnél 1), "role": mit tanít a tétel (legfeljebb 200 karakter), "title"?: a tétel címe a forrásban,',
   ' "conceptIds": a hozzá tartozó fogalmak "id"-i a concepts listából, "data": a fajta szerinti adat,',
@@ -98,6 +118,7 @@ export const SOURCE_VISUALS_CONTRACT = [
   "(ugyanaz a jelentés ugyanaz a tónus az egész forrásban). A szövegek a forrás saját szavai legyenek. Ha a forrásban nincs ilyen elem: \"visuals\": [].",
   `Legfeljebb ${SOURCE_VISUAL_LIMITS.maxItems} tétel. A hibás alakú tételt a program kihagyja.`,
 ].join("\n");
+export const sourceVisualsContract = (images: boolean) => (images ? SOURCE_VISUALS_CONTRACT_IMAGES : SOURCE_VISUALS_CONTRACT);
 
 const treeTexts = (node: SourceDecisionNode): string[] => [node.text, ...(node.branches ?? []).flatMap((b) => [b.label, ...treeTexts(b.node)])];
 
