@@ -85,7 +85,8 @@ async function repairWith(original: ReturnType<typeof fusionFixture>) {
       seen.push(effectiveLessonVariety());
       if (step === "lektor") return { notes: [] };
       // A modell kéretlen jelölőt ad a javított tanításban.
-      return calls++ === 0 ? { ...original, variety: { version: "valtozatossag-1" } } : { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+      // V4: BE futásban a bankkérés a KVÍZTÍPUSOK szabályt viszi (a modell típusolt kvízt ad) — lásd bankAnswer.
+      return calls++ === 0 ? { ...original, variety: { version: "valtozatossag-1" } } : { methods: e.methods, tasks: e.tasks, quiz: bankAnswer(effectiveLessonVariety() ? "KVÍZTÍPUSOK" : "", { quiz: e.quiz }).quiz, glossary: [] };
     });
     candidateVariety = (result.candidate as { variety?: unknown }).variety;
     await workflowPhase("save"); await workflowPhase("readback");
@@ -120,6 +121,17 @@ const concepts: MapConcept[] = [{ localId: "area", examWeight: "core", term: "te
 const TRANSCRIPT = "A téglalap területe az oldalak szorzata. A terület mértékegysége a négyzetcentiméter.";
 const outline = { sections: [{ heading: fixture.sections[0].heading, conceptIds: ["area"], plannedBlocks: ["explain", "example", "animate", "recap"], animationSuggestions: [] }], misconceptions: [] };
 
+/**
+ * V4: BE állapotban a bankkérés a KVÍZTÍPUSOK szabályt viszi — a valós modell ilyenkor típusolt kvízt ad (≥ 6 kérdésnél ≥ 2 típus). A fixture
+ * számos opciójú tételei közül minden második „number” típusú; KI kérésben (nincs szabály) a fixture változatlan.
+ */
+function bankAnswer(prompt: string, experience: unknown) {
+  const packet = structuredClone(experience) as { quiz: Array<Record<string, unknown>> };
+  const numeric = (q: Record<string, unknown>) => (q.options as string[]).every(o => /^\d+ cm²$/.test(o));
+  if (prompt.includes("KVÍZTÍPUSOK")) packet.quiz = packet.quiz.map((q, i) => ({ ...q, format: i % 2 && numeric(q) ? "number" : "choice" }));
+  return packet;
+}
+
 function client(opts: { failBank?: boolean; failAuthor?: boolean; modelMarker?: boolean; outline?: unknown; onAuthor?: (request: string) => void } = {}): ModelClient {
   const { experience: _bank, ...teaching } = fixture;
   return {
@@ -133,7 +145,7 @@ function client(opts: { failBank?: boolean; failAuthor?: boolean; modelMarker?: 
       else if (station === "2" || station === "tananyagterv") json = opts.outline ?? outline;
       else if (station === "3") { opts.onAuthor?.(t); if (opts.failAuthor) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = opts.modelMarker ? { ...teaching, variety: { version: "valtozatossag-1" } } : teaching; }
       else if (station === "4") json = { patches: "nem érvényes ábrafolt" };
-      else if (station === "5") { if (opts.failBank) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = structuredClone(fixture.experience); }
+      else if (station === "5") { if (opts.failBank) return { text: "nem JSON", model: "claude-opus-5-5", truncated: false, usage: { input: 1, cachedInput: 0, output: 1 } }; json = bankAnswer(t, fixture.experience); }
       else if (station === "6" || station === "lektorálás") json = { solutions: [], notes: [], reviewedAll: true };
       else json = {};
       return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false, usage: { input: 1000, cachedInput: 600, output: 100 } };
@@ -219,7 +231,7 @@ async function conceptFixWith(original: typeof fixture) {
     const t = turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
     let json: unknown = {};
     if (/^FOGALOMJAVÍTÁS|A PROGRAM ELLENŐRZÉSE \(fogalomjavítás\)/.test(t)) json = { ...teaching, variety: { version: "valtozatossag-1" } };
-    else if (/5\. ÁLLOMÁS/.test(t)) json = structuredClone(fixture.experience);
+    else if (/5\. ÁLLOMÁS/.test(t)) json = bankAnswer(t, fixture.experience);
     else if (/(^|\n)LEKTORÁLÁS|A PROGRAM ELLENŐRZÉSE \(a javítás lektorálása\)/.test(t)) json = { solutions: [], notes: [], reviewedAll: true };
     return { text: JSON.stringify(json), model: "claude-opus-5-5", truncated: false };
   } };
