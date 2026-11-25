@@ -11,14 +11,14 @@ test("ismeretlen kind, tryKind és animKind helyén frissítésre kérő magyar�
   const l = structuredClone(fusionFixture()) as unknown as RawLesson;
   const concept = conceptOf(l);
   l.sections[0].blocks.unshift({ kind: "flipCard", front: "x", back: "y", coversConceptIds: concept });
-  l.sections[0].blocks.push({ kind: "try", tryKind: "numberLine", spec: {}, coversConceptIds: concept });
+  l.sections[0].blocks.push({ kind: "try", tryKind: "holoSlider", spec: {}, coversConceptIds: concept });
   l.sections[0].blocks.push({ kind: "animate", animKind: "holoDeck", params: {}, caption: "Új ábra.", coversConceptIds: concept });
   assert.equal(lessonSchema.safeParse(l).success, false, "szűrés nélkül sérült");
   const out = dropUnknownBlocks(l) as RawLesson;
   assert.equal(out.sections[0].blocks.length, l.sections[0].blocks.length);
   out.sections[0].blocks.forEach((b, i) => {
     const original = l.sections[0].blocks[i];
-    if (["flipCard", "try", "animate"].includes(String(original.kind)) && (original.kind === "flipCard" || original.tryKind === "numberLine" || original.animKind === "holoDeck")) {
+    if (["flipCard", "try", "animate"].includes(String(original.kind)) && (original.kind === "flipCard" || original.tryKind === "holoSlider" || original.animKind === "holoDeck")) {
       assert.equal(b.kind, "explain"); assert.match(String(b.text), /frissítsd az oldalt/i);
     } else assert.deepEqual(b, original, `az ismert blokk a(z) ${i}. helyen változatlan`);
   });
@@ -38,7 +38,7 @@ test("ha egy fejezet minden blokkja ismeretlen, a fejezet megmarad (az indexek n
   l.sections.push({ ...structuredClone(l.sections[0]), title: "Új fajtájú fejezet" });
   const count = l.sections.length;
   const title = l.sections[1].title;
-  l.sections[1].blocks = [{ kind: "flipCard", coversConceptIds: concept }, { kind: "try", tryKind: "estimate", spec: {}, coversConceptIds: concept }];
+  l.sections[1].blocks = [{ kind: "flipCard", coversConceptIds: concept }, { kind: "try", tryKind: "holoEstimate", spec: {}, coversConceptIds: concept }];
   const out = dropUnknownBlocks(l) as RawLesson & { sections: Array<{ title?: string }> };
   assert.equal(out.sections.length, count);
   assert.equal(out.sections[1].title, title);
