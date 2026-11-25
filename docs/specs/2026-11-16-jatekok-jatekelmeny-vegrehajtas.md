@@ -1679,7 +1679,7 @@ fizika-esetek (pattogás, határok) változatlanok.
 
 ## J6 — Galaktikus Aszteroida: folyamatos lövöldözős kérdés-kristályokkal (J6a, J6b)
 
-**Állapot (J6a):** nem kezdődött · **Állapot (J6b):** nem kezdődött
+**Állapot (J6a):** folyamatban – 2026-11-17, ág feat/jatek-j6a-aszteroida-kristaly, munkafa .claude/worktrees/jatek-j6a, kanban #81 · **Állapot (J6b):** nem kezdődött
 **Függ:** J0c merge (3. hullám). **Elfogadás:** J-SA, J1–J10, J16, M1–M12. Terv: 5.6.
 
 ### Fájlok
@@ -1748,6 +1748,165 @@ fizika-esetek (pattogás, határok) változatlanok.
   logikát hívja, így várhatóan zöld; felderítés: olvasd el.
 
 ---
+
+#### Megvalósult eltérések (J6a — Kristály-válasz, kapuk nélkül; kanban #81; J6b ezekre épül)
+
+- **Meghajtó:** a lap és a szimuláció közös `createAsteroidDriver` (`L/spaceAsteroid/sim.ts`): fix 1/60 s-os `createFixedLoop`,
+  a nyitott kérdés alatti `slowMo: 0.7` időskála, `createFeel` (hitstop, rázás: a lap a kamerát a `feel.shakeOffset`-ből mozgatja),
+  mini-Director (`pace`: sérülés → `damage`, közeli veszély → `nearThreat`, rossz válasz → `wrong`) és a kérdés-sáv képkockája
+  (`q.frame(clock, { calm })` → a director `tick`-je). A világ egy lépése az `opts.step`: a lapon a `tick(1/60)`, a szimulációban
+  az `createAsteroidWorld`. **A szimuláció a SZABÁLYOK modellje, nem a 3D lap másolata** (hullám-képlet, hasadás, életek, 2 mp
+  sérthetetlenség, boss 90 HP / 3 fázis, kristály-következmények, a FELVEHETŐ ELEMEK — élet / pajzs / erő / bomba — és az évfolyam-
+  sáv szerinti könnyítés közös kóddal (`physics.ts`); a lövedék-fizikát és a célzást egy ügyességi dobás helyettesíti, kalibrált
+  küszöbökkel — a valós ügyesség nem mérhető, UNVERIFIED). Review #486 óta: a sim ugyanazt a pickup-táblát (`dropChance`,
+  `pickDropKind`, `applyPickupEffect`) és ugyanazt a „csak a hajót érő ellenfél ütközik” szabályt használja, mint a lap. A lapon mért kérdés/perc és szimuláció-arány:
+  `T/space-asteroid-play.spec.ts`.
+- **A kristály ÁLLÓ célpont** (`CRYSTAL_DRIFT_X / Y = 0`; a modul a nem nulla lebegést is kezeli): ujjal így könnyebb eltalálni /
+  megérinteni, a kristályok soha nem fedik egymást, és a mobil mérők (M2, joystick-mérő) stabil dobozt várnak. A „lassú lebegés” a
+  nézeté: a 3D kristály billeg, a gomb fénye lüktet (csökkentett mozgásnál nem).
+- **A kristály-zóna a kérdés-kártya ALATT van, nem „a felső harmadban”:** keskeny telefonon (360×640) a HUD + kártya a vászon
+  felső harmadát elfoglalja. A zóna a kártya BECSÜLT aljától indul (tiszta becslő: `promptLayout` / `estimateLines`, a képernyő és a
+  prompt a MAG bemenete — KSZ-1), legalább 72 px magas; hosszú kérdésnél lejjebb csúszik. A zónát a kérdés megjelenésekor EGYSZER
+  számoljuk (review #486: a rajzoló kód nem ír vissza a mag állapotába, nincs képkockánkénti DOM-mérés / újrazónázás); a kristályok a
+  JÁTÉKTÉR (±9 egység) fölött maradnak.
+- **Élesítési idő és szándékos célzás (review #486 M2, K.3 / KSZ-11):** a kristály a megjelenése után `CRYSTAL_ARM_MS` = 500 ms-ig
+  „élesedik” (látható előjelzés, `data-armed="false"`), ez alatt a lövedék nem választ (a koppintás / 1–4 billentyű szándékos, célzott művelet, azonnal válaszol — a közös mérő M10 is így kattint); és csak olyan lövedék választ,
+  amelynek tűz-megnyomása a kristály megjelenése + élesítés UTÁN történt (`bulletCountsAsAnswer`): a tartott tűz és a kérdés előtt
+  kilőtt lövedék soha nem „válaszol” — a gyerek olvasás nélkül, véletlenül nem lő rossz választ. (Tulajdonosi döntésre: a tűz-
+  felengedés + újranyomás szabály alapértelmezett; ha túl szigorú, a J6b előtt lazítható.)
+- **Két út ugyanahhoz a válaszhoz:** a 3D kristályt a lövedék találja el (`crystalAt`, találati gömb +20%), a hozzá tartozó DOM-gomb
+  (≥ 48 px, `pointerTapHandlers`: pointer-alapú, több ujjnál is) érintéssel / billentyűvel (1–4) is választ. Mindkettő `q.pick`; a
+  választ a director idempotensen egyszer fogadja. A célzássegéd csak az ellenfeleket kapja (**U-J6-1: igen, kizárható — és ki is
+  van zárva**). A felirat ≤ 22 karakter (`crystalLabelsFit`): a hosszabb opciójú tétel hátrébb sorolódik (`promptFits`, az
+  évfolyam-bank választóban „látottnak” véve); ha mégis ilyen jön (tananyag, kupon-mód; a banki tételek ~5,7%-a, a leghosszabb
+  válasz 38 karakter — mérve a `T/space-asteroid-rules.test.ts`-ben), a kristályokon a SORSZÁM áll, a válaszok TELJES szövege a
+  vászonra nyíló „Válaszok” listán (`sa-answers`, törés, nincs vágás, a legrosszabb tétel becsült magassága a vászon 72%-án belül,
+  fölötte görgethető) olvasható; a lista a kérdéssel együtt MAGÁTÓL megnyílik (orkesztrátori döntés, review #486 Ú5 — így nem lehet olvasás nélkül kilőni egy számozott kristályt), nyitva tartása alatt a világ és a kérdés-óra áll; a gyerek zárja be, és csak utána indul az élesítés (a „Válaszok” gomb újranyitja, a zárás újra indítja az élesítést), az 1–4 billentyű és a lista
+  gombjai válaszolnak, a „Vissza a pályához” gomb bezárja, a „Válaszok” gomb újranyitja — NINCS csonkolás (review #486 K2;
+  a „2 sorra vág” engedmény megszűnt).
+- **U-J6-2:** a `space-asteroid-quiz-slot.test.ts` változatlanul zöld; forrás-őre a `pickGradeSlotWithVocab({ pick: () => pickGradeQuiz({
+  grade: sharedGrade …` és a `vocab?.next(` / `markGradeQuizSeen(seen, vq)` mintát rögzíti — a provider `fresh()` ezt a szöveget
+  őrzi (a tananyag-ág, a `material()`, a szóbank-hívás előtt áll: a `vocab-game-wiring` sorrend-őre is zöld).
+- **Hullámok:** 8 hullám + a 9. hullámban a főellenfél (`BOSS_WAVE`); a hullám-képlet (`waveEnemyCount`, `waveSpawnInterval`,
+  `pickEnemyKind`, `pickRockSize`, `enemyHp`, `waveBaseVy`) a `physics.ts`-ben, a lap és a sim közös. Az ellenfelek érkezési
+  magassága a látható sáv teteje fölött (`SPAWN_Y_MIN / MAX` = 8,6–10,2; a kamera a játéksíkból +8,15-ig lát): a korábbi 12,6–14,2
+  magasságról a szikla 4–5 mp-ig a kép fölött utazott, így „az első sziklák 1 mp-nél” nem teljesült volna.
+- **Tanító szakasz (K.4/25):** a menet első 30 mp-ében (`TUTORIAL_SEC`) az ütközés nem von le életet (a kép / hang / rázás megvan, 2 mp
+  sérthetetlenség), az első 8 mp-ben egy soros súgó (`sa-hint`: „Bal ujj: mozgás · jobb ujj: tűz”); a találat színe narancs
+  (K.4/20: nincs telített piros villanás). A szimuláció ugyanezt a szabályt modellezi.
+- **Győzelem véglegessége (review #486 M1):** a főellenfél halálának pillanatában a menet eldőlt: utána az ütközés / lövedék nem sebez
+  (`lifeLossOutcome`, a lap és a szimuláció közös szabálya), az eredmény nem írható felül (`endRun(false)` a győzelmet megtartja);
+  e2e: `forceState({ bossFinale: true })` — egy élet, elesett főellenfél, a hajón repülő ellenséges lövedék → „Legyőzted a főellenfelet!”.
+- **Interpolált rajz (K.4/9, KSZ-4):** a fix lépés előző és mostani helyzete között a rajz az `alpha`-val interpolál (`interpolate`).
+- **A pálya sűrűségét a JÁTÉK-intenzitás hajtja (review #486 Ú1 / V1, terv 4.1/6, KSZ-16):** `waveSpawnInterval(wave, intensity)` =
+  hullám-képlet × `SPAWN_BASE_SCALE` (1,2) × (1 + `intensity` × `SPAWN_RELIEF_MAX`); a `pace.intensity()` (sérülés +0,25, közeli
+  veszély +0,05/s, rossz válasz +0,1) a lemaradás-könnyítést legfeljebb **+10%-ra** korlátozza (KSZ-16: legfeljebb ±10%). A KÉRDÉS-sáv
+  (a jó / rossz válasz sávja) a pálya sűrűségét NEM hajtja, csak a kérdések nehézségét / ablakát. Pontosan: a rossz válasz is ad
+  +0,1 intenzitást, ez legfeljebb **+1%** átmeneti ritkítás az érkezésben (a 3 apró szikla jóval nagyobb, ellenkező hatású); a jó
+  válasz nem ritkít. Így a jó válasz mindig előny. A kicsiknek (3–4. évfolyam) a könnyítés az évfolyam-szabályból jön (`gradeEase`: 1,3×
+  ritkább érkezés, 0,85× sebesség), nem a plafon emeléséből. Sim-teszt: 2 évfolyamsáv (3–4., „5. évfolyamtól” — a világ az 5. évfolyamtól
+  nem függ az évfolyamtól, csak a kérdésbank, ezért ez EGY számítás) × 20 / 45 / 75 / 95%: a győzelem a pontossággal nem csökken
+  (−1/20 tűréssel), és kérdéssel nem kevesebb, mint kérdés nélkül.
+- **A szimuláció bot-kalibrációja (UNVERIFIED a valós gyerek-ügyességre; a győzelmi számok a korábbi PR-táblákkal NEM összehasonlíthatók,
+  mert a modell azóta változott: közös szabálymag, felvehető elemek, oldalirányú átfedés, intenzitás-hajtotta sűrűség):**
+  `DODGE_IMPACT` = 0,40 (a hajó oszlopába érő ellenfél kikerülésének küszöbe: ügyességi dobás < küszöb → kitérés; a lap
+  ütközés-vizsgálatát helyettesíti), `DODGE_FIGHTER` = 0,95 és `DODGE_BOSS` = 0,8 (a vadászgép / főellenfél lövésének kikerülése; a
+  lövés előjelzett, de a bot reakciója véges), `LATERAL_OVERLAP` = 0,6 (ekkora eséllyel ér az ellenfél a hajó oszlopába; kis szikla:
+  `0,55 + 0,15 × méret` szorzóval kisebb eséllyel, a hitbox kisebb), `PICKUP_CATCH_EASE` = 0,85 (a hulló elemet ekkora ügyességi
+  küszöbbel éri el). Az értékeket úgy választottuk, hogy a tervezett viselkedés-tulajdonságok teljesüljenek: az erős modell végigviszi,
+  a gyenge kérdés nélkül nem, a kérdés segít (az `Ú1` teszt), a menet ~3 perc — nem a valós ügyességből mérve. Javasolt horgony (jegyre
+  kerül): a lapon szkriptelt játékos ütközés / perc mérése, amelyhez a `DODGE_*` és a `LATERAL_OVERLAP` illeszthető.
+- **Teszt-elvárások és bot-konstansok átvilágítása (teszt-integritás, 2026-11-17):**
+  - `T/space-asteroid-crystals.test.ts:89` („a kristály nem ér a hajó legfelső helyére”): eredeti elvárás `hit-alj > PLAYER_Y_MAX + 1,5`
+    (a 40ac73b4 commitban, a kristály-zóna merev „hajó fölötti padló + rés” tervével); a 9f0d08c5 commit `− 0,3`-ra lazította, amikor a zónát a
+    kérdés-kártya alá csúsztattuk (hosszú kérdésnél a zóna a hajó felső sávjába nyúlhat). A lazítás a TESZT bemenetén (normál zóna) NEM volt
+    szükséges: a `+1,5` a mai kóddal is teljesül — **mérce-igazítás volt, nem spec-változás, ezért visszaállítva `+1,5`-re** (a szűk zóna esetét
+    a „felső perembe kapaszkodó minimum-magasság” teszt külön őrzi).
+  - Bot-konstansok (`sim.ts`: `DODGE_IMPACT` 1,2 → 0,40, `DODGE_FIGHTER` 1,2 → 0,95, `DODGE_BOSS` 1,1 → 0,8, `PICKUP_CATCH_EASE` 0,95 → 0,85): a
+    6a3c42df-i modell minden nem lelőtt ellenfelet ütköztetett és nem ismert felvehető elemet; a #486 M3 után a sim a lap szabályait
+    (felvehető elemek, oldalirányú átfedés) használja, ezért a küszöbök újrahangolása a MODELLVÁLTÁS következménye, nem a bukás elkerülése.
+    Mérés (20 seed, 900 mp, ugyanazon a mai játékkódon, győzelem kérdéssel / nélkül):
+
+    | konstansok | AVG | STRONG | WEAK | YOUNG (3. évf.) |
+    |---|---|---|---|---|
+    | régi: 1,2 / 1,2 / 1,1 / 0,95 | 20 / 20 | 20 / 20 | 11 / 3 | 19 / 18 |
+    | b526c8cd: 0,65 / 1,1 / 0,85 / 0,95 | 20 / 19 | 20 / 20 | 4 / 0 | 17 / 14 |
+    | mai: 0,40 / 0,95 / 0,8 / 0,85 | 18 / 13 | 20 / 19 | 3 / 0 | 14 / 5 |
+
+    Az új küszöbök a botot NEHEZEBBEN játszatják (kevesebb győzelem) — az elfogadási pontok NEM könnyebben teljesülnek: a régi értékekkel a „kérdés
+    nélkül is el lehet veszíteni” (gyenge: 3/20 nyer) és az „átlagos játékos olykor veszít” (20/20) elbukna, vagyis a régi értékek a mai modellben
+    LAZÁBBAK voltak. A kalibráció a gyerek modellezése, nem a teszt kiszolgálása.
+- **Vak ellenőrzés (L1–L5) javításai:** (L1) a hármas lövés oldalsó lövedéke a kristályon áthalad, NEM válaszol — a lövedékek a magból jönnek
+  (`volleyFor`, `side` jelölés), a választ csak a középső (célzott) lövedék adhatja; teszt: a játék saját függvényeivel 4 nézetben 0% téves, és
+  böngészős eset üres pályán (`noEnemies`) hármas lövéssel; ellenpróbával. (L2) a felirat-regex javítva és a méret-fok a leghosszabb szó szerint
+  (`crystalLabelTier`: 14 / 12 / 11 / 10 px, szélesebb gomb a hosszú szónál, nincs szó közepi törés, nincs csonkolás); böngészős mérés a
+  legnehezebb banki szavakkal (köztük „Dunántúli-középhegység”, „paradicsom”) 3 nézetben. (L3) fekvő nézetben a kristály-zóna a hajó felső
+  sávjába is nyúlhat (a kártya alatt nincs több hely), de MINDEN kristály választható: a hajó alóluk bármelyiket eléri (teszt, 4 nézet); az
+  alsó sor teljes kiemelése a hajó sávja fölé külön tervdöntést kér (jegyre). (L5) a rossz válasz nem jutalmaz: forrás-őr + böngészős teszt
+  (rossz → nincs pajzs / hármas lövés / bomba / pont; jó → fejlesztés), a lapra tett `applyCrystalUpgrade()` a rossz ágban elbuktatja.
+- **Második vak ellenőrzés (GPT-6.2 Sol, 2026-11-19; L1–L6) javításai és döntési pontjai:**
+  - (L1, blokkoló) **az Ú5 automatikus listanyitása visszavonva** (döntési pont: az orkesztrátori Ú5 döntést a vak ellenőrzés blokkoló leletként felülírta — olvasni ÉS lőni
+    ugyanazon az állapoton kell): hosszú / nem férő válasznál a világ NEM áll meg magától; a teljes szövegek NEM blokkoló jelmagyarázatban (`sa-legend`, `pointer-events: none`)
+    látszanak a számozott kristályokkal egyszerre. A kézi lista („Válaszok” gomb) megmarad, megállít, amíg nyitva van.
+  - (L2, blokkoló) nyitott kérdésnél a célzássegéd NEM téríti el a lövést (`shotCenterVx`); az eltérített (segített) középső lövedék `side`-ként jelölt, a kristályon áthalad. Teszt:
+    a vak ellenőrzés számolt ellenpéldája, egység + forrás-őr. (Böngészős érintős teszt: a szintetikus pointer megbízhatatlan — NOT RUN, a fizika számolt.)
+  - (L3) a rossz kristály szilánkja nem jutalmaz: lelövése / bombázása nem ad pontot, kombót, kill-jelvényt és nem ejt zsákmányt (sim + lap; sim-teszt a lelet forgatókönyve szerint).
+    **Mellékhatás:** a szilánk-zsákmány megszűnése nehezítette a játékot, ezért a bot-küszöbök újrahangolva ugyanarra a nyerési sávra (AVG 19/20, SIM_YOUNG 16/20): `DODGE_IMPACT`
+    0,40 → 0,70, `PICKUP_CATCH_EASE` 0,85 → 0,95 (`DODGE_FIGHTER` 0,95, `DODGE_BOSS` 0,8 változatlan). Ez a LAP szabály-változásának következménye (a modell a lapot követi), nem a
+    teszt kiszolgálása; a korábbi (0,40 / 0,85) értékekkel az Ú1-teszt a 3–4. évfolyamon elbukott volna (75% → 18, 95% → 13), mert a szilánk-zsákmány nélkül a rossz válaszok drágábbak.
+  - (L4) a mentésben a kihagyott (lejárt) kérdés KÜLÖN (`timeouts`), a `wrongAnswers` csak a rossz válasz; a tanulási jelvény (`maxStreak`, `perfect`) a válaszsorozatból jön
+    (`perfect`: győzelem, ≥ 3 helyes, 0 rossz, 0 kihagyott), nem a harci kombóból. SPEC-VÁLTOZÁS: a `questionTotals` új alakja és a hozzá tartozó elvárások.
+  - (L5) a kristály-felirat beférése a VALÓDI szélességgel (`canvas.measureText`, `labelFitsChip`): a törhetetlen, széles szó (22 × W) nem csonkul, hanem a sorszám + jelmagyarázat jön.
+  - (L6) a hármas-lövés böngészős teszt determinisztikus: a hajó a célzott kristály alá a teszt-kampóval (`shipX`) kerül, a lövés előtt ellenőrzött állapot (nyitott kérdés, élesített kristályok).
+  - (L7) a lobby leírása (`P/Games.tsx`) közös fájl: ORCHESTRÁTOR-KÉRÉS (a kristályos szöveg).
+- **Harmadik vak ellenőrzés (GPT-6.2 Sol, 2026-11-19, a 8243e5d6 fejre; L1–L7) javításai és döntési pontjai:**
+  - (L1, blokkoló) a „Válaszok” gomb a jelmagyarázat rácsának SAJÁT eleme (portrén a 3. oszlop), nem lebeg a szövegen. Fekvőn a jelmagyarázat a kérdéskártya MELLETT áll
+    (bal oszlop: 1–2., jobb: 3–4. válasz; `position: fixed`, a kártya felső pereme magasságában), a kristály-sorok fölött; a gomb alul középen áll. A kártya a nézet közepén van, a
+    kristályok a kártya ALATT: a szöveg és a kristály nem kerül egy helyre. Böngészős fedés-mérés 4 nézetben (360×640, 390×844, 412×915, 844×390; a banki leghosszabb tétel ÉS egy
+    négy, többsoros válaszú tétel): a szövegsorok (`Range.getClientRects`), a gomb, a kártya és a kristályok páronként nem fedik egymást, és minden kristály közepén a kristály a
+    találat-cél (`elementFromPoint`).
+  - (L2) a csak szilánkokat leölő bomba nem ad combót: a lap és a szimuláció ugyanazt a `bombKillRaisesCombo` feltételt hívja. Böngészős regresszió: rossz kristály → 3 szilánk → bomba → combo 0.
+  - (L3) a kihagyott (lejárt) kérdések száma a `recordRun`-ban: a közös `L/achievements.ts` additív, opcionális `timeouts` mezőt (és `totalTimeouts` élettartam-számlálót) kapott
+    (orkesztrátori engedéllyel); hiányzó mező = 0, régi mentés / régi hívó változatlan (`achievements-timeouts.test.ts`). A lap `runTotalsRef.timeouts`-ot küldi. A szerver-pontséma változatlan.
+  - (L4) a lecke-kupon bónuszra a LEJÁRT kérdés `-1`-et küld (`couponClaimIndex`; a `useCouponSession` szerződése), a megszakított semmit; egység- és forrás-őr teszt.
+  - (L5) a szóbank-forrás a menet magjából (`words` adatfolyam) választ szót és elterelőt; a közös `useVocabQuizSource` egyetlen, additív, visszafelé kompatibilis 3. paramétert kapott (`rng`, alapból
+    `Math.random`, a többi játék változatlan). Teszt: azonos mag → azonos kérdés-sor, más mag → más. A módosítást az orkesztrátor engedélyezte; a többi hívó változatlanságát forrás-őr igazolja.
+  - (L6) az utolsó élet elvesztésekor a megválaszolt kérdés megoldás-kijelzése (≥ 1,8 mp) végigmegy: az eredmény azonnal rögzül (nincs további sebzés), az eredményképernyő a kijelzés VÉGE
+    után nyílik (`endRun(…, afterReveal)`); a megválaszolatlan kérdés megszakad, nincs új kérdés. Böngészős teszt: kijelzés közben `sa-over` nincs, ≥ 1,7 mp után megjelenik.
+  - (L7) a lobby leírása: változatlanul orkesztrátor-kérés (nem érintettem).
+- **Negyedik vak ellenőrzés (GPT-6.2 Sol, 2026-11-19, a c37d79ac fejre; L1–L7) javításai** (az L1 itt FELÜLÍRJA a harmadik kör elrendezését):
+  - (L6, előbb) az átfedésmérő a VALÓDI kártyát (`.play-question-card`) méri, nem a nézetet fedő `sa-question` gyökeret; kontroll-teszt: a mérő a kényszerített (kristályra tolt) jelmagyarázatot elbuktatja, a jó elrendezést átengedi.
+  - (L1, blokkoló) a jelmagyarázat HELYET FOGLAL, a magban számolt elrendezéssel (`legendLayoutFor`, `crystalZoneFor({ reservePx })`): álló nézetben közvetlenül a kérdéskártya ALATT áll (a „Válaszok” gomb a feje, alatta a lista),
+    a kristály-zóna ez alatt kezdődik (a zóna teteje legfeljebb a doboz 70%-ánál, azaz a jelmagyarázat nélküli zóna korlátjával azonos). A lista magassága korlátos (a nézet 28%-a / a hely), a többi a listában BELÜL görgethető (nem nő rá a
+    kristályokra); a magyar szót a jelmagyarázat nem töri közepén. Fekvőn a kártya MELLETT áll (bal: 1–2., jobb: 3–4. válasz, a kártya magasságában, szintén belül görgethető), a gomb alul középen. A hely-becslés óvatos (széles betű), a tiszta
+    mag tesztelt 4 nézetben; a böngészős mérés a valódi dobozokat méri (tananyag-szerű teljes mondatos válaszok hosszú prompttal + a banki leghosszabb tétel).
+  - (L2) a tűz-nyomás idejét a bemeneti kezelő bélyegzi (`markFirePress`, a kristály-órával azonos időalapon), nem a következő fix lépés; teszt: 495 ms-os kristály-korral, ugyanabban a böngészőfeladatban érkező nyomás és tartott tűz nem válaszol.
+  - (L3) a kupon-mód a kupon állapotából jön (`couponActiveRef`), nem a betöltött tananyag-lista hosszából: hibás / üres tananyag-végpontnál sem nyílik évfolyam-bank.
+  - (L4) a kupon lejáratakor a nyitott kérdés megszakítottként zárul (`abort`, idempotens).
+  - (L5) a főellenfél győzelménél is végigmegy a megoldás-kijelzés (`endRun(…, afterReveal)`); böngészős teszt.
+  - (L7) a lobby leírása: változatlanul orkesztrátor-kérés.
+- **Tartott tűz jelzése:** ha a lövedék átmegy a kristályon (nem élesített / régi nyomás), „Engedd el a tűzgombot, és lőj újra a válaszhoz!”
+  jelenik meg 3,5 mp-re, amíg a gyerek lövéssel egyszer még nem válaszolt (`sa-hold-hint`).
+- **Átméretezés nyitott kérdésnél:** a mag új aréna-méretből újraszámolja a kristályok helyét (`rezoneCrystals`), az élesítés újraindul.
+- **Évfolyam-sáv (review #486 M3):** 3–4. évfolyamon a világ könnyebb (`gradeEase`: ritkább érkezés, lassabb ellenfél), hogy a tudás
+  segítsen és egy harmadikos-negyedikes végigvigye; a szimuláció győzelmi arány-állításai: `SIM_YOUNG` ≥ 12/20 kérdéssel, és minden
+  modellre kérdéssel nem több a vereség, mint nélküle.
+- **HUD:** a képkocka-hurok ref-eket ír, a React ≤ 10 Hz-es pillanatképet kap (`publishHud`, KSZ-9); idő helyett hullám / élet, a
+  sáv a menet előrehaladása. A pajzs- és erő-időzítő a tick-ben, játékidőben fogy (a `setInterval` kör-óra megszűnt).
+- **Kanban #69 (havi audit):** a menüben (osztályválasztó / kezdőképernyő) a `render` azonnal kilép — a jelenet nem rajzol. A
+  `requestGameFrame` (#477, lejárt kupon) a hurokban változatlanul megvan.
+- **K.4/7:** `createGameRenderer`, `webglcontextlost` → szünet + „Grafika újraindítása” (új vászon + új renderer, a futó ellenfelek
+  meshe a rajzoláskor újraépül); a shader-előmelegítés (`renderer.compile`) a menü alatt fut.
+- **Spec-változás (terv 9.), a K.1/11 listán túl:** a `T/space-asteroid-mobile.test.ts` 4 esete a „quiz” fázis / kör-óra / saját
+  `shakeRef` megszűnése miatt (SPEC-VÁLTOZÁS 2026-11-17 jelöléssel, a szigor megtartásával), mellette a K.1/11 három esete
+  (`remaining-learning.spec.ts`, `learning-flow.browser.ts`, `coupon-lesson.browser.ts`) és a wiring-guard új esetei. A `wave_10` jelvény
+  („érj el a 10. hullámig”) átnevezése / küszöbe orkesztrátor-kérés (`L/achievements.ts` közös fájl).
+- **J6b-nek:** a főellenfél a pálya tetején áll (`targetY` = 8,5 ≈ a látható sáv teteje: a teste fele a kép fölött) — a gyenge
+  pontoknak lejjebb kell kerülniük; a `feel` és a `pace` a `driverRef.current`-ből érhető el; az új kérdés-fajták a
+  `q.request("boss" | "rescue", clock)`-on át jönnek, a kristály-réteg (`crystalsRef`, `onCrystalOutcome`) a rendes kérdésé.
+- **Nem teljesült (NOT DONE, jelölve a PR K.4 kitöltésében):** K.4/4–5 (a sziklák / lövedékek poolból, `InstancedMesh`: a lap a
+  régi építés-spawnonként modellt őrzi), K.4/8 (a 4×-es CPU-lassításon 6–16 db 50–125 ms-os hosszú feladat 40 mp alatt: a React-újrarajzolás
+  és az elemépítés), K.4/9 teljesült (interpoláció).
 
 ## Joystick-reakció (hibajavítás, kanban #49)
 
@@ -3144,6 +3303,16 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 3. A K.3 etikai lista, a K.4 30 pontos kapu és a K.5 kódszabályok a PR-leírásban.
 4. A követhetőségi táblázat (terv 12.) minden cél-mondatához legalább egy lezárt szelet a J9 végén; a G8–G10 a JM
    véglegesítésével.
+
+### J6a — review #486, 2. kör (2026-11-25)
+- A rögzült menet eredménye végleges: a megoldás-kijelzés alatt tovább futó harc (bomba, lövedék, főellenfél eleste) nem fordítja győzelemre (`runEndedRef`).
+- A kristály-felirat beférése a SOR-számot is méri (mohó tördelés a mért szóközzel, kötőjeles törés); háromnál több sor → jelmagyarázat.
+- A fekvő jelmagyarázat magassága a közös rácssorok maximumából, a 18 px-es sorszámjel minimumával (`landscapeLegendHeightPx`).
+- Álló nézetben helyhiánynál tömör mód: a kártya alatt nincs lista és nincs helyfoglalás, a „Válaszok” gomb a vezérlők fölötti alsó sávban; a teljes lista a gombbal nyílik. SPEC-VÁLTOZÁS a fedés-mérőben: tömör módban nincs mért szövegsor.
+
+### J6a — review #486, 3. kör (2026-11-25)
+- A már rögzített menet (a megoldás-kijelzésre váró utolsó élet) alatt a szünet menü „Kör vége” pontja azonnal az eredményképernyőt nyitja; az eredmény nem íródik át. Ok: az `endRound` a kijelzés-várót is törli, a `runEndedRef` őr pedig korábban csendben visszatért.
+- Teszt: `space-asteroid-play.spec.ts` „review #486 (Vercel) … „Kör vége” pontja azonnal az eredményképernyőt nyitja” (RED `3a76d23b`).
 
 ### J7b — review #610 (2026-11-25)
 - Turbópad: a már elért pad a tartás (horgonyzás / mérési sáv) alatt sem kérdez; a tartás elengedése után igen (`sim.ts`, teszt: `tornado-junctions.test.ts`).

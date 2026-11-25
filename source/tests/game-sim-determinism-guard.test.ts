@@ -146,6 +146,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   // J7b: a Tornado lapján nincs kivétel (a szél, a tölcsér kezdőszöge és a kérdés-sorsolás a menet seedelt RNG-jéből, a villám
   // külön seedelt `fxRng`-ből).
   "TornadoHunter200.tsx": [],
+  // J6a: az Aszteroida lapján nincs kivétel (hullám-érkezés, hasadás, pickup, vadászgép-lövés a menet `world` RNG-jéből; a kérdés-kristályok
+  // és az évfolyam-bank választás a `crystal` / `pick` RNG-ből; a kozmetika a `fx` RNG-ből: `cosmeticRandom`).
+  "SpaceAsteroidQuiz.tsx": [],
 };
 
 const PAGE_FORBIDDEN = FORBIDDEN.filter(({ name }) => name === "Math.random" || name === "Date.now");

@@ -24,11 +24,22 @@ for (const [width, height] of [[390, 844], [844, 390], [1366, 768]]) {
     await expect(page.getByTestId("coupon-hud")).toBeVisible();
     await expect.poll(() => requestedLesson).toBe(true);
     await page.getByTestId("sa-start").click();
-    const wrong = page.getByRole("button", { name: "Ferde oldal", exact: true });
+    // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.; végrehajtás J6a): a régi eset a BLOKKOLÓ induló
+    // kvízt rögzítette (a lecke-kvíz azonnal, a válaszgomb a dialógusban, a hibás válasz kártyája magától). Az új követelmény nem
+    // lazább: a lecke-kérdés (kupon módban csak tananyag) kristályon érkezik; a VALÓS (eredeti) opció-index megy a szervernek;
+    // a magyarázat a „Miért?” gombra nyílik. A teszt-kampó azonnali kérdést nyit (a bemelegítés 10 mp-es).
+    await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
+    await page.evaluate(() => (window as unknown as { __websuliGame: { forceState: (p: object) => void } }).__websuliGame.forceState({ question: true }));
+    const wrong = page.getByRole("button", { name: "Kristály: Ferde oldal", exact: true });
     await expect(wrong).toBeInViewport();
+    // SPEC-VÁLTOZÁS 2026-11-17 (review #486 M2/KSZ-1): fix várakozás helyett FELTÉTELES várakozás — a kristályok élesítése (500 ms) véget ér,
+    // a zóna a magban egyszer áll be; a `click()` az elmozdulás nélküli (stabil) gombot várja meg.
+    await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true");
     await wrong.click();
     await expect.poll(() => answers.length).toBe(1);
     expect(answers[0]).toMatchObject({ quizItemId: id, pickedIndex: 0 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.getByTestId("play-why").click();
     await expect(page.getByTestId("quiz-feedback")).toBeVisible();
     await expect(page.getByTestId("quiz-feedback").locator(":scope > div")).toHaveCSS("opacity", "1");
     const dismiss = page.getByTestId("quiz-feedback-dismiss");
