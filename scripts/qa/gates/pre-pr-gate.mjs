@@ -86,6 +86,10 @@ export function checkPrBody(body) {
   if (!(/elfogad/i.test(b) && /^\s*[-*] \[[ xX]\]/m.test(b))) missing.push('elfogadási lista (`- [x]` tételek az „elfogadás” alatt)');
   if (!/futtatott ellenőrzés|ellenőrzések/i.test(b)) missing.push('„Futtatott ellenőrzések” szakasz (parancs + valós eredmény)');
   if (!/nem futtatott|NOT RUN/i.test(b)) missing.push('„Nem futtatott + ok” sor (NOT RUN + ok + kockázat, vagy „nincs”)');
+  // PR #570 review: a vázlat-generátor (pr-body.mjs) kitöltetlen helyei — egyetlen maradt jelölés is bukás (a commitcímből lett
+  // jelölőnégyzet sem pótolja az elfogadási listát, ha mellette KITÖLTENDŐ maradt).
+  const todo = (b.match(/<!-- KITÖLTENDŐ -->/g) ?? []).length;
+  if (todo) missing.push(`${todo} kitöltetlen \`KITÖLTENDŐ\` jelölés a leírásban`);
   return missing;
 }
 
