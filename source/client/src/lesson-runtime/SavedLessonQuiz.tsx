@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { noteResultResponse } from "./resultAwaiting";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -37,8 +38,10 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
   const retry = useRef<(() => Promise<PracticeView>) | null>(null);
   const loading = useRef(false);
   const mounted = useRef(true);
-  const save = (data: PracticeView) => {
+  const save = (data: PracticeView & { resultAwaiting?: unknown }) => {
     setRound(data); onFinished(!!data.finishedAt);
+    // U4d: a kör lezáró válasza hozza az összevont levél várakozó részét; a teljesen megválaszolt kör enélkül törli a jelzést.
+    if (data.resultAwaiting || data.questions.every(q => q.answer)) noteResultResponse(lessonId, data);
     try { localStorage.setItem(key, data.id); } catch { /* The server still owns the saved round. */ }
   };
   const run = async (action: () => Promise<PracticeView>) => {

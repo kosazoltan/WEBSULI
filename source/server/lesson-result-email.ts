@@ -544,8 +544,9 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
       // Review #586: az átmeneti DB-hiba nem veszítheti el a kész gyakorlókört — korlátos újrapróba (a hívó csak naplóz).
       const outcome = await pairWithRetry({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } });
       if (outcome.type === "parked") return { awaiting: outcome.awaiting };
-      if (outcome.type === "paired") await deliverCombined(input.lessonId, outcome, true);
-      if (outcome.type === "alreadySent" && outcome.redeliver) await deliverCombined(input.lessonId, outcome.redeliver, false);
+      // U4d: a párosítás eredménye azonnal megy vissza (a gyakorlókör válasza erre vár), a levél a háttérben — a tartós pótlás a söprőé.
+      if (outcome.type === "paired") void deliverCombined(input.lessonId, outcome, true).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
+      if (outcome.type === "alreadySent" && outcome.redeliver) void deliverCombined(input.lessonId, outcome.redeliver, false).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
       return { awaiting: null };
     }
   }
