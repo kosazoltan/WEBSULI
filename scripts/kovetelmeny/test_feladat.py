@@ -535,8 +535,6 @@ class ReviewSzalLapozas(unittest.TestCase):
             F.gh_open_threads(5, run=lambda args, **kw: self.valasz([{"isResolved": False}], info=False))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class GyujtFelsorolasosKapcsolo(unittest.TestCase):
@@ -555,3 +553,7 @@ class GyujtFelsorolasosKapcsolo(unittest.TestCase):
         self.assertEqual(G.flag_state("send", rule, ""), "be")
         self.assertEqual(G.flag_state("dry-run", rule, ""), "ki")
         self.assertEqual(G.flag_state(G.REJTETT, rule, ""), "nem_logikai")
+
+
+if __name__ == "__main__":
+    unittest.main()
