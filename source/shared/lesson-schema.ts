@@ -6,6 +6,7 @@ import { parseReferenceExpression } from "./answer-value";
 export const LESSON_TEXT_LIMITS = { heading: 255, explain: 4000, problem: 2000, step: 1000, answer: 1000, caption: 500, question: 1000, option: 500, feedback: 1000, hint: 1000, bullet: 500 } as const;
 import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
 import { decisionStoryParamsSchema } from "./decision-story";
+import { sourceImageParamsSchema } from "./source-image";
 
 /**
  * The Lesson: what a child actually reads, as structured data rather than an HTML blob.
@@ -53,6 +54,8 @@ export const ANIM_KINDS = [
   // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): elágazó döntési fa, képes kártyák.
   "decisionTree",
   "pictureCards",
+  // D1H (docs/specs/2026-11-25-d1h-kivagott-kep.md): a forrás kivágott képe forrásmegjelöléssel — a modell SOHA nem írja (a program tölti).
+  "sourceImage",
 ] as const;
 
 /**
@@ -85,7 +88,7 @@ export type AnimKind = (typeof ANIM_KINDS)[number];
  */
 export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"] as const satisfies ReadonlyArray<AnimKind>;
 /** A bővítés ELŐTTI ábrafajta-felsorolás (a főág `ANIM_KINDS` listája, ugyanabban a sorrendben). */
-export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
+export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k) && k !== "sourceImage") as [AnimKind, ...AnimKind[]]);
 
 /**
  * Spec 2026-09-24 (magyarázó ábrák): olvasáskor az ismeretlen (újabb programverzióból származó)
@@ -208,6 +211,11 @@ const blockUnion = z.discriminatedUnion("kind", [
 ]);
 function refineBlock(block: z.infer<typeof blockUnion>, ctx: z.RefinementCtx): void {
   {
+    if (block.kind === "animate" && block.animKind === "sourceImage") {
+      const parsed = sourceImageParamsSchema.safeParse(block.params);
+      if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ["params", ...issue.path] });
+      return;
+    }
     if (block.kind === "animate" && (block.animKind === "triangleArea" || block.animKind === "decisionStory")) {
       const parsed = (block.animKind === "triangleArea" ? triangleAreaLabParamsSchema : decisionStoryParamsSchema).safeParse(block.params);
       if (!parsed.success) for (const issue of parsed.error.issues) {

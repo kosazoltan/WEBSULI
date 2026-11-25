@@ -23,7 +23,8 @@ const MAP = { meta: { title: "T", subject: "s", classroom: 4 }, concepts: [] } a
 const ADVERTISED = ["numberLine", "fraction", "timeline", "geometry", "process", "map", "wordBuilder", "sentenceParts", "triangleArea", "decisionStory",
   "cycle", "labeledShape", "barChart", "venn", "illustration", "scene3d"];
 // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): a döntési fa és a képes kártyák is az S3a-ig nem hirdetett fajták.
-const NOT_YET_ADVERTISED = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"];
+// D1H: a `sourceImage`-et SOHA nem hirdetjük — a kivágott képet a program tölti.
+const NOT_YET_ADVERTISED = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards", "sourceImage"];
 
 test("az author és javító prompt a HIRDETETT animációtípusokat közli (a paraméter-alak nélküli új fajtákat nem)", () => {
   assert.deepEqual([...PROMPT_ANIM_KINDS], ADVERTISED);
