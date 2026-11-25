@@ -7,6 +7,8 @@ import { attemptDeadline } from "@shared/attempt-deadline";
 import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { isRetryableRequestError } from "@shared/request-retry";
 import { createRoundOwners, isFreshRound, roundHasActivity } from "@shared/round-owner";
+import { createOutboxStore, outboxEntryExpired, type OutboxEntry } from "@shared/result-outbox";
+import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
 /**
@@ -38,6 +40,59 @@ const sentInMemory = new Set<string>();
 const ownerKeyOf = (storageKey: string, kind: string, roundId: string) => `${storageKey}:${kind}:owner:${roundId}`;
 /** B5b (#510 R44): a pillanatkép-kérés kísérletenkénti határideje — utána ugyanaz az állapot újra elküldhető. */
 export const SNAPSHOT_POST_TIMEOUT_MS = 15_000;
+
+/**
+ * B7 (docs/specs/2026-11-25-eredmeny-email-b7.md; #510 R24, R28, R30, R32, R40): a végleges beküldések TARTÓS kimenő sora, kapcsoló
+ * mögött (alapból KI). BE állásban a kész kör törzse várakozás nélkül a sorba kerül; a sort a beküldő, az alkalmazás indulása és az
+ * `online` esemény üríti. Siker → jelző + kikerül; 400 / nem újrapróbálható 4xx (a 429 kivételével) → kikerül; újrapróbálható hiba →
+ * marad (laponként legfeljebb RESULT_REPORT_ATTEMPTS kísérlet, 30 s / 60 s várakozással; a következő ürítés folytatja).
+ */
+const outbox = createOutboxStore(() => (resultOutboxEnabled() ? localStorage : null));
+const outboxAttempts = new Map<string, { attempts: number; nextAt: number }>();
+const outboxInFlight = new Set<string>();
+const flagSet = (flag: string) => { if (sentInMemory.has(flag)) return true; try { return !!localStorage.getItem(flag); } catch { return false; } };
+class OutboxEntryExpired extends Error {}
+/** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várják egymást, R20). Sosem dob. */
+export function drainResultOutbox(): void {
+  const now = Date.now();
+  for (const entry of outbox.read()) {
+    if (flagSet(entry.flag)) { outbox.remove(entry.id); continue; }
+    // R30: a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül.
+    if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
+    const state = outboxAttempts.get(entry.id);
+    if (outboxInFlight.has(entry.id) || (state && (state.attempts >= RESULT_REPORT_ATTEMPTS || state.nextAt > now))) continue;
+    outboxInFlight.add(entry.id);
+    void sendOutboxEntry(entry).finally(() => outboxInFlight.delete(entry.id));
+  }
+}
+async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
+  try {
+    const fingerprint = await getFingerprint().catch(() => undefined);
+    // R40: a korhatár a tényleges kérés előtt is (a token / ujjlenyomat várakozása alatt lejárt bejegyzés nem megy ki). B4b: a mostani
+    // token csak a rögzített párosítással egyezve (kötés BE); a törzs minden tényleges kérés előtt épül.
+    const body = ({ ownerBinding }: { ownerBinding: boolean }) => {
+      if (outboxEntryExpired(entry, Date.now())) throw new OutboxEntryExpired();
+      const learner = ownerBinding ? roundOwners.learnerFor(entry.owner) : getLearnerToken() ?? undefined;
+      return { ...entry.body, ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}) };
+    };
+    const response = await apiRequest("POST", `/api/lessons/${entry.lessonId}/results`, body, { resultTimes: entry.times, retries: 0, keepalive: entry.kind === "quiz" });
+    noteResultResponse(entry.lessonId, response);
+    sentInMemory.add(entry.flag);
+    try { localStorage.setItem(entry.flag, "1"); } catch { /* a memóriabeli jelző + a szerver egyedi kulcsa véd */ }
+    try { localStorage.removeItem(entry.partialKey); } catch { /* nincs mit törölni */ }
+    roundOwners.clear(entry.ownerKey);
+    outboxAttempts.delete(entry.id);
+    outbox.remove(entry.id);
+  } catch (error) {
+    const status = (error as { status?: unknown } | null)?.status;
+    const retryable = error instanceof OutboxEntryExpired ? false : isRetryableRequestError(error) || status === 429;
+    if (!retryable) { outboxAttempts.delete(entry.id); outbox.remove(entry.id); return; }
+    const attempts = (outboxAttempts.get(entry.id)?.attempts ?? 0) + 1;
+    const delay = RESULT_REPORT_RETRY_DELAYS_MS[Math.min(attempts, RESULT_REPORT_RETRY_DELAYS_MS.length) - 1];
+    outboxAttempts.set(entry.id, { attempts, nextAt: Date.now() + delay });
+    if (attempts < RESULT_REPORT_ATTEMPTS) setTimeout(drainResultOutbox, delay);
+  }
+}
 export function useResultReport(lessonId: string | undefined, kind: "tasks" | "quiz", round: ExperienceRound, storageKey: string, ready = true) {
   /** R20 (B5b): a végleges beküldés „úton van” őre KÖRÖNKÉNT (a „már elküldve” jelző kulcsán) — az előző kör függő beküldése mellett az
    *  új, teljes kör is elmegy. */
@@ -81,6 +136,18 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // R47: legkésőbb a lezáráskor rögzül (ha a tevékenység-effekt még nem futott le).
     const ownerKey = ownerKeyOf(storageKey, kind, roundId);
     const owner = roundOwners.bind(ownerKey, seenFresh.current.has(experienceFingerprint({ ids: round.ids })));
+    if (resultOutboxEnabled()) {
+      // B7 (R24): BE állásban a kör törzse várakozás nélkül a tartós sorba kerül, és a sor azonnal ürül (a küldést a sor végzi).
+      const times = { ...(round.startedAt > 0 ? { startedAt: round.startedAt } : {}), ...(kind === "quiz" && round.lastAnsweredAt ? { lastAnsweredAt: round.lastAnsweredAt } : {}) };
+      const body = kind === "tasks"
+        ? { kind, roundId, answers: Object.fromEntries(round.ids.map(id => [id, round.answers[id] ?? ""])) }
+        : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])) };
+      // R30: lezárt körnél a sorba kerülés ideje, le nem zártnál a kör utolsó tevékenysége.
+      const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
+      outbox.add({ id: `${lessonId}|${flag}`, lessonId, kind, body, times, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, ownerKey, owner, activityAt });
+      drainResultOutbox();
+      return;
+    }
     sending.current.add(flag);
     void (async () => {
       try {
