@@ -4,7 +4,8 @@ import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 /** D1H-1 (docs/specs/2026-11-25-d1h-kivagott-kep.md): a lecke a kivágott forrásképet alt-szöveggel és forrásmegjelöléssel mutatja. */
 test.use({ serviceWorkers: "block" });
 const ID = "c".repeat(64);
-const PNG = Buffer.from("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082", "hex");
+// Review #594: valódi, dekódolható 4×3-as PNG (sharp-pal készítve).
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAIAAAA7ljmRAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEElEQVQImWM4IScHRww4OQD1xwwx6wqgCwAAAABJRU5ErkJggg==", "base64");
 
 test("a sourceImage blokk: kép a végpontról, alt, felirat és kattintható forrásmegjelölés", async ({ page }) => {
   const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: Array<{ coversConceptIds?: string[] }> }> };
@@ -31,9 +32,15 @@ test("a sourceImage blokk: kép a végpontról, alt, felirat és kattintható fo
   const img = figure.locator("img");
   await expect(img).toHaveAttribute("alt", "Rétegvulkán keresztmetszete");
   await expect(img).toHaveAttribute("src", `/api/source-images/${ID}`);
+  // Review #594: a kép ténylegesen betöltődött és dekódolódott (nem csak az attribútumok léteznek).
+  await expect(img).toBeVisible();
+  await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBe(4);
   await expect(figure).toContainText("A vulkán keresztmetszete a forrásban.");
   const credit = figure.getByRole("link", { name: /nkp\.hu — Földrajz 7\./ });
   await expect(credit).toHaveAttribute("href", "https://www.nkp.hu/foldrajz");
   await expect(credit).toHaveAttribute("rel", /noopener/);
-  await expect(page.locator('[data-anim="sourceImage"]').filter({ hasText: "Hiányzó kép felirata." })).toHaveCount(0);
+  // Review #594: a betölthetetlen képpel a TELJES blokk (fejléccel együtt) eltűnik.
+  await expect(page.locator(`[data-source-image="${"d".repeat(64)}"]`)).toHaveCount(0);
+  await expect(page.getByText("Hiányzó kép felirata.")).toHaveCount(0);
+  await expect(page.locator(`[data-source-image="${ID}"]`)).toHaveCount(1);
 });

@@ -12,7 +12,10 @@ assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a
 const { dbPool } = await import("../server/db");
 const { sourceImagesRouter, storeSourceImage } = await import("../server/source-images");
 
-const WEBP = Buffer.concat([Buffer.from("RIFF"), Buffer.from([0x20, 0, 0, 0]), Buffer.from("WEBPVP8 "), Buffer.alloc(24, 7)]);
+// Review #594: valódi, dekódolható 4×3-as WEBP (sharp-pal készítve); a sérült (szignatúrás, csonka) kép negatív eset.
+const WEBP = Buffer.from("UklGRjgAAABXRUJQVlA4ICwAAADQAQCdASoEAAMAAUAmJaACdLoB+AADsAD+8MQL/xZyMR2eb/52DYl2vWAAAA==", "base64");
+const PNG_HEADER_ONLY = Buffer.from("89504e470d0a1a0a", "hex");
+const WEBP_TRUNCATED = WEBP.subarray(0, 30);
 let base = "";
 let close = () => {};
 before(async () => {
@@ -32,6 +35,8 @@ test("tárolás: tartalomcímzett (sha256), idempotens; a meta (forrás, oldal) 
   const rows = (await dbPool.query("SELECT mime, source_url, credit FROM lesson_source_images WHERE id = $1", [id])).rows;
   assert.deepEqual(rows, [{ mime: "image/webp", source_url: "https://www.nkp.hu/a", credit: "nkp.hu" }]);
   await assert.rejects(storeSourceImage(Buffer.from("nem kép"), { credit: "x" }), /kép/i);
+  await assert.rejects(storeSourceImage(PNG_HEADER_ONLY, { credit: "x" }), /sérült|nem dekódolható|nem kép/i);
+  await assert.rejects(storeSourceImage(WEBP_TRUNCATED, { credit: "x" }), /sérült|nem dekódolható/i);
 });
 
 test("végpont: a kép a helyes MIME-vel, nosniff-fel, hosszú gyorsítótárral; hibás azonosító 400, ismeretlen 404", async () => {

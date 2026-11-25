@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { Router } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db } from "./db";
@@ -17,6 +18,11 @@ export async function storeSourceImage(bytes: Buffer, meta: SourceImageMeta): Pr
   const mime = sniffImageMime(bytes);
   if (!mime) throw new Error("A kivágott forrás nem kép.");
   if (bytes.length > SOURCE_IMAGE_MAX_BYTES) throw new Error("A kivágott kép túl nagy.");
+  // Review #594: a szignatúra kevés — a teljes kép dekódolható legyen (a sérült / csonka kép nem kerül a tárba).
+  try {
+    const { width, height } = await sharp(bytes, { failOn: "error", limitInputPixels: 40_000_000 }).stats().then(() => sharp(bytes).metadata());
+    if (!width || !height) throw new Error("méret nélkül");
+  } catch { throw new Error("A kivágott kép sérült vagy nem dekódolható."); }
   const id = createHash("sha256").update(bytes).digest("hex");
   await db.insert(lessonSourceImages).values({ id, mime, bytes, sourceUrl: meta.sourceUrl ?? null, sourceFile: meta.sourceFile ?? null, page: meta.page ?? null, credit: meta.credit.slice(0, 200) })
     .onConflictDoNothing({ target: lessonSourceImages.id });
