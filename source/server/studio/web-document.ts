@@ -20,9 +20,12 @@ async function zipKind(bytes: Buffer): Promise<WebFormat | null> {
   const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(bytes).catch(() => null);
   if (!zip) return null;
+  // Review #592: a méretkapu az ELSŐ kibontás (a `mimetype` olvasása) előtt fut — ismeretlen ZIP-altípusnál is.
+  guardZip(zip);
   if (zip.file("word/document.xml")) return "docx";
   if (zip.file("ppt/presentation.xml") || Object.keys(zip.files).some(p => /^ppt\/slides\/slide\d+\.xml$/.test(p))) return "pptx";
-  const mime = zip.file("mimetype") ? (await zip.file("mimetype")!.async("string")).trim() : "";
+  const mimeEntry = zip.file("mimetype");
+  const mime = mimeEntry ? (await mimeEntry.async("string")).slice(0, 200).trim() : "";
   if (mime === "application/vnd.oasis.opendocument.presentation") return "odp";
   if (mime === "application/vnd.oasis.opendocument.text") return "odt";
   return null;
@@ -39,15 +42,24 @@ function sniffBytes(bytes: Buffer, contentType: string): WebFormat | "zip" | nul
   if (sniffImageMime(bytes)) return "image";
   if (startsWith(bytes, CFB_SIG)) return "ppt";
   if (startsWith(bytes, ZIP_SIG)) return "zip";
+  // Review #592: a szöveges jelleg a TARTALOMBÓL dől el (a fejléc előtt) — a fejléccel „text/plain”-nek mondott bináris nem szöveg,
+  // a „application/octet-stream”-ként kiszolgált valódi szöveg viszont az. A fejléc csak a HTML / sima szöveg között dönt.
+  if (!looksLikeText(bytes)) return null;
   const head = bytes.subarray(0, 4096).toString("latin1");
   if (/^\s*(MIME-Version:|Content-Type:\s*multipart\/related)/im.test(head) && /multipart\/related/i.test(head)) return "mht";
   if (/^(message\/rfc822|multipart\/related)/i.test(contentType)) return "mht";
   if (/^(text\/html|application\/xhtml\+xml)\b/i.test(contentType) || /^\s*(<!doctype html|<html|<head|<body|<p\b|<div\b)/i.test(head)) return "html";
-  if (/^text\/plain\b/i.test(contentType)) return "text";
-  // Bináris (vezérlőkarakteres) tartalom nem szöveg.
-  const sample = bytes.subarray(0, 512);
-  if (sample.length && sample.every(b => b === 9 || b === 10 || b === 13 || b >= 32)) return contentType ? null : "text";
-  return null;
+  return "text";
+}
+
+/** Szöveg-e: UTF-16 BOM, vagy (az első 8 KB-ban) nincs NUL és a vezérlőbájtok aránya elhanyagolható; UTF-8 vagy 8 bites kódlap. */
+function looksLikeText(bytes: Buffer): boolean {
+  if (!bytes.length) return false;
+  if ((bytes[0] === 0xff && bytes[1] === 0xfe) || (bytes[0] === 0xfe && bytes[1] === 0xff)) return true;
+  const sample = bytes.subarray(0, 8192);
+  let control = 0;
+  for (const b of sample) { if (b === 0) return false; if (b < 32 && b !== 9 && b !== 10 && b !== 13 && b !== 12) control++; }
+  return control / sample.length < 0.01;
 }
 
 function imageOf(bytes: Buffer, sourceUrl: string, name?: string): WebImage | null {
@@ -78,6 +90,21 @@ async function xmlTexts(xml: string, ns: string, paragraphTag: string, textTag: 
     .filter(Boolean);
 }
 const DRAWING = "http://schemas.openxmlformats.org/drawingml/2006/main";
+
+/** Review #592: az ODF üres szóköz-elemei (`text:s` ismétlésszámmal, `text:tab`, `text:line-break`) a szöveg részei. */
+function odfText(node: Node): string {
+  let out = "";
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === 3) { out += child.nodeValue ?? ""; continue; }
+    const el = child as Element;
+    if (el.namespaceURI === ODF_TEXT_NS && el.localName === "s") out += " ".repeat(Math.min(Math.max(Number(el.getAttributeNS(ODF_TEXT_NS, "c") ?? 1) || 1, 1), 100));
+    else if (el.namespaceURI === ODF_TEXT_NS && el.localName === "tab") out += "\t";
+    else if (el.namespaceURI === ODF_TEXT_NS && el.localName === "line-break") out += "\n";
+    else out += odfText(el);
+  }
+  return out;
+}
+const ODF_TEXT_NS = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
 const ODF_TEXT = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
 
 async function zipImages(zip: Zip, prefix: RegExp, sourceUrl: string): Promise<WebImage[]> {
@@ -89,6 +116,38 @@ async function zipImages(zip: Zip, prefix: RegExp, sourceUrl: string): Promise<W
   return capImages(out);
 }
 
+const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const OFFICE_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const PRES_NS = "http://schemas.openxmlformats.org/presentationml/2006/main";
+
+/** Egy csomagrész kapcsolatai (`_rels/<rész>.rels`): azonosító, típus, a célrész ZIP-útvonala (relatív cél feloldva). */
+async function relTargets(zip: Zip, part: string): Promise<Array<{ id: string; type: string; target: string }>> {
+  const dir = part.slice(0, part.lastIndexOf("/") + 1);
+  const rels = zip.file(`${dir}_rels/${part.slice(dir.length)}.rels`);
+  if (!rels) return [];
+  const { DOMParser } = await import("@xmldom/xmldom");
+  const doc = new DOMParser().parseFromString(await rels.async("string"), "application/xml");
+  return Array.from(doc.getElementsByTagNameNS(REL_NS, "Relationship")).map(r => {
+    const raw = r.getAttribute("Target") ?? "";
+    const segments: string[] = [];
+    for (const seg of (raw.startsWith("/") ? raw.slice(1) : dir + raw).split("/")) { if (seg === "..") segments.pop(); else if (seg && seg !== ".") segments.push(seg); }
+    return { id: r.getAttribute("Id") ?? "", type: r.getAttribute("Type") ?? "", target: segments.join("/") };
+  });
+}
+
+async function pptxSlideOrder(zip: Zip): Promise<string[]> {
+  const fallback = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p)).sort((a, b) => naturalNum(a) - naturalNum(b));
+  const pres = zip.file("ppt/presentation.xml");
+  if (!pres) return fallback;
+  const { DOMParser } = await import("@xmldom/xmldom");
+  const doc = new DOMParser().parseFromString(await pres.async("string"), "application/xml");
+  const rels = new Map((await relTargets(zip, "ppt/presentation.xml")).map(r => [r.id, r.target]));
+  const ordered = Array.from(doc.getElementsByTagNameNS(PRES_NS, "sldId"))
+    .map(s => rels.get(s.getAttributeNS(OFFICE_REL_NS, "id") ?? ""))
+    .filter((p): p is string => !!p && !!zip.file(p));
+  return ordered.length ? [...new Set(ordered)] : fallback;
+}
+
 async function readZipDocument(bytes: Buffer, kind: WebFormat, url: string): Promise<WebDocument> {
   const { default: JSZip } = await import("jszip");
   const zip = await JSZip.loadAsync(bytes);
@@ -98,14 +157,16 @@ async function readZipDocument(bytes: Buffer, kind: WebFormat, url: string): Pro
     return { format: kind, title: "", text: text.trim(), images: await zipImages(zip, /^word\/media\//, url), needsOcr: false };
   }
   if (kind === "pptx") {
-    const slides = Object.keys(zip.files).filter(p => /^ppt\/slides\/slide\d+\.xml$/.test(p)).sort((a, b) => naturalNum(a) - naturalNum(b));
+    // Review #592: a diasorrend a `presentation.xml` `sldIdLst` listája (+ kapcsolatai), a jegyzet a dia saját kapcsolatából; a fájlnév
+    // száma csak tartalék (sérült / hiányos csomag), a megjelenített diaszám a bejárási sorszám.
+    const slides = await pptxSlideOrder(zip);
     const parts: string[] = [];
-    for (const path of slides) {
-      const n = naturalNum(path);
+    for (const [index, path] of slides.entries()) {
       const lines = await xmlTexts(await zip.file(path)!.async("string"), DRAWING, "p", "t");
-      const notesFile = zip.file(`ppt/notesSlides/notesSlide${n}.xml`);
+      const notesPath = (await relTargets(zip, path)).find(r => /\/notesSlide$/.test(r.type))?.target;
+      const notesFile = notesPath ? zip.file(notesPath) : null;
       const notes = notesFile ? await xmlTexts(await notesFile.async("string"), DRAWING, "p", "t") : [];
-      parts.push([`[${n}. dia]`, ...lines, ...(notes.length ? [`Jegyzet: ${notes.join(" ")}`] : [])].join("\n"));
+      parts.push([`[${index + 1}. dia]`, ...lines, ...(notes.length ? [`Jegyzet: ${notes.join(" ")}`] : [])].join("\n"));
     }
     return { format: kind, title: "", text: parts.join("\n\n").trim(), images: await zipImages(zip, /^ppt\/media\//, url), needsOcr: false };
   }
@@ -117,7 +178,7 @@ async function readZipDocument(bytes: Buffer, kind: WebFormat, url: string): Pro
     // Dokumentumsorrendben: címsor (text:h) és bekezdés (text:p) együtt.
     const walk = (node: Node): void => {
       for (let child = node.firstChild as Element | null; child; child = child.nextSibling as Element | null) {
-        if (child.namespaceURI === ODF_TEXT && (child.localName === "p" || child.localName === "h")) { const t = (child.textContent ?? "").trim(); if (t) lines.push(t); }
+        if (child.namespaceURI === ODF_TEXT && (child.localName === "p" || child.localName === "h")) { const t = odfText(child).trim(); if (t) lines.push(t); }
         else walk(child);
       }
     };
@@ -127,14 +188,71 @@ async function readZipDocument(bytes: Buffer, kind: WebFormat, url: string): Pro
   return { format: kind, title: "", text: lines.join("\n"), images: await zipImages(zip, /^Pictures\//, url), needsOcr: false };
 }
 
-/** Régi bináris PowerPoint: a TextCharsAtom (0x0FA0, UTF-16LE) és TextBytesAtom (0x0FA8, latin1) rekordok, határon belül olvasva. */
+/**
+ * Review #592: a régi bináris PowerPoint a CFB (OLE2) tárolóban — a „PowerPoint Document” adatfolyamot a FAT / MiniFAT szektorláncából
+ * állítjuk össze (a szektorok nem feltétlenül szomszédosak), határ- és körellenőrzéssel; azon olvassuk a TextCharsAtom (0x0FA0,
+ * UTF-16LE) és TextBytesAtom (0x0FA8, latin1) rekordokat.
+ */
+const FREESECT = 0xffffffff, ENDOFCHAIN = 0xfffffffe;
+export function readCfbStream(bytes: Buffer, name: string): Buffer | null {
+  if (!startsWith(bytes, CFB_SIG) || bytes.length < 512) return null;
+  const shift = bytes.readUInt16LE(30), miniShift = bytes.readUInt16LE(32);
+  if (shift !== 9 && shift !== 12) throw new Error("A régi Office-fájl szerkezete nem olvasható (szektorméret).");
+  const size = 1 << shift, miniSize = 1 << miniShift;
+  const sectorAt = (i: number) => { const off = (i + 1) * size; if (i < 0 || off >= bytes.length) throw new Error("A régi Office-fájl sérült (szektor a fájlon kívül)."); return bytes.subarray(off, Math.min(off + size, bytes.length)); };
+  // DIFAT: 109 bejegyzés a fejlécben + a DIFAT-lánc.
+  const fatSectors: number[] = [];
+  for (let i = 0; i < 109; i++) { const v = bytes.readUInt32LE(76 + i * 4); if (v !== FREESECT && v !== ENDOFCHAIN) fatSectors.push(v); }
+  let difat = bytes.readUInt32LE(68);
+  for (let guard = 0; difat !== ENDOFCHAIN && difat !== FREESECT; guard++) {
+    if (guard > 10_000) throw new Error("A régi Office-fájl sérült (DIFAT-kör).");
+    const sec = sectorAt(difat);
+    for (let i = 0; i < size / 4 - 1; i++) { const v = sec.readUInt32LE(i * 4); if (v !== FREESECT && v !== ENDOFCHAIN) fatSectors.push(v); }
+    difat = sec.readUInt32LE(size - 4);
+  }
+  const fat: number[] = [];
+  for (const f of fatSectors) { const sec = sectorAt(f); for (let i = 0; i + 4 <= sec.length; i += 4) fat.push(sec.readUInt32LE(i)); }
+  const chain = (start: number, table: number[]) => {
+    const out: number[] = []; const seen = new Set<number>();
+    for (let s = start; s !== ENDOFCHAIN; s = table[s]) {
+      if (s === FREESECT || s >= table.length || seen.has(s)) throw new Error("A régi Office-fájl sérült (szektorlánc).");
+      seen.add(s); out.push(s);
+    }
+    return out;
+  };
+  const readChain = (start: number, length?: number) => { const buf = Buffer.concat(chain(start, fat).map(sectorAt)); return length === undefined ? buf : buf.subarray(0, length); };
+  const dir = readChain(bytes.readUInt32LE(48));
+  type Entry = { name: string; type: number; start: number; size: number };
+  const entries: Entry[] = [];
+  for (let off = 0; off + 128 <= dir.length; off += 128) {
+    const nameLen = Math.min(dir.readUInt16LE(off + 64), 64);
+    entries.push({ name: dir.toString("utf16le", off, off + Math.max(nameLen - 2, 0)), type: dir[off + 66], start: dir.readUInt32LE(off + 116), size: dir.readUInt32LE(off + 120) });
+  }
+  const entry = entries.find(e => e.type === 2 && e.name.toLowerCase() === name.toLowerCase());
+  if (!entry) return null;
+  if (entry.size > WEB_DOCUMENT_LIMITS.maxEntryBytes) throw new Error("A régi Office-fájl adatfolyama túl nagy.");
+  const cutoff = bytes.readUInt32LE(56);
+  if (entry.size >= cutoff) return readChain(entry.start, entry.size);
+  // Kis adatfolyam: a gyökérbejegyzés ministreamjében, a MiniFAT láncán.
+  const root = entries.find(e => e.type === 5);
+  const miniFatStart = bytes.readUInt32LE(60);
+  if (!root || miniFatStart === ENDOFCHAIN) return null;
+  const miniStream = readChain(root.start, root.size);
+  const miniFatBuf = readChain(miniFatStart);
+  const miniFat: number[] = [];
+  for (let i = 0; i + 4 <= miniFatBuf.length; i += 4) miniFat.push(miniFatBuf.readUInt32LE(i));
+  return Buffer.concat(chain(entry.start, miniFat).map(i => { const off = i * miniSize; if (off + miniSize > miniStream.length) throw new Error("A régi Office-fájl sérült (ministream)."); return miniStream.subarray(off, off + miniSize); })).subarray(0, entry.size);
+}
+
 function readLegacyPpt(bytes: Buffer): string {
+  const stream = readCfbStream(bytes, "PowerPoint Document");
+  if (!stream) throw new Error("A régi Office-fájlban nincs PowerPoint-adatfolyam (a régi Word / Excel nem támogatott).");
   const out: string[] = [];
-  for (let off = CFB_SIG.length; off + 8 <= bytes.length; off++) {
-    const verInst = bytes.readUInt16LE(off), type = bytes.readUInt16LE(off + 2), len = bytes.readUInt32LE(off + 4);
-    if ((verInst & 0x0f) !== 0 || (type !== 0x0fa0 && type !== 0x0fa8) || len === 0 || len > 65_536 || off + 8 + len > bytes.length) continue;
+  for (let off = 0; off + 8 <= stream.length; off++) {
+    const verInst = stream.readUInt16LE(off), type = stream.readUInt16LE(off + 2), len = stream.readUInt32LE(off + 4);
+    if ((verInst & 0x0f) !== 0 || (type !== 0x0fa0 && type !== 0x0fa8) || len === 0 || len > 65_536 || off + 8 + len > stream.length) continue;
     if (type === 0x0fa0 && len % 2) continue;
-    const text = (type === 0x0fa0 ? bytes.toString("utf16le", off + 8, off + 8 + len) : bytes.toString("latin1", off + 8, off + 8 + len)).replace(/\r/g, "\n").trim();
+    const text = (type === 0x0fa0 ? stream.toString("utf16le", off + 8, off + 8 + len) : stream.toString("latin1", off + 8, off + 8 + len)).replace(/\r/g, "\n").trim();
     const hasControl = Array.from(text).some(ch => { const c = ch.charCodeAt(0); return c <= 8 || (c >= 14 && c <= 31); });
     if (text && /\p{L}/u.test(text) && !hasControl) { out.push(text); off += 7 + len; }
   }

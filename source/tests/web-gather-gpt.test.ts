@@ -185,6 +185,10 @@ test("A4: fetchPublicPage dokumentum-módban a PDF-et és a képet is elfogadja 
 
 test("A5: a gyűjtő dokumentum-módban tölt; szöveg nélküli (kép / szkennelt) forrás W1b nélkül nem kerül a listába", () => {
   assert.equal(usableSource({ url: "https://a.hu/k.png", title: "k", text: "", format: "image", images: [] }), undefined);
+  // Review #592: az elfogadott dokumentum képei, formátuma és szkennelt-jele a W1b-nek megmarad.
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 1, sourceUrl: "https://a.hu/d.pdf" };
+  const kept = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "pdf", images: [img], needsOcr: true });
+  assert.deepEqual({ format: kept?.format, images: kept?.images, needsOcr: kept?.needsOcr }, { format: "pdf", images: [img], needsOcr: true });
   const src = readFileSync(new URL("../server/studio/web-gather-gpt.ts", import.meta.url), "utf8");
   assert.match(src, /fetchPublicPage\(url, \{ signal, documents: true \}\)/);
 });
