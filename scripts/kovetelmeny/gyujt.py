@@ -41,6 +41,7 @@ RESTORE = Path("D:/restore/kibontva/repo/WEBSULI")
 BOOLISH = {"on", "off", "1", "0", "true", "false", "yes", "no", "admin"}
 NUM_RE = re.compile(r"-?\d+(\.\d+)?")
 NEM_ELL = "nem ellenőrzött"
+REJTETT = "beállítva (érték rejtve)"
 
 # Kapcsolónkénti bekapcsolási szabály a kód szerint (nem egységes normalizálás):
 FLAG_RULES: dict[str, dict] = {
@@ -60,7 +61,17 @@ FLAG_RULES: dict[str, dict] = {
     "LESSON_COVERS": {"kill": {"0"}, "ref": "source/server/lesson-covers.ts:267"},
     "STUDIO_QUIZ_BLIND": {"kill": {"0"}, "ref": "source/server/studio/single-run/engine.ts:322"},
     "STUDIO_ANSWER_KEY_TESTS": {"kill": {"0"}, "ref": "source/server/studio/answer-key-writer.ts:89"},
+    # 2026-11-25 revízió: felsorolásos kapcsoló — csak a `values` készlet értékei tárolódnak nyíltan (docs/specs/2026-11-25-gyujt-enum-kapcsolo.md).
+    "ADVENT_RESULT_EMAIL_MODE": {"on": {"send"}, "values": {"send", "dry-run"}, "ref": "source/server/advent/result-email.ts:39"},
 }
+
+
+def live_value(key: str, raw: str | None) -> str:
+    """Az élő érték tárolható alakja: logikai / szám nyíltan, a szabályban felsorolt érték nyíltan, minden más REJTETT (titokvédelem)."""
+    v = (raw or "").strip().lower()
+    if v in BOOLISH or NUM_RE.fullmatch(v) or v in FLAG_RULES.get(key, {}).get("values", ()):
+        return v
+    return REJTETT
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sources(
@@ -574,7 +585,7 @@ def flag_state(live: str, rule: dict | None, code_default: str) -> str:
         return "nem_ellenorzott"
     v = "" if live == "hiányzik" else live
     rule = rule or {}
-    if v and v not in BOOLISH:
+    if v and v not in BOOLISH and v not in (rule or {}).get("values", ()):
         return "nem_logikai"
     if "kill" in rule:
         return "ki" if v in rule["kill"] else "be"
@@ -646,8 +657,7 @@ def collect_flags(db: Db, repo: str, ok: dict, unavailable: list, use_render: bo
                     page = json.load(urllib.request.urlopen(req, timeout=30))
                     for e in page:
                         ev = e.get("envVar", e)
-                        v = (ev.get("value") or "").strip().lower()
-                        live[ev["key"]] = v if (v in BOOLISH or NUM_RE.fullmatch(v)) else "beállítva (érték rejtve)"
+                        live[ev["key"]] = live_value(ev["key"], ev.get("value"))
                     if len(page) < 100 or not page[-1].get("cursor"):
                         break
                     cursor = page[-1]["cursor"]
