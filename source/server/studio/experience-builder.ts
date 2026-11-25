@@ -727,7 +727,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // a többi szolgáltatói hiba (429, keret, kulcs, státusz nélküli) változatlanul kilép a folytatási útra.
       let response: unknown;
       // Spec 2026-09-30 (U2/C8): szigorú séma a szolgáltatónak (a hívó dönt, hogy az adott út támogatja-e); a null-ok visszaalakítva.
-      const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskTarget, taskMax, quizCount, quizTarget, quizMax, language: Boolean(language) }, Boolean(repairBase));
+      const responseFormat = bankResponseFormat({ methodMin: methodKinds.length, taskCount, taskTarget, taskMax, quizCount, quizTarget, quizMax, language: Boolean(language), ...(effectiveLessonVariety() ? { quizFormats: true } : {}) }, Boolean(repairBase));
       // A meglévő 3. és 4. kísérlet előtt (nem új kísérlet: a modell-sorrend és a mentő-/salvage-szemantika változatlan).
       if (deps.orchestrate && errors && attempt >= PACKET_ATTEMPTS - 1) {
         const corrected = await deps.orchestrate({ sectionIndex: unit.sectionIndex, attempt, system, prompt, errors, previous, diagnoses });

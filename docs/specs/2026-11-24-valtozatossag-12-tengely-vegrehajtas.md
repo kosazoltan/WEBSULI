@@ -81,3 +81,7 @@ Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, leg
    kakukktojás- és számolós címke).
 2. GREEN: `shared/lesson-experience.ts`, `server/studio/bank-schema.ts`, `server/studio/experience-builder.ts`,
    `client/src/lesson-runtime/LessonExperienceView.tsx`, `LessonRuntimeProbe.tsx` (`?quizFormats=1`).
+
+### V4 — kapulánc-javítás (2026-11-25)
+- A szolgáltatói szigorú séma (`bankResponseFormat`) a `format` mezőt CSAK változatosság BE mellett kéri (`quizFormats`); KI-ben a `response_format` bájtra a régi — a KI kérés nem változik (TRAP: új szerzői/szolgáltatói tartalom csak BE mögé).
+- Dokumentált tesztváltozás: a `lesson-variety-paths` hamis modellje BE kérésben (KVÍZTÍPUSOK szabály) típusolt kvízt ad (`bankAnswer`), mert a V4 bankszabálya (≥ 6 kérdésnél ≥ 2 típus) BE-ben kötelező; a `quiz-formats` séma-tesztje a BE és a KI sémát külön méri.

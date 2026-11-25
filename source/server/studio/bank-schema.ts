@@ -44,9 +44,12 @@ const strictQuiz = z.object({
   id: text(64), sectionIndex: z.number().int().min(0), coversConceptIds: ids, question: text(1500),
   options: z.array(text(500)).min(3).max(4), correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
   intent: z.enum(["recall", "apply"]),
-  // V4: a kvízkérdés típusa (index-alapú; docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md).
-  format: z.enum(QUIZ_FORMATS),
 });
+/**
+ * V4: a kvízkérdés típusa (index-alapú; docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md) — CSAK változatosság BE mellett
+ * része a szolgáltatói sémának; KI állapotban a `response_format` bájtra a régi (a kérés nem változik).
+ */
+const strictQuizWithFormat = strictQuiz.extend({ format: z.enum(QUIZ_FORMATS) });
 const strictGlossary = z.object({ word: text(160), translation: text(300), partOfSpeech: text(80), example: text(500), exampleTranslation: text(500) });
 
 export type BankPacketCounts = {
@@ -60,6 +63,8 @@ export type BankPacketCounts = {
   taskCount: number; taskTarget: number; taskMax: number; quizCount: number; quizTarget: number; quizMax: number;
   /** Nyelvi leckénél kötelező a szószedet. */
   language: boolean;
+  /** V4: a kvíztételek `format` mezője (változatosság BE). Hiányzó = KI, a séma a régi. */
+  quizFormats?: boolean;
 };
 
 /** TELJES csomag (első kísérlet és teljes újraírás): a darabszám pontosan a cél. */
@@ -67,7 +72,7 @@ export function strictPacketSchema(c: BankPacketCounts) {
   return z.object({
     methods: z.array(strictMethod).min(Math.max(1, c.methodMin)).max(20),
     tasks: z.array(strictTask).min(c.taskTarget).max(c.taskTarget),
-    quiz: z.array(strictQuiz).min(c.quizTarget).max(c.quizTarget),
+    quiz: z.array(c.quizFormats ? strictQuizWithFormat : strictQuiz).min(c.quizTarget).max(c.quizTarget),
     glossary: z.array(strictGlossary).min(c.language ? 1 : 0).max(30),
   });
 }
@@ -75,10 +80,12 @@ export function strictPacketSchema(c: BankPacketCounts) {
 export const strictPatchSchema = z.object({
   methods: z.array(strictMethod).max(20), tasks: z.array(strictTask).max(45), quiz: z.array(strictQuiz).max(75), glossary: z.array(strictGlossary).max(30),
 });
+const strictPatchSchemaWithFormats = strictPatchSchema.extend({ quiz: z.array(strictQuizWithFormat).max(75) });
 
 /** A szolgáltatónak adott `response_format` (json_schema, strict). `patch`: javító lista, különben teljes csomag. */
 export function bankResponseFormat(counts: BankPacketCounts, patch: boolean): ResponseFormatJsonSchema {
-  const rf = zodResponseFormat(patch ? strictPatchSchema : strictPacketSchema(counts), patch ? "bank_packet_patch" : "bank_packet");
+  const patchSchema = counts.quizFormats ? strictPatchSchemaWithFormats : strictPatchSchema;
+  const rf = zodResponseFormat(patch ? patchSchema : strictPacketSchema(counts), patch ? "bank_packet_patch" : "bank_packet");
   // Az SDK segédje saját (parse-képes) osztályt ad; a szolgáltatónak csak a sima JSON-alak megy.
   return { type: "json_schema", json_schema: { name: rf.json_schema.name, strict: rf.json_schema.strict ?? true, schema: rf.json_schema.schema as Record<string, unknown> } };
 }

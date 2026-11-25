@@ -76,3 +76,11 @@ test("review #160: a javító út (buildStructuredImprovement) bankhívása is m
   assert.ok(bankExtras.length >= 1, "volt bankhívás");
   for (const extra of bankExtras) assert.equal((extra as { responseFormat?: { type?: string } } | undefined)?.responseFormat?.type, "json_schema");
 });
+
+test("V4: a kvíztípus (format) CSAK változatosság BE mellett része a szolgáltatói sémának — KI-ben a response_format bájtra a régi", () => {
+  const ki = JSON.stringify(bankResponseFormat(counts, false)), kiPatch = JSON.stringify(bankResponseFormat(counts, true));
+  assert.doesNotMatch(ki, /fillGap/); assert.doesNotMatch(kiPatch, /fillGap/);
+  assert.equal(JSON.stringify(bankResponseFormat({ ...counts, quizFormats: false }, false)), ki);
+  assert.match(JSON.stringify(bankResponseFormat({ ...counts, quizFormats: true }, false)), /"format":\{"type":"string","enum":\["choice","fillGap","oddOneOut","number"\]\}/);
+  assert.match(JSON.stringify(bankResponseFormat({ ...counts, quizFormats: true }, true)), /fillGap/);
+});

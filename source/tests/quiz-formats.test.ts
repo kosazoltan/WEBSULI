@@ -44,9 +44,12 @@ test("a szerződés a típusokat és a keverést kéri (változatosság BE); a s
   assert.match(c, /oddOneOut/);
   assert.match(c, /legalább 2 különböző/);
   assert.doesNotMatch(bankPacketContract({ sectionIndex: 0, conceptIds: ["c1"], methodKinds: ["gate"], taskCount: 1, taskTarget: 1, quizCount: 6, quizTarget: 6 }), /oddOneOut/);
-  const schema = strictPacketSchema({ methodMin: 0, taskCount: 0, taskTarget: 0, taskMax: 0, quizCount: 1, quizTarget: 1, quizMax: 1, language: false });
+  // Kapulánc-javítás (V4): a format csak BE mellett része a szolgáltatói sémának — KI-ben a kérés bájtra a régi.
+  const schema = strictPacketSchema({ methodMin: 0, taskCount: 0, taskTarget: 0, taskMax: 0, quizCount: 1, quizTarget: 1, quizMax: 1, language: false, quizFormats: true });
   const quizItem = { id: "q1", sectionIndex: 0, coversConceptIds: ["c1"], question: "Mennyi 2 + 3?", options: ["5", "6", "4"], correctIndex: 0, feedbackPerOption: ["a", "b", "c"], intent: "recall" };
   const strictQuiz = schema.shape.quiz.element;
   assert.equal(strictQuiz.safeParse({ ...quizItem, format: "number" }).success, true);
   assert.equal(strictQuiz.safeParse(quizItem).success, false, "a strict séma a mezőt kéri");
+  const kiQuiz = strictPacketSchema({ methodMin: 0, taskCount: 0, taskTarget: 0, taskMax: 0, quizCount: 1, quizTarget: 1, quizMax: 1, language: false }).shape.quiz.element;
+  assert.equal(kiQuiz.safeParse(quizItem).success, true, "KI: a régi séma (format nélkül)");
 });
