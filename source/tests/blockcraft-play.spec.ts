@@ -600,7 +600,11 @@ for (const vp of [{ width: 360, height: 640 }, { width: 390, height: 844 }, { wi
               const b2 = await probe(page);
               const ra = JSON.parse(String(a.stoneRects)) as R[];
               const rb = JSON.parse(String(b2.stoneRects)) as R[];
-              const stable = rb.length === 4 && rb.every((x, k) => x && ra[k] && Math.abs(x.x0 - ra[k]!.x0) <= 4 && Math.abs(x.y0 - ra[k]!.y0) <= 4);
+              // CI #484: a kövek időalapú ringatózása nagy sávban ~9 px kilengés; lassú szoftveres WebGL-en két képkocka között a kő
+              // 4 px-nél többet is mozdul (6× CPU-lassítással helyben is mérve). A tűrés ezért a kőmérethez igazodik (¼ magasság,
+              // min. 4 px) — a sávba helyezés előtti állapot ugrása (több száz px) így is kiszűrődik.
+              const tol = (x: NonNullable<R>) => Math.max(4, (x.y1 - x.y0) / 4);
+              const stable = rb.length === 4 && rb.every((x, k) => x && ra[k] && Math.abs(x.x0 - ra[k]!.x0) <= tol(x) && Math.abs(x.y0 - ra[k]!.y0) <= tol(x));
               if (stable) rects = rb;
               return stable;
             },
