@@ -210,6 +210,13 @@ function probeLesson(search: string): Lesson {
     const lesson = fusionFixture();
     const theme = EXPERIENCE_THEMES.find(t => t === q.get("theme"));
     if (theme) lesson.experience!.theme = theme;
+    // V4: a kvíztípusok kipróbálása (`&quizFormats=1`): körbe choice / fillGap / oddOneOut / number.
+    if (q.has("quizFormats")) lesson.experience!.quiz = lesson.experience!.quiz.map((item, i) => {
+      if (i % 4 === 1) return { ...item, format: "fillGap" as const, question: `${item.question.replace(/\?$/, "")}: a terület ___.` };
+      if (i % 4 === 2) return { ...item, format: "oddOneOut" as const, question: "Melyik nem illik a sorba?", options: [...item.options, "kör"], feedbackPerOption: [...item.feedbackPerOption, "A kör nem sokszög."] };
+      if (i % 4 === 3) return { ...item, format: "number" as const };
+      return item;
+    });
     // Websuli Design: a fúziós lecke is kipróbálható mind az öt évfolyamsávban (`?fusion=1&classroom=N`).
     const grade = Number(q.get("classroom"));
     if (q.has("classroom") && Number.isInteger(grade) && grade >= 0 && grade <= 12) lesson.classroom = grade;
