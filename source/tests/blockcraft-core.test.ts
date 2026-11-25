@@ -744,3 +744,11 @@ test("review #484 (core.ts:645): a kijelzés alatt elutasított érintés elfogy
   const reopened = st.lock;
   assert.ok(reopened && reopened.resolved === null, "új lenyomásra a zár megnyílik");
 });
+
+test("review #484 (BlockCraftQuiz.tsx:632): a lite (low/medium) anyag is átveszi az emissiveMap-et — csak a rúnajel izzik, a kőalap nem", () => {
+  const src = readFileSync(fileURLToPath(new URL("../client/src/pages/BlockCraftQuiz.tsx", import.meta.url)), "utf8").replace(/\r\n/g, "\n");
+  const start = src.indexOf("function makeBlockMaterials(");
+  const lite = src.slice(start, src.indexOf("return new THREE.MeshStandardMaterial", start));
+  assert.ok(lite.includes("new THREE.MeshLambertMaterial"), "a lite ág megtalálva");
+  assert.match(lite, /options\.emissiveMap[\s\S]*?m\.emissiveMap\s*=\s*options\.emissiveMap/, "a lite ág az emissiveMap-et is beállítja");
+});
