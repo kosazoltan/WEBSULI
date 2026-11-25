@@ -61,6 +61,26 @@ const SUPERSEDE_CHECK_ATTEMPTS = 4;
 export function setRetryDelay(ms: number): number { const previous = retryDelayMs; retryDelayMs = ms; return previous; }
 
 /**
+ * B6 (docs/specs/2026-11-25-eredmeny-email-b6.md; #510 R14, R41): a küldés alatt álló kísérletek és a halasztott újrapróbák
+ * nyilvántartása — a leállítási ürítés (`flushLessonResults`) a halasztottat előrehozza, a futót a határidőig megvárja. Leállítás
+ * közben a halasztás és a pillanatkép-késleltetés nulla: ami ekkor keletkezik, azonnal fut.
+ */
+let shuttingDown = false;
+const inFlight = new Set<Promise<unknown>>();
+const deferred = new Map<ReturnType<typeof setTimeout>, () => void>();
+function track<T>(work: Promise<T>): Promise<T> {
+  inFlight.add(work);
+  void work.finally(() => inFlight.delete(work)).catch(() => undefined);
+  return work;
+}
+function defer(run: () => void): void {
+  if (shuttingDown) { run(); return; }
+  const timer = setTimeout(() => { deferred.delete(timer); run(); }, retryDelayMs);
+  timer.unref?.();
+  deferred.set(timer, run);
+}
+
+/**
  * PR #495 (Codex P2): a foglalás felszabadítása korlátozott újrapróbával — ha a küldés bukik ÉS az első `array_remove` is átmeneti
  * adatbázishibát kap, a címzett különben végleg a `delivered` listában ragadna, és minden későbbi hívás ismétlődésnek venné. A végleg
  * sikertelen felszabadítás csak a hiba osztályával naplózódik; ezt a (nem helyreállítható) esetet a kanban #128 fedi.
@@ -158,7 +178,7 @@ async function claimFinalRound(lessonId: string, kind: "tasks" | "quiz", roundId
  * meghiúsult címzett a következő azonos hívással és egy 60 s-os automatikus újrapróbálással pótolódik, a már kézbesített (vagy más
  * hívás által éppen küldött) nem kap másodikat. Sosem dob — a hiba a naplóba megy.
  */
-export async function sendLessonResult(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz;
+async function sendLessonResultOnce(input: { lessonId: string; roundKey: string; learner: string; learnerFirst?: string; learnerId?: string; guest?: boolean; graded: GradedTasks | GradedQuiz;
   /** U4b: összevont levél (a két rész egy levélben); a jelzősor a `graded` (feladat-) részé, a körkulcs a két körből képzett. */
   combined?: { tasks: GradedTasks | null; quiz: GradedQuiz | null } }, retry = true, report?: { failed: number }): Promise<{ sent: number; duplicate: boolean }> {
   try {
@@ -207,7 +227,7 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     }
     if (ok.length < claimed.length) {
       logger.warn(`[LESSON-RESULT] ${claimed.length - ok.length} címzettnek nem ment el${retry ? " — 60 s múlva újrapróbálja" : ""}.`);
-      if (retry) setTimeout(() => { void sendLessonResult(input, false); }, retryDelayMs).unref?.();
+      if (retry) defer(() => { void sendLessonResult(input, false); });
     }
     if (report) report.failed = claimed.length - ok.length;
     return { sent: ok.length, duplicate: false };
@@ -215,10 +235,14 @@ export async function sendLessonResult(input: { lessonId: string; roundKey: stri
     // Review K3: csak a hiba osztálya / kódja — a lekérdezés hibaüzenete a paramétereket (e-mail-címet) is tartalmazná.
     logger.error(`[LESSON-RESULT] a küldés nem sikerült: ${errorClass(error)}${retry ? " — újrapróbálja" : ""}`);
     // Review (2026-11-17): a váratlan kivétel (az `allSettled`-en kívül: adatbázis, foglalás) után is egy újrapróba — levél ne vesszen el.
-    if (retry) setTimeout(() => { void sendLessonResult(input, false); }, retryDelayMs).unref?.();
+    if (retry) defer(() => { void sendLessonResult(input, false); });
     if (report) report.failed = -1;
     return { sent: 0, duplicate: false };
   }
+}
+/** B6: minden küldési kísérlet nyilvántartott (a leállítási ürítés megvárja). Sosem dob. */
+export function sendLessonResult(...args: Parameters<typeof sendLessonResultOnce>): ReturnType<typeof sendLessonResultOnce> {
+  return track(sendLessonResultOnce(...args));
 }
 
 /**
@@ -308,8 +332,8 @@ function schedulePartial(key: string, owner: string, answered: number, send: (ve
     const entry = pendingPartials.get(key);
     if (!entry || entry.version !== version) return;
     pendingPartials.delete(key);
-    void entry.send(version).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
-  }, partialDelayMs);
+    void track(entry.send(version)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
+  }, shuttingDown ? 0 : partialDelayMs);
   timer.unref?.();
   pendingPartials.set(key, { timer, version, ...keep });
 }
@@ -330,9 +354,37 @@ async function attemptPartial(lessonId: string, roundId: string, version: number
     return report;
   }).catch((error) => { logger.warn(`[LESSON-RESULT] a félbehagyott kvíz kísérletének kapuja átmenetileg hibázott: ${errorClass(error)}`); return { failed: 1 }; });
   if (outcome && outcome.failed !== 0 && retryLeft > 0) {
-    setTimeout(() => { void attemptPartial(lessonId, roundId, version, input, retryLeft - 1).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz újrapróbája nem sikerült: ${errorClass(error)}`)); }, retryDelayMs).unref?.();
+    defer(() => { void track(attemptPartial(lessonId, roundId, version, input, retryLeft - 1)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz újrapróbája nem sikerült: ${errorClass(error)}`)); });
   }
 }
+
+/**
+ * B6 (R14, R41): leállítási ürítés a pool lezárása ELŐTT. A várakozó pillanatképek a késleltetés kivárása nélkül, a halasztott
+ * újrapróbák az időzítő törlésével azonnal indulnak — ugyanazon a kapun (kör-zár, véglegesítés, változat) —, majd a küldés alatt álló
+ * kísérletek végét a határidőig várja. Visszaadja a határidő után is függő kísérletek számát (azok elvesznek, naplózva). Sosem dob.
+ */
+export async function flushLessonResults(budgetMs: number): Promise<{ left: number }> {
+  shuttingDown = true;
+  const deadline = Date.now() + Math.max(0, budgetMs);
+  for (const [key, entry] of [...pendingPartials.entries()]) {
+    clearTimeout(entry.timer);
+    pendingPartials.delete(key);
+    void track(entry.send(entry.version)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
+  }
+  for (const [timer, run] of [...deferred.entries()]) { clearTimeout(timer); deferred.delete(timer); run(); }
+  while (inFlight.size > 0) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([Promise.allSettled([...inFlight]), new Promise<void>(resolve => { timer = setTimeout(resolve, remaining); timer.unref?.(); })]);
+    clearTimeout(timer);
+  }
+  const left = inFlight.size;
+  if (left) logger.warn(`[LESSON-RESULT] leállítás: ${left} eredménylevél-kísérlet a határidő után is függ — elvész.`);
+  return { left };
+}
+/** Teszthez: a leállítási állapot visszaállítása (a nyilvántartás ürítése nélkül). */
+export function resetResultShutdownForTests(): void { shuttingDown = false; }
 
 async function learnerName(userId: string | undefined): Promise<string> {
   if (!userId) return GUEST_LEARNER;
