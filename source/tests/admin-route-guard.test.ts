@@ -66,6 +66,7 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/client-error": "böngészős hibajelentés — Origin-allowlist + IP-korlát + napi plafon",
   "GET /api/design-assets/:id/thumb": "nyilvános arculati kép (csak olvasás)",
   "GET /api/design-assets/:id": "nyilvános arculati kép (csak olvasás)",
+  "GET /api/source-images/:id": "D1H: a lecke kivágott forrásképe (nyilvános, tartalomcímzett, csak olvasás)",
   "POST /api/lessons/arbiter": "nyilvános döntőbíró — Origin-allowlist + IP-korlát, munkamenet-jog nélkül",
   "POST /api/lessons/:lessonId/results": "tanulói eredmény e-mail az adminoknak — CSRF + korlát",
   "POST /api/lessons/:lessonId/results/status": "U4d: a saját várakozó eredményrész lekérdezése (a beküldéssel azonos kilét, csak tasks/quiz/null) — CSRF + korlát",
