@@ -128,6 +128,18 @@ test("E9: a bejelentkezett tanuló gyakorlóköre (sendPracticeResult) ugyanazon
 });
 
 // Review #586 — a kézbesítés tartóssága, a kilét és a kapcsoló-időszakok.
+/**
+ * FLAKE-U4-R1 (docs/specs/2026-11-25-flake-u4-r1.md): a kézbesítés nyoma (`delivered_at`) a háttérküldés UTÁN, a kézbesítési zár
+ * tranzakciójában íródik — a levelek megérkezése után sem azonnal. Korlátos (legfeljebb 5 s) lekérdező várakozás a várt állapotig.
+ */
+const waitRows = async <T,>(read: () => Promise<T>, expected: T): Promise<T> => {
+  let rows = await read();
+  for (let i = 0; i < 100 && JSON.stringify(rows) !== JSON.stringify(expected); i++) {
+    await new Promise(r => setTimeout(r, 50));
+    rows = await read();
+  }
+  return rows;
+};
 const delivered = async (owner: string) => (await dbPool.query(`SELECT kind, delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = $1 AND sent_reason = 'pair' ORDER BY kind`, [owner])).rows;
 
 test("R1: a sikertelen kézbesítés után a pár nincs lezárva; a kör ismételt beküldése újrakézbesít, utána delivered_at íródik", async () => {
@@ -144,7 +156,8 @@ test("R1: a sikertelen kézbesítés után a pár nincs lezárva; a kör isméte
   await settle(2);
   assert.equal(sent.length, 2);
   assert.match(sent[0].subject, /Feladatok \+ kvíz/);
-  assert.deepEqual(await delivered("guest:fp-r1"), [{ kind: "quiz", d: true }, { kind: "tasks", d: true }]);
+  const both = [{ kind: "quiz", d: true }, { kind: "tasks", d: true }];
+  assert.deepEqual(await waitRows(() => delivered("guest:fp-r1"), both), both);
   sent.length = 0;
   await post("comb-two", quizBody("fp-r1", "r1-q"));
   await settle();
@@ -185,12 +198,7 @@ test("R5: a kapcsoló KI állásában a korábban félretett rész a régi úton
   assert.ok(sent.some(m => / — Kvíz — /.test(m.subject)) && sent.some(m => / — Feladatok — /.test(m.subject)));
   assert.deepEqual(await open("guest:fp-r5"), []);
   // A kézbesítés nyoma a háttérküldés UTÁN íródik — korlátos várakozás (CI-terhelés alatt lassabb), nem fix alvás.
-  let rows: Array<{ d: boolean }> = [];
-  for (let i = 0; i < 60; i++) {
-    rows = (await dbPool.query(`SELECT delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r5'`)).rows;
-    if (rows.every(r => r.d)) break;
-    await new Promise(r => setTimeout(r, 50));
-  }
+  const rows = await waitRows(async () => (await dbPool.query(`SELECT delivered_at IS NOT NULL AS d FROM lesson_result_pending WHERE owner_key = 'guest:fp-r5'`)).rows, [{ d: true }]);
   assert.deepEqual(rows, [{ d: true }], "a kiürített rész csak sikeres küldés után kap delivered_at-et");
 });
 
