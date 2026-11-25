@@ -23,6 +23,8 @@ test("ismeretlen kind, tryKind és animKind kimarad; az ismert blokkok sorrendje
 test("ha egy fejezet minden blokkja ismeretlen, a fejezet megmarad (az indexek nem csúsznak) egy frissítésre kérő magyarázattal", () => {
   const l = structuredClone(fusionFixture()) as unknown as RawLesson & { sections: Array<{ title?: string }> };
   const concept = conceptOf(l);
+  // A minta egyfejezetes: a második fejezet az első másolata, csupa ismeretlen blokkal.
+  l.sections.push({ ...structuredClone(l.sections[0]), title: "Új fajtájú fejezet" });
   const count = l.sections.length;
   const title = l.sections[1].title;
   l.sections[1].blocks = [{ kind: "flipCard", coversConceptIds: concept }, { kind: "try", tryKind: "estimate", spec: {}, coversConceptIds: concept }];
