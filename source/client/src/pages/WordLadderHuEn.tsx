@@ -139,6 +139,7 @@ import {
 } from "@/game-engine/play";
 
 import { newScoreRunId, postGameScore } from "@/lib/gameScoreRunId";
+import { leadCaption, lossLine, overtakeCaption, winTitle } from "@/lib/wordLadder/captions";
 const LS_XP = "websuli-wordladder-xp";
 const LS_BEST = "websuli-wordladder-streak";
 
@@ -805,10 +806,10 @@ export default function WordLadderHuEn() {
           feelRef.current.addTrauma(0.25);
         } else if (ev.kind === "overtake") {
           if (ev.by === "player") {
-            showBanner(`Megelőzted ${RIVAL_NAME}t! 🎉`, 1500);
+            showBanner(overtakeCaption("player", RIVAL_NAME), 1500);
             sfxGate();
           } else {
-            showBanner(`${RIVAL_NAME} előzött — kapaszkodj utána!`, 1500);
+            showBanner(overtakeCaption("rival", RIVAL_NAME), 1500);
             sfxWarning();
           }
         }
@@ -1271,7 +1272,7 @@ export default function WordLadderHuEn() {
   // háttérbe kerülés ilyenkor is szünet menüt nyit (K1/K3: a menü a kártya fölé kerül).
   const screenState: GameScreenState = phase === "menu" ? "start" : phase === "result" ? "result" : menuOpen ? "paused" : "playing";
   const lead = Math.round((hud.rung - hud.rival) * 10) / 10;
-  const leadText = lead >= 1 ? `+${Math.floor(lead)} fok előnyöd van` : lead <= -1 ? `${RIVAL_NAME} ${Math.floor(-lead)} fokkal előtted` : "Fej fej mellett!";
+  const leadText = leadCaption(lead, RIVAL_NAME);
   const rivalPct = Math.min(100, (hud.rival / Math.max(1, hud.target)) * 100);
   const youPct = Math.min(100, (hud.rung / Math.max(1, hud.target)) * 100);
   const wrongItems = q.director?.wrongList() ?? [];
@@ -1686,8 +1687,12 @@ export default function WordLadderHuEn() {
         .wl-race-dot { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 9999px; transform: translate(-50%, -50%); transition: left .25s ease; box-shadow: 0 0 0 2px #fff, 0 2px 6px #0008; }
         .wl-race-you { background: #38bdf8; z-index: 2; }
         .wl-race-rival { background: #a855f7; }
-        .wl-race-text { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 2px 0; font-size: 13px; font-weight: 800; color: #f8fafc; text-shadow: 0 1px 2px #000a; }
+        /* P-011: árnyék helyett tömör sötét háttér (telefonon az árnyék maszatos); a címkék a pöttyük világos színét kapják, az
+           állás-szöveg más színű — a címke és az érték elválik. */
+        .wl-race-text { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 2px 0; padding: 0 8px; border-radius: 9999px; background: #0f172ae6; font-size: 13px; font-weight: 800; color: #f8fafc; text-shadow: none; }
         .wl-race-key { display: inline-flex; align-items: center; gap: 4px; }
+        .wl-race-key-you { color: #7dd3fc; }
+        .wl-race-key-rival { color: #d8b4fe; }
         .wl-race-key::before { content: ""; width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
         .wl-race-key-you::before { background: #38bdf8; }
         .wl-race-key-rival::before { background: #a855f7; }
@@ -1728,7 +1733,7 @@ export default function WordLadderHuEn() {
           position: relative; display: flex; align-items: center; gap: 8px; min-height: 64px; min-width: 48px; padding: 8px 10px;
           text-align: left; border-radius: 18px 22px 16px 24px; color: #fff; font-weight: 900; cursor: pointer;
           font-size: clamp(17px, 4.6vw, 20px); line-height: 1.15; overflow-wrap: anywhere; hyphens: auto;
-          background: radial-gradient(120% 90% at 30% 20%, #c08a5a, #8a5a34 55%, #5b3a1c);
+          background: radial-gradient(120% 90% at 30% 20%, #94643c, #7a4e2c 55%, #5b3a1c); /* P-011: a legvilágosabb pont is ≥ 4,5 : 1 a fehér felirattal */
           border: 2px solid #fcd34d88; box-shadow: inset 0 2px 0 #ffffff33, inset 0 -5px 0 #3b2412, 0 6px 14px #0008;
           -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none;
           transition: transform .08s ease, background-color .12s ease, opacity .15s ease, box-shadow .12s ease;
@@ -1741,8 +1746,8 @@ export default function WordLadderHuEn() {
           flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9999px;
           background: linear-gradient(180deg, #fbbf24, #f59e0b); color: #1f1300; font-size: 15px; box-shadow: 0 2px 0 #92400e;
         }
-        ${HOLD}-label { flex: 1 1 auto; min-width: 0; text-shadow: 0 1px 2px #0009; }
-        ${HOLD}[data-state="correct"] { background: radial-gradient(120% 90% at 30% 20%, #4ade80, #16a34a 60%, #14532d); border-color: #bbf7d0; box-shadow: 0 0 0 3px #86efac, 0 0 24px #22c55e99; animation: wl-grab .28s ease-out; }
+        ${HOLD}-label { flex: 1 1 auto; min-width: 0; text-shadow: none; } /* P-011: árnyék nélkül, a kontrasztot a fa-szín adja */
+        ${HOLD}[data-state="correct"] { background: radial-gradient(120% 90% at 30% 20%, #15803d, #166534 60%, #14532d); border-color: #bbf7d0; box-shadow: 0 0 0 3px #86efac, 0 0 24px #22c55e99; animation: wl-grab .28s ease-out; }
         ${HOLD}[data-state="wrong"] { background: radial-gradient(120% 90% at 30% 20%, #b45309, #7c2d12 70%); border-color: #fdba74; animation: wl-crumble .5s ease-in forwards; }
         ${HOLD}[data-state="dim"] { opacity: .45; }
         ${HOLD}[data-state="correct"] .wl-hold-key, ${HOLD}[data-state="wrong"] .wl-hold-key { background: #ffffff33; color: #fff; box-shadow: none; }
@@ -1813,7 +1818,7 @@ export default function WordLadderHuEn() {
         badges={newlyUnlocked}
         open={phase === "result"}
         testId="wl-won"
-        title={result?.won ? `🏁 Elérted a csúcsot! Legyőzted ${RIVAL_NAME}t!` : lossTitle(result?.missing ?? 1)}
+        title={result?.won ? winTitle(RIVAL_NAME) : lossTitle(result?.missing ?? 1)}
         won={result?.won ?? false}
         score={result?.xp ?? 0}
         best={result?.best ?? bestScore}
@@ -1827,7 +1832,7 @@ export default function WordLadderHuEn() {
         extra={
           <div className="flex flex-col gap-1">
             <span data-testid="wl-result-line">
-              {result?.won ? `${result.bonus} XP győzelmi jutalom · ` : `${RIVAL_NAME} most gyorsabb volt — a visszavágóban utolérheted! · `}
+              {result?.won ? `${result.bonus} XP győzelmi jutalom · ` : `${lossLine(RIVAL_NAME)} · `}
               {result?.seconds ?? 0} mp · legjobb kombó: {result?.bestCombo ?? 0}
             </span>
             <span className="text-white/75">{syncEligibility?.eligible ? "Eredmény elküldve a szervernek." : syncBanner}</span>

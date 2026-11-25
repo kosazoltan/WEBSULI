@@ -1643,6 +1643,8 @@ fizika-esetek (pattogás, határok) változatlanok.
     tétel visszajön, a győzelmi arány nem rosszabb a kupon nélkülinél (tűrés 1/20); lap: e2e 3 tételes kuponos leckével.
     Jegyre (a közös szabály kérdése, a tesztelt ≤ 8 tételes tartományon kívül): 10–12 tételes kupon-leckénél a hibázott
     tétel 80 seedből 14–43 esetben nem jön vissza a menetben (a közös director `LATE_RETURN_MAX = 10` határa).
+    → P-010 (2026-11-23, `docs/specs/2026-11-23-kuponos-ismetles-hatarido.md`): kupon módban a `LATE_RETURN_MAX` határidő, a
+    plafon alatti hibázott tétel bármely leckeméretnél ≤ 10 kérdésen belül visszajön (`game-question-director-kupon.test.ts`).
 21. **Mérőkép az élesítés után (Ú5).** A kérdés-képek a beúszás és a 600 ms-os előjelzés után készülnek.
     Jegyre: Ú3 (≥ 600 ms tartott joystick — a mechanika szándékolt alakja, a J5b-ben újramérve); a 7-es küszöb az átlagosnak
     könnyű (a J5b rivális-győzelme váltja ki).

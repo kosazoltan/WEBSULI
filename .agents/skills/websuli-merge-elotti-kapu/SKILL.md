@@ -26,7 +26,7 @@ A `gh pr merge --auto` tilos (a hook megtagadja): az összevonás később, fut�
    (`*-guard.test.ts`, `scripts/qa/**`, `.github/workflows/**`), a kapu a main elmozdulásának fájllistáját (GitHub compare) a
    `gates.config.json` `repoWideScopes` táblázatával veti össze: bukás „előbb olvaszd be a maint” (C-61), ha a main az ellenőrzés által
    olvasott fájlt változtatott, vagy a lista nem olvasható / csonka / üres; egyébként figyelmeztetés. Részletek: `docs/minosegkapuk.md`.
-5. A független ellenőr ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL (helyi `review-<fej>.json`, vagy a PR-leírás / komment
+5. A helyi GPU-ellenőr (`local-review.mjs`) ítélete a JELENLEGI fejre IGEN / IGEN, FELTÉTELLEL (helyi `review-<fej>.json`, vagy a PR-leírás / komment
    `Független ellenőr ítélete: … (fej: <hash>)` sora).
 6. Futásőr: `bash scripts/qa/active-runs-guard.sh` kilépési kódja 0 (1 = aktív gyártás → ne vonj össze; 2 = hiba → vakon tilos).
 7. `source/` változás → „TELEPÍTÉST INDÍT” jelzés.

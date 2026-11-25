@@ -36,7 +36,20 @@ async function tapCenter(page: Page, selector: string): Promise<void> {
   await page.waitForTimeout(650);
   const box = await el.boundingBox();
   expect(box, `${selector} doboza`).not.toBeNull();
-  await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  const original = await el.elementHandle();
+  if (!original) throw new Error("A választott drón eltűnt a koppintás előtt");
+  try {
+    await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    // Ha az ellenfél közepe fedte a drónt, ez szabályosan lövés volt. Egyetlen új érintés
+    // ugyanazon a még választható drónon, másik ponton; új kérdésre nem válaszolunk helyette.
+    const next = await original.evaluate(async node => {
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      if (!node.isConnected || node.getAttribute("data-state") !== "idle" || node.getAttribute("aria-disabled") === "true") return null;
+      const r = node.getBoundingClientRect();
+      return { x: r.left + r.width * 0.2, y: r.top + r.height / 2 };
+    });
+    if (next) await page.touchscreen.tap(next.x, next.y);
+  } finally { await original.dispose(); }
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -65,6 +78,8 @@ test.describe("valódi érintés", () => {
 
     // 1. feladat: a JÓ drón érintéssel → a pont nő, a drón zöld.
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
+    const firstWave = await drones(page).elementHandles();
+    expect(firstWave).toHaveLength(4);
     await expect(page.getByTestId("play-question-more"), "a feladat koppintás nélkül olvasható").toHaveCount(0);
     await tapCenter(page, '[data-testid="sq-answers"] [data-correct="true"]');
     await expect(page.locator('[data-testid="sq-answers"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");
@@ -74,7 +89,9 @@ test.describe("valódi érintés", () => {
     // 2. feladat: ROSSZ drón → nincs dialógus, a helyes drón zölden látszik, „Miért?” (a kijelzés ALATT) → kártya újrapróba nélkül.
     // A „Miért?” a kijelzés alatt áll egy helyben; a kijelzés végén a kártya „Miért?”-csippé, majd új feladattá alakul, és a
     // gomb elmozdul — a main CI-n (43943054869, 1. és 3. próba) a koppintás erre a váltásra esett, és a gomb mellé ment.
-    await expect(drones(page)).toHaveCount(0, { timeout: 5_000 });
+    // A régi négy DOM-elem eltűnése tartósan ellenőrizhető akkor is, ha a két mérés között már az új négy drón megjelent.
+    await expect.poll(() => page.evaluate(nodes => nodes.filter(node => node.isConnected).length, firstWave), { timeout: 5_000 }).toBe(0);
+    await Promise.all(firstWave.map(node => node.dispose()));
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
     await tapCenter(page, '[data-testid="sq-answers"] [data-correct="false"]');
     await expect(page.locator('[data-testid="sq-answers"] [data-correct="true"]')).toHaveAttribute("data-state", "correct");

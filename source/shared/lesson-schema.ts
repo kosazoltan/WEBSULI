@@ -6,6 +6,7 @@ import { parseReferenceExpression } from "./answer-value";
 export const LESSON_TEXT_LIMITS = { heading: 255, explain: 4000, problem: 2000, step: 1000, answer: 1000, caption: 500, question: 1000, option: 500, feedback: 1000, hint: 1000, bullet: 500 } as const;
 import { triangleAreaLabParamsSchema } from "./triangle-area-lab";
 import { decisionStoryParamsSchema } from "./decision-story";
+import { sourceImageParamsSchema } from "./source-image";
 
 /**
  * The Lesson: what a child actually reads, as structured data rather than an HTML blob.
@@ -50,6 +51,11 @@ export const ANIM_KINDS = [
   "table",
   "ruleBox",
   "compareCards",
+  // S2b-1 (docs/specs/2026-11-22-tgm-s2b1-dontesi-fa-kepes-kartya.md): elágazó döntési fa, képes kártyák.
+  "decisionTree",
+  "pictureCards",
+  // D1H (docs/specs/2026-11-25-d1h-kivagott-kep.md): a forrás kivágott képe forrásmegjelöléssel — a modell SOHA nem írja (a program tölti).
+  "sourceImage",
 ] as const;
 
 /**
@@ -80,9 +86,9 @@ export type AnimKind = (typeof ANIM_KINDS)[number];
  * kimenetében csak a forrás vizuális leltárának funkciókapcsolója mellett fogadja el (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz
  * 14. pont) — KI állapotban a modell ilyen fajtát nem is hall, és a kimenet határa a bővítés előtti hibával utasítja el.
  */
-export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards"] as const satisfies ReadonlyArray<AnimKind>;
+export const SOURCE_VISUAL_ANIM_KINDS = ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"] as const satisfies ReadonlyArray<AnimKind>;
 /** A bővítés ELŐTTI ábrafajta-felsorolás (a főág `ANIM_KINDS` listája, ugyanabban a sorrendben). */
-export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k)) as [AnimKind, ...AnimKind[]]);
+export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VISUAL_ANIM_KINDS as readonly string[]).includes(k) && k !== "sourceImage") as [AnimKind, ...AnimKind[]]);
 
 /**
  * Spec 2026-09-24 (magyarázó ábrák): olvasáskor az ismeretlen (újabb programverzióból származó)
@@ -90,17 +96,49 @@ export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VIS
  * „sérültnek” az új ábrás leckét (lásd a 2026-09-24-es `princess`-téma esetet). Íráskor a séma szigorú.
  */
 export function dropUnknownAnimateBlocks(raw: unknown): unknown {
+  return dropUnknownBlocks(raw);
+}
+
+/** Az ismeretlen (újabb programverziós) blokk helyén álló szöveg (V-kompat). */
+export const UNKNOWN_SECTION_TEXT = "Ez a rész a program újabb változatával készült. Frissítsd az oldalt, és megjelenik.";
+
+const isKnownBlock = (b: unknown): boolean => {
+  if (!b || typeof b !== "object") return false;
+  const { kind, tryKind, animKind } = b as { kind?: unknown; tryKind?: unknown; animKind?: unknown };
+  if (!(BLOCK_KINDS as readonly unknown[]).includes(kind)) return false;
+  if (kind === "try") return (TRY_KINDS as readonly unknown[]).includes(tryKind);
+  if (kind === "animate") return (ANIM_KINDS as readonly unknown[]).includes(animKind);
+  return true;
+};
+
+/**
+ * V-kompat (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md, review #583, #598): olvasáskor az újabb programverzió
+ * ismeretlen blokkfajtája (`kind`), feladatfajtája (`tryKind`) és ábrafajtája (`animKind`) HELYÉN egy rövid, frissítésre kérő
+ * magyarázat áll — a régi, gyorsítótárazott kliens a leckét nem mutatja „sérültnek”. A blokk NEM törlődik, hanem helyettesítődik
+ * (review #598): a blokkindexek (Próba-beküldés `blockIndex`, mentett válaszok, feladatállapot, kisfilm-ábrahivatkozás) a szerveren
+ * tárolt, szűretlen leckével egyeznek, és a fejezetek sem tűnnek el. A magyarázat fogalma a helyettesített blokké, ennek híján a
+ * lecke első fogalma. Íráskor a séma szigorú.
+ */
+export function dropUnknownBlocks(raw: unknown): unknown {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { sections?: unknown }).sections)) return raw;
   const lesson = raw as { sections: Array<{ blocks?: unknown }> };
+  if (lesson.sections.every((s) => !s || !Array.isArray(s.blocks) || s.blocks.every(isKnownBlock))) return raw;
+  const conceptOf = (b: unknown) => {
+    const c = (b as { coversConceptIds?: unknown } | null)?.coversConceptIds;
+    return Array.isArray(c) && c.length > 0 && c.every((x) => typeof x === "string") ? (c as string[]) : undefined;
+  };
+  const lessonConcept = lesson.sections.flatMap((s) => (s && Array.isArray(s.blocks) ? s.blocks : [])).map(conceptOf).find(Boolean);
   return {
     ...lesson,
     sections: lesson.sections.map((section) => !section || !Array.isArray(section.blocks) ? section : {
       ...section,
-      blocks: section.blocks.filter((b) => !(b && typeof b === "object" && (b as { kind?: unknown }).kind === "animate"
-        && !(ANIM_KINDS as readonly unknown[]).includes((b as { animKind?: unknown }).animKind))),
+      blocks: section.blocks.map((b) => isKnownBlock(b) ? b : {
+        kind: "explain", text: UNKNOWN_SECTION_TEXT, depth: "core", readAloud: false, coversConceptIds: (conceptOf(b) ?? lessonConcept ?? []).slice(0, 1),
+      }),
     }),
   };
 }
+
 export type TryKind = (typeof TRY_KINDS)[number];
 export type ExplainDepth = (typeof EXPLAIN_DEPTHS)[number];
 export type AgeBand = (typeof AGE_BANDS)[number];
@@ -205,6 +243,11 @@ const blockUnion = z.discriminatedUnion("kind", [
 ]);
 function refineBlock(block: z.infer<typeof blockUnion>, ctx: z.RefinementCtx): void {
   {
+    if (block.kind === "animate" && block.animKind === "sourceImage") {
+      const parsed = sourceImageParamsSchema.safeParse(block.params);
+      if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ["params", ...issue.path] });
+      return;
+    }
     if (block.kind === "animate" && (block.animKind === "triangleArea" || block.animKind === "decisionStory")) {
       const parsed = (block.animKind === "triangleArea" ? triangleAreaLabParamsSchema : decisionStoryParamsSchema).safeParse(block.params);
       if (!parsed.success) for (const issue of parsed.error.issues) {
@@ -369,9 +412,16 @@ export const lessonSchema = z.object({
     /** Arculati bank (2026-10-17-arculati-bank): a lecke témakörkulcsa (shared/topic-taxonomy.ts). */
     topic: z.string().regex(/^[a-z0-9-]{2,64}$/).optional(),
   }).strict().optional(),
+  /**
+   * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (5. szakasz 2. pont): a változatossági kapcsolóval gyártott lecke jelölője —
+   * mentéskor KIZÁRÓLAG a szerver írja (a modell kimenetének sémája elhagyja). Engedékeny: hibás alak → elhagyva, a lecke olvasható.
+   */
+  variety: z.object({ version: z.string().trim().min(1).max(40) }).passthrough().optional().catch(undefined),
 });
 
-const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema.extend({ blocks: z.array(legacyBlockSchema).min(1) })).min(1) });
+// S5a: a bővítés előtti séma a főághoz híven a `variety` kulcsot sem ismeri (a modell kéretlen jelölője elhagyódik). A BE ág a teljes
+// `lessonSchema` (azonosság-őr: tests/source-visuals-flag.test.ts) — ott a jelölőt a mentés határa (`withVarietyMarker`) írja felül.
+const legacyLessonSchema = lessonSchema.extend({ sections: z.array(sectionSchema.extend({ blocks: z.array(legacyBlockSchema).min(1) })).min(1) }).omit({ variety: true });
 /**
  * A MODELL KIMENETÉNEK sémája (szerzői lecke, ábrafolt blokkja, fogalomjavítás, leckejavítás). `sourceVisuals`: a forrás vizuális
  * leltárának funkciókapcsolója (spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz 14. pont) — BE: a teljes séma; KI: a bővítés

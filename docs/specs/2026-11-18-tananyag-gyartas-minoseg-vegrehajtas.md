@@ -8,7 +8,10 @@ Sorrend (tulajdonosi döntések 2026-11-18 után): **S1a → S1b → SK1 → S2a
 mérés) → S5a → S5b → S6a → S6b → S6c → SK2 → S7a → S7b → S8a → S8b → S8c → SK4 → SK5 → S9 → S10/2 (záró mérés).** Egy alszelet =
 egy ág = egy PR. Döntések: D1 újrarajzolás · D2 30 USD próbakeret · D3 ElevenLabs előre gyártva · D4 hangfájlok az adatbázisban,
 csak a leckék · D5 fél pontos plafon igen · D6 egyeztetés alatt (az S7a nem indul, amíg nincs döntés) · D7 éles gyártásban a
-költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad.
+költségkeret túllépése csak jelez (e-mail), nem állít meg; gyártás-stop kapcsoló nem épül; a 30 USD próbakeret kemény plafon marad ·
+D8 (P-064, 2026-11-23) a néma próbakimondás megszűnése és az abszolút 80 MB-os hangtárplafon jóváhagyva · D9 (P-065, 2026-11-23)
+költség- és hibakorlátnál mindenhol jelzés, vészleállítás csak a próbafutás 30 USD-os kemény keretén; új éles futásidő- és összesített
+javítókör-megállító nem épül.
 
 ## 0. Közös szabályok (minden szeletre)
 
@@ -604,6 +607,10 @@ minden más és a hiány = KI). Minden szeletre érvényes szabályok:
 > **Tulajdonosi döntés (D7, kérdőív, 2026-11-18) — ez a fejezet ehhez igazodik:** éles gyártásban a token- / költségkeret
 > túllépése „Csak jelezzen” (a futás megy tovább, e-mail megy; NEM állít meg); vészleállító / egységes gyártás-stop kapcsoló „Nem
 > kell” (ne épüljön); a meglévő körszám-plafon marad, ahogy van; a 30 USD-os próbakeret kemény plafon marad.
+>
+> **Tulajdonosi megerősítés (P-065, 2026-11-23; terv D9):** a költség- és hibakorlátok MINDENHOL jelzést adnak (figyelmeztetés /
+> riasztás); vészleállítás KIZÁRÓLAG a fizetős próbafutás 30 USD-os kemény költségkereténél. Ebbe a szeletbe NEM kerül új megállító
+> korlát sem az éles futásidőre, sem az összesített javítókörre (a 6. lépés éles tesztje ezt rögzíti: a hívásszám nem csökken).
 
 Ág: `feat/futaskeret-sk3`. Fájlok: `shared/run-budget.ts` (új), `server/studio/single-run/telemetry.ts`,
 `server/studio/single-run/engine.ts`, `server/studio/single-run/budget-alert.ts` (új), `server/studio/experience-builder.ts` (csak
@@ -1027,7 +1034,7 @@ végpont) és S8b-2 (kliens, böngészős próba) külön PR.
    környezeti változóval csak lefelé állítható; felfelé kódváltozás, tehát review kell); ha `totalBytes() + size >
    maxTotalBytes` vagy a fájl túl nagy → `TtsStorageLimitError`, írás nincs. A `put` ellenőrzi, hogy `mime === "audio/mpeg"`, a
    `size` egyezik a bájtok hosszával, és az `id` 32 hexa jegy.
-   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; a tulajdonosnak jelezve, megerősítésre vár):** a megvalósított méretőr `TTS_AUDIO_LIMITS = { maxTotalBytes: 40 MB (hangverziónként),
+   **Spec-pontosítás 2026-11-18 (orkesztrátori döntés a független review alapján; tulajdonos jóváhagyta 2026-11-23 — P-064, D8):** a megvalósított méretőr `TTS_AUDIO_LIMITS = { maxTotalBytes: 40 MB (hangverziónként),
    maxAbsoluteBytes: 80 MB (a teljes tábla), maxFileBytes: 300 KB }` — mindkét összplafon kemény (`total-exceeded` /
    `absolute-exceeded`), az abszolút plafon környezeti változóval nem állítható; a `put` csak az aktuális `TTS_VOICE_VERSION`-re ír;
    a felületen `usage()` és őrzött `purgeOtherVersions()` is van (megtagad, ha a megtartandó verzió nem az aktuális vagy nincs sora).
@@ -1162,7 +1169,7 @@ szerintem amikor megnyitja az adott tananyagot, pufferelje a hangokat a diáknak
    sizes, saveData, effectiveType })` → az előtöltendő kulcsok sorrendben (plafonok, adatkímélő / 2g: csak az első szakasz);
    `nextPreloads(állapot)` → a következő indítható letöltések (párhuzamosság, előre vett kulcs); `retryDelayMs(próbálkozás)`;
    a hangmotor munkamenet-ismerete KIZÁRÓLAG valódi koppintásokból (spec-módosítás 2026-11-19, vak review B1–B3 — a nulla hangerejű
-   próba-kimondás megszűnt): `engineAfter(ismeret, hang, kimenet)` — a `start` esemény igazolja a hangot és törli a negatív
+   próba-kimondás megszűnt; tulajdonos jóváhagyta 2026-11-23 — P-064, D8): `engineAfter(ismeret, hang, kimenet)` — a `start` esemény igazolja a hangot és törli a negatív
    ítéleteit; a kemény hiba / esemény nélküli lejárat `NEGATIVE_VERDICT_TAPS` (2) koppintásra szóló, lejáró ítélet;
    `engineAfterRound` — néma motor (minden próbált hang esemény nélkül járt le), szintén 2 koppintásra; `engineAged` — a koppintás
    „elhasználja” az ítélet egy egységét. A megszakítás (`interrupted` / `canceled`) és a `not-allowed` nem kerül az ismeretbe.
@@ -1304,3 +1311,48 @@ szakít meg; a motorról a valódi koppintások kimenetele ad — nyelvenkénti,
 3. Szeletes funkció zárása: az utolsó szelet összevonása ELŐTT az egész funkció átfogó reviewja (az `AGENTS.md` „Review
    guidelines” szerint), az eredmény PR-kommentként.
 4. Retro mért tényekből és futás utáni higiénia (memória, skill, kanban, munkafák, ágak) a repó szabályai szerint.
+
+## 2026-11-22 — TGM-leltár a főághoz
+
+Mérve `git log` / `git diff --shortstat` paranccsal, a főág `442a9653` állapotán. A változatossági ágak mind a `d9d1e6c6` főág-állapotról
+indultak (a főág azóta 4 committal előrébb jár), egymásra rakva, a szülő-ág beolvasztásával (merge, nem rebase). „Saját diff” = az ág
+és a közvetlen szülő-ága közti különbség (`git diff <szülő> <ág>`), zárójelben a dokumentáció és a tesztek része.
+
+| Szelet | Hol van | Saját commitok | Saját diff (+/−) | Szülő | Állapot |
+|---|---|---|---|---|---|
+| S1a, S1b, SK1, S2a | főág, #515 (squash; az üzenete szerint #501 + #505 + #507 + S2a), `STUDIO_SOURCE_VISUALS` mögött, alapból KI | — | — | — | kész, beolvasztva |
+| S8a–S8d | főág, #516 (squash) | — | — | — | kész, beolvasztva |
+| S5a | `feat/tgm-s5a-visszajelzes-nyitasok` → **`feat/tgm-s5a-v2`** (friss főágról, cherry-pick) | f2df634a, 9998d4fe, e1eb06ad, f7c93164 | +885 / −34 (docs 281, teszt 337) | `d9d1e6c6` | kész; v2 PR-ra kész, push nélkül |
+| S5b | `feat/tgm-s5b-nyitasformak` | 2ef57e77, 4194703a, bffcf646, a0d26414 | +414 / −30 (docs 79, teszt 192) | S5a | kész helyben, PR nincs |
+| S6a | `feat/tgm-s6a-fejezetiv` | e45e7548, d82519f7, 2db93921 (+ merge) | +335 / −8 (docs 57, teszt 119) | S5b | kész helyben, PR nincs |
+| S6b | `feat/tgm-s6b-try-hang` | e08862b0, 2b477759, c0924a29 (+ merge) | +262 / −27 (docs 50, teszt 105) | S6a | kész helyben, PR nincs |
+| S6c | `feat/tgm-s6c-abrafajta` | 85850874, 8ec3df80, a2e20570, 4c8b34bc (+ merge) | +572 / −101 (docs 58, teszt 142) | S6b | kész helyben, PR nincs |
+| SK2 | `feat/tgm-sk2-valtozatossag-kapu` | 8b7313e4, c208c040, ce6db8a3 (+ merge) | +448 / −3 (docs 66, teszt 105) | S6c | kész helyben, kapu `report` módban |
+| S2b-1 | `feat/tgm-s2b-dontesi-fa-kepes-kartya` | 88f5eb2e, b9e8eb71, 75f95a7d, c0e9f733 (+ merge) | +384 / −12 (docs 50, teszt 121) | SK2 | kész helyben; kódja a láncra nem épül, de az átvételkor az `animate-blocks.tsx` importsora és a `lesson-design.css` vége kézi feloldást kér (ott az S6c sorai is állnak), a spec önálló fájlba kerül — `feat/tgm-s2b1-v2` így készült |
+| S2b-2 | `feat/tgm-s2b2-megjelenito-leletek` | 31613031, 56bdbe67, 271009c6, 3e101941 (+ merge) | +247 / −29 (docs 47, teszt 145) | S2b-1 | kész helyben |
+| S3a-1 | `feat/tgm-s3a1-abrakeszito-forrasra` | 3e9d2e4e | +31 (csak docs: S3a / S3b szeletterv) | S2b-2 (a 6feff77a merge) | csak terv, kód nincs |
+| S3a-2, S3b, S4a, S4b, SK3, S10, S7a, S7b, SK4, SK5, S9 | — | — | — | — | nincs elkezdve |
+
+A helyi `feat/tgm-s1b-sk1-forras-fedettseg`, `fix/tgm-sk1b-fedettsegi-kapu-kemenyites`, `feat/tgm-s2a-megjelenitok` és `feat/tgm-s8*` ágak
+a squash-merge miatt „előrébb járónak” látszanak, de tartalmuk a #515 / #516-tal a főágon van — higiéniai jelöltek (törlés csak
+tulajdonosi jóváhagyással). A `higienia-backup/*` távoli ágak a változatossági ágak mentései.
+
+*Helyesbítés (2026-11-22, a leltár után):* az első változat azt írta, hogy az S2b-1 kódja ütközés nélkül átvehető. A próba-cherry-pick
+az első (docs) ütközésnél megállt, a kódcommitok le sem futottak — a próba csak akkor bizonyít ütközésmentességet, ha minden commit lefutott.
+
+**A változatossági cél mérhetősége (seed-determinisztikus ujjlenyomat-eltérés).** A közös mag a `shared/seeded.ts` (S5a): ugyanarra a
+bemenetre ugyanaz, különböző magra eltérő kiosztás, `Math.random` nélkül. Szeletenként:
+
+- S5a — `tests/lesson-feedback-openers.test.ts`: 200 kulcson a leggyakoribb nyitás < 10%; ugyanaz a kérdés 50 különböző maggal (térkép)
+  ≥ 8 különböző nyitás, mind a saját korosztály kódszótárából; ugyanaz a mag → ugyanaz a nyitás.
+- S5b — `tests/lesson-opening-forms.test.ts`, `tests/lesson-bank-plan-seed.test.ts`: 100 magon ≥ 3 nyitásforma és ≥ 25 hősnév; 50 magon
+  ≥ 6-féle első módszer; mag nélkül a bankterv bájtra a régi.
+- S6a / S6b — `tests/lesson-section-shapes.test.ts`, `scripts/measure/shape-simulation.mts`: a fejezetív-kiosztás szomszéd- és 40%-os
+  szabálya 200 magon; a szimuláció a leggyakoribb minta arányát (< 35%) és az azonos-minta valószínűséget (< 20%) méri modellhívás nélkül.
+- SK2 — `shared/variety-metrics.ts`, `scripts/measure/variety-measure.mts`: az állományszintű mérőszám (alapvonal | most | küszöb); ez a
+  bekapcsolási döntés gépi bizonyítéka. A valódi gyártáson mért eltérés fizetős próbát igényel (a 2026-11-20-as spec 8. szakasza,
+  ≈ 20 USD) — csak tulajdonosi jóváhagyással.
+
+**Javasolt sorrend (önálló, semleges kis PR-ok a friss főágról, cherry-pickkel, rebase nélkül):** S5a-v2 → S2b-1 (kódja a láncra nem
+épül; az átvétel kézi ütközésfeloldással, lásd a táblázatot) → S5b → S6a → S6b → S2b-2 → S6c (a sávtokenes ábrák az S2b-re épülnek) → SK2 → S3a-1 kódja → S3a-2 → S3b. Az S6c (+572) és az S5a
+(+885, ebből 281 docs és 337 teszt) a ~400 soros irányelv fölött van: az S6c két részre bontható (sávtokenes ábrák / ábrafajta-terv).

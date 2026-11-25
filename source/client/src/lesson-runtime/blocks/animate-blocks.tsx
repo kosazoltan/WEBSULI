@@ -6,6 +6,8 @@ import { DecisionStory } from "./DecisionStory";
 import { BarChartAnim, CycleAnim, IllustrationAnim, LabeledShapeAnim, RichNumberLineAnim, VennAnim } from "./explanatory-visuals";
 import { Scene3dAnim } from "./scene3d-anim";
 import { CompareCardsAnim, RuleBoxAnim, TableAnim } from "./source-visuals";
+import { DecisionTreeAnim, PictureCardsAnim } from "./tree-cards";
+import { SourceImageAnim } from "./source-image";
 
 /**
  * LS-4 — the eight planned animation kinds (master plan §4).
@@ -206,4 +208,7 @@ export const ANIMATE_REGISTRY: Record<AnimKind, ComponentType<AnimProps>> = {
   table: TableAnim,
   ruleBox: RuleBoxAnim,
   compareCards: CompareCardsAnim,
+  decisionTree: DecisionTreeAnim,
+  pictureCards: PictureCardsAnim,
+  sourceImage: SourceImageAnim,
 };

@@ -6,7 +6,7 @@
  * Az ADMIN_EMAILS értesítési lista, jogot NEM ad.
  */
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 
 process.env.DATABASE_URL ??= "postgresql://authz:authz@127.0.0.1:1/admin_access";
 process.env.SESSION_SECRET ??= "admin-access-test-secret";
@@ -208,7 +208,18 @@ describe("JM7c-1 / review #462 — tárolt jelző és az eltérés oka", () => {
   });
 });
 
+/**
+ * KB #212: az őr gyorsítótára (5 s / 60 s) és a state-tár élettartama (15 perc) befagyasztott órán fut — terhelés alatt vagy
+ * órakorrekciónál a valódi óra két hívás között lejárathatta a gyorsítótárat / a rekordot (hamis bukás).
+ */
+const FROZEN_NOW = 1_800_000_000_000;
+const freezeClock = () => {
+  beforeEach(() => mock.timers.enable({ apis: ["Date"], now: FROZEN_NOW }));
+  afterEach(() => mock.timers.reset());
+};
+
 describe("JM7c-1 — kizárás elleni őr", () => {
+  freezeClock();
   const fakeDb = (emails: (string | null)[] | Error) => {
     const calls: string[] = [];
     return {
@@ -361,6 +372,7 @@ describe("JM7c-1 — Google-os első belépés: új sor jelzőt csak listás cí
 });
 
 describe("JM7c-1 — AdminStateStore (login-CSRF)", () => {
+  freezeClock();
   type Sess = { adminOauthStates?: Record<string, { v: string; t: number }> };
   const req = (session: Sess) => ({ session }) as never;
   const store = new AdminStateStore();
@@ -396,9 +408,13 @@ describe("JM7c-1 — AdminStateStore (login-CSRF)", () => {
 
   it("15 perc után lejár; legfeljebb 5 függő belépés", async () => {
     const s: Sess = {};
+    const fresh = await put(s);
+    assert.equal(s.adminOauthStates![fresh]!.t, FROZEN_NOW, "a rekord a (befagyasztott) óra pillanatát kapja");
+    s.adminOauthStates![fresh]!.t = FROZEN_NOW - (15 * 60_000 - 1);
+    assert.equal(await check(s, fresh), "ver", "15 perc − 1 ms: még érvényes");
     const h = await put(s);
-    s.adminOauthStates![h]!.t -= 15 * 60_000;
-    assert.equal(await check(s, h), false);
+    s.adminOauthStates![h]!.t = FROZEN_NOW - 15 * 60_000;
+    assert.equal(await check(s, h), false, "pontosan 15 perc: lejárt");
     const handles: string[] = [];
     for (let i = 0; i < 7; i++) handles.push(await put(s));
     assert.equal(Object.keys(s.adminOauthStates!).length, 5);

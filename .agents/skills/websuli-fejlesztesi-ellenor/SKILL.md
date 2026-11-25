@@ -1,69 +1,36 @@
 ---
 name: websuli-fejlesztesi-ellenor
-description: WEBSULI független fejlesztési ellenőr - friss kontextusú, csak olvasó alügynök hibát keres az elkészült fejlesztésben a PR megnyitása ELŐTT. Töltsd be automatikusan minden fejlesztés / javítás elkészültekor (zöld helyi kapuk után), a PR megnyitása előtt, és minden érdemi javító push előtt (visszaellenőrzés). A fejlesztő maga nem ellenőrizheti magát.
+description: WEBSULI fejlesztési ellenőr - a PR előtt és minden javító push után a HELYI GPU-modell (Ollama, angol megbízás) nézi át a diffet: node scripts/qa/gates/local-review.mjs. A felhős vak kör (friss alügynök minden fejre) 2026-11-23 óta kivezetve. Töltsd be minden fejlesztés / javítás elkészültekor, zöld helyi kapuk után.
 ---
 
-# Fejlesztési ellenőr — független alügynökös ellenőrzés a PR előtt
+# Fejlesztési ellenőr — helyi GPU-ellenőr a PR előtt
 
-Tulajdonosi utasítás (2026-11-17, kötelező): minden fejlesztés után automatikusan egy FÜGGETLEN alügynök ellenőrizze az elkészült
-munkát, hogy a hibák ne utólag derüljenek ki. Mért ok: a 2026-11-16/17-i játékhullám öt PR-jából négynél a független review a zöld CI
-UTÁN talált blokkoló hibát; minden ilyen kör 1–1,5 óra CI + egy újabb review-kör volt
-(`docs/handoffs/2026-11-17-jatekok-utomunka-retro.md`, `docs/agent-csapdak.md` C-61…C-72). Runbook: `docs/minosegkapuk.md`.
+Tulajdonosi döntés (2026-11-23): a felhős „vak kör” kivezetve — 45 PR-ra 342 felhős ellenőr-kör jutott (≈ 7,6 / PR), a 2.–4. kör
+jellemzően csak az előző javítás apróságait kereste. Mérés és döntés: `docs/specs/2026-11-23-vak-kor-kivezetes.md`. Runbook:
+`docs/minosegkapuk.md`.
 
-## 1. Mikor kötelező
+## 1. Mikor
 
-- Minden fejlesztés / javítás elkészültekor, a PR megnyitása ELŐTT (a `pre-pr-gate` és a `gh pr create` hook ítélet nélkül nem enged).
-- Minden érdemi javító push előtt (review-lelet, CI-hiba javítása): visszaellenőrzés ugyanattól az ellenőrtől, az új fejre.
-- A merge előtt az ítéletnek a PR JELENLEGI fejére kell szólnia (`pre-merge-gate`).
-- A fejlesztő (vagy az az ügynök, amelyik a kódot írta) nem lehet a saját ellenőre.
+- PR megnyitása előtt és minden javító push után, az új fejre (helyi, ingyenes — nincs „egy kötegben küldd” kényszer).
+- Előbb zöld `npm run gate:stage` és `npm run gate:push`: a determinisztikus kapu fogja az olcsó hibát.
 
-## 2. Előfeltétel — az olcsó helyi kapuk előbb (API-költség elve)
-
-Az ellenőr NE olcsó hibákra pazarolja a keretet. Indítás előtt zöldnek kell lennie:
+## 2. Futtatás
 
 ```bash
-npm run gate:stage          # szakasz-kapu (gyors)
-npm run gate:push           # teljes helyi kapu: lint, tsc, teljes unit, háromfázisú rend, friss main
+node scripts/qa/gates/local-review.mjs                 # base origin/main, head HEAD; jelentés + review-<fej>.json
+node scripts/qa/gates/local-review.mjs --refuted a1b2c3d4 --refuted-reason "a guard a 42. sorban megvan"
 ```
 
-Játék- / UI-szeletnél a CI-azonos böngészős utat is futtasd le előbb (a `pre-pr-gate` futtatja; a pontos parancsot kiírja), hogy az
-ellenőr a futott e2e-eredményre hivatkozhasson.
+- A helyi modellel (alap: `hf.co/ornith-ai/Ornith-1.5-9B-GGUF:Q8_0`, felülírás `--model` / `WEBSULI_LOCAL_REVIEW_MODEL`)
+  **kizárólag angolul** kommunikálunk — a prompt a scriptben angol; magyar megbízást ne adj neki.
+- Ítélet: high → NEM (1-es kilépés), csak medium/low → IGEN, FELTÉTELLEL, nincs lelet → IGEN.
+- A `high` leletet a KÓDBÓL ellenőrizd (9B modell, lehet hamis pozitív): valódi → javítás + újrafuttatás; hamis → `--refuted`.
+- 3-as kilépés (nincs Ollama): indítsd az Ollamát; tartalékként egyetlen felhős alügynök-kör + `record-review.mjs` (lásd 5.).
 
-## 3. A megbízás (másold, töltsd ki, add egy FRISS kontextusú alügynöknek)
+## 3. Felhős második vélemény — csak kockázatos fájlnál, egyszer
 
-```text
-Független fejlesztési ellenőr vagy a kosazoltan/WEBSULI repóban (NYILVÁNOS repó). Magyarul dolgozz és jelents.
-CSAK OLVASÓ: a repóban semmit nem módosítasz, nem commitolsz, nem pusholsz, GitHubra (PR, komment, review) semmit nem írsz.
-Saját mérőszkriptet csak a scratchpadodba írhatsz: <SCRATCHPAD>/review-<PR-vagy-ág>/ — a D:\ és a D:\repo gyökerébe semmit.
-
-Cél: HIBÁT keress, ne összefoglalót írj. A munkát a SPECIFIKÁCIÓHOZ mérd, ne a tesztek szűk bemenetéhez.
-- Ág / fej: <ág> @ <fej-hash>; munkafa: <út> (csak olvasd; ha futtatsz, ott futtass, de ne módosíts)
-- Terv: <docs/specs/…md>; végrehajtási utasítás: <docs/specs/…-vegrehajtas.md>, a szelet fejezete: <sorok>
-- Diff: git diff origin/main...<fej>
-- A helyi kapuk eredménye (zöld): <a gate:push / gate:pr összesítő táblája>
-- Kifejezetten nézd meg: <a fejlesztő által ismert kockázatok, ha vannak>
-
-Kötelező ellenőrzőlista: a websuli-fejlesztesi-ellenor skill 4. szakasza (.agents/skills/websuli-fejlesztesi-ellenor/SKILL.md) —
-minden pontra írj ítéletet (teljesül / részben / nem / nem alkalmazható) bizonyítékkal.
-
-Szabályok:
-- Minden lelet fájl:sor hivatkozással és konkrét hibaforgatókönyvvel (ki, milyen eszközön, mit csinál, mi történik).
-- Kritikus / magas leletnél előbb próbáld MEGCÁFOLNI (keresd a védelmet a kódban, futtass próbát); csak megerősítés után jelentsd.
-  A megcáfolt gyanúkat külön szakaszban sorold fel.
-- Számszerű állítást (fér-e a szöveg, hány kérdés jön, mennyi idő) mérj vagy számolj, és írd le, hogyan.
-- Ne találj ki fájlt, függvényt, eredményt; a bizonytalant jelöld UNVERIFIED-nek.
-- A jelentést ide írd: <SCRATCHPAD>/review-<PR-vagy-ág>/jelentes.md
-
-A jelentés formája:
-# Független review — <ág / PR>, fej `<hash>`
-## Ítélet: IGEN | IGEN, FELTÉTELLEL | NEM
-(NEM, ha van blokkoló; FELTÉTELLEL, ha a nem blokkoló leletek jegyre mennek)
-## Blokkoló leletek (fájl:sor, forgatókönyv, javítási javaslat)
-## Jegyre menő leletek (közepes / alacsony)
-## Az ellenőrzőlista pontjai (ítélet + bizonyíték)
-## Megcáfolt gyanúk
-## Mit futtattam (parancs + eredmény) / Mit NEM futtattam (ok + kockázat)
-```
+A jelentés „Kockázatos fájlok” szakasza (migráció / séma, auth / token, fizetés, e-mail, CI-workflow) esetén EGY felhős vélemény
+ajánlott (Gemini `external-review.mjs`, vagy egy Claude-alügynök a 4. pont listájával). Visszaellenőrző / újra-vak kör nincs; nem kapu.
 
 ## 4. Kötelező ellenőrzőlista (a mért hibatípusokból)
 
@@ -135,21 +102,11 @@ node scripts/qa/gates/external-review.mjs --repo . --base origin/main --head <fe
 - Nincs kulcs vagy elfogyott a keret: „KIHAGYVA” — nem bukás (kivéve `--strict`). A `pre-pr-gate` / `pre-merge-gate` a
   `external-<fej>.json` (`--record`) hiányát csak `WARN`-ként jelzi.
 
-## 5. Visszaellenőrzés
-
-- A javított fejet UGYANAZ az ellenőr kapja (SendMessage a meglévő alügynöknek), a `git diff <régi-fej> <új-fej>` kiindulással:
-  minden korábbi lelet lezárása / állapota, és új hiba a javításban (a javítás gyakran új hibát hoz: C-68).
-- A jelentés végére új szakasz: `# Visszaellenőrzés — új fej <hash>` saját ítélettel.
-
-## 6. Az ítélet rögzítése (ezt olvassa a pre-pr-gate és a pre-merge-gate)
+## 5. Tartalék: felhős ellenőr ítéletének rögzítése
 
 ```bash
 node scripts/qa/gates/record-review.mjs --head <fej-hash> --verdict IGEN --report <SCRATCHPAD>/review-<x>/jelentes.md
-# --verdict: IGEN | "IGEN, FELTÉTELLEL" | NEM
 ```
 
-- A bizonyíték: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json` (helyi, nem commitolható; munkafából is látszik).
-- A szkript kiír egy sort: `Független ellenőr ítélete: IGEN (fej: <hash>)`. Ezt — és CSAK ezt — tedd a PR-leírásba (vagy kommentbe).
-  A nyilvános repóra biztonsági részlet, leletlista, jelentés-útvonal nem kerül.
-- `IGEN, FELTÉTELLEL`: a feltételek jegyre (kanban) és a PR-leírásba kerüljenek. `NEM`: javítás → helyi kapuk → visszaellenőrzés.
-- Új commit után a régi ítélet nem érvényes (fej-hash szerint kulcsolt) — ezért a javításokat egy kötegben, egy pushban küldd.
+- A bizonyíték mindkét úton: `<git-common-dir>/websuli-qa-evidence/review-<fej>.json`. A kiírt `Független ellenőr ítélete: …
+  (fej: <hash>)` sort — és csak azt — tedd a PR-leírásba.

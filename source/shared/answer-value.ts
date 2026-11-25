@@ -211,12 +211,40 @@ function unitPresent(answer: string, atomText: string, unit: string): boolean {
 }
 
 /**
+ * T-1 (#122, spec 2026-11-20-pontozo-polinom-ket-szam): műveleti jel után álló „1–3 jegy, EGY vízszintes szóköz, 3 jegy” — a „30 · 7 210”
+ * lépés + végeredmény is lehet, nem csak ezres tagolás. A 0-val kezdődő csoport („12 000”), a tizedesrész és a további ezres csoport
+ * kizárja. Lookbehind nélkül (régebbi Safari): a bal oldali szám / zárójel és a műveleti jel a találat része.
+ */
+const OPERAND_GROUP = new RegExp(`([\\d)]\\s*[${OPS}]\\s*)(\\d{1,3})[^\\S\\r\\n\\t](?=[1-9]\\d{2}(?!\\d|[.,]\\d|[^\\S\\r\\n\\t]\\d))`, "g");
+/** A második olvasat: a fenti helyeken a szóköz sortörés (hosszmegtartó — a pozíciók nem tolódnak); `starts`: a leválasztott számok kezdete. */
+function splitOperandGroups(answer: string): { text: string; starts: number[] } {
+  const starts: number[] = [];
+  const text = answer.replace(OPERAND_GROUP, (_m: string, pre: string, digits: string, offset: number) => {
+    starts.push(offset + pre.length + digits.length + 1);
+    return `${pre}${digits}\n`;
+  });
+  return { text, starts };
+}
+
+/**
  * A tanulói válasz részeredményeinek ítélete. A válaszban az elvárt értékek SORRENDBEN keresendők (részfeladatonként
  * előre haladva); közbeeső, más szám (indoklás, részszámítás) megengedett, felcserélt részeredmény nem.
+ * T-1 (#122): ha a mai olvasat nem teljes, a műveleti jel utáni „7 210” két számként is megpróbálható; ez csak akkor nyer, ha több
+ * részeredményt ad, és MINDEN leválasztott szám egy számos részeredmény találata (különben hamis elfogadás lenne).
  */
 export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnswer[]): TypedGrade {
-  const verdicts: PartVerdict[] = [];
   const answer = answerWindow(rawAnswer);
+  const joined = gradeReading(answer, answers);
+  if (joined.grade.undecidable || joined.grade.correct === joined.grade.total) return joined.grade;
+  const split = splitOperandGroups(answer);
+  if (!split.starts.length) return joined.grade;
+  const alt = gradeReading(split.text, answers);
+  return alt.grade.correct > joined.grade.correct && split.starts.every((s) => alt.numberHits.includes(s)) ? alt.grade : joined.grade;
+}
+
+function gradeReading(answer: string, answers: readonly TypedAnswer[]): { grade: TypedGrade; numberHits: number[] } {
+  const verdicts: PartVerdict[] = [];
+  const numberHits: number[] = [];
   const atoms = [...answer.matchAll(ATOM_RE)].map((m) => ({ text: m[0], index: m.index ?? 0, value: atomValue(m[0].replace(/^[−–]/, "-")) }));
   let cursor = 0;
   let undecidable = false;
@@ -251,10 +279,10 @@ export function gradeTypedAnswers(rawAnswer: string, answers: readonly TypedAnsw
       if (expected.unit && !unitPresent(answer, a.text, expected.unit)) continue;
       found = i; break;
     }
-    if (found >= 0) { cursor = found + 1; textPos = atoms[found].index + atoms[found].text.length; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
+    if (found >= 0) { numberHits.push(atoms[found].index); cursor = found + 1; textPos = atoms[found].index + atoms[found].text.length; verdicts.push({ part: expected.part, ok: true, reason: "Helyes érték." }); }
     else verdicts.push({ part: expected.part, ok: false, reason: expected.form === "simplified-fraction" ? `A(z) ${expected.part} rész eredményét egyszerűsített törtként várjuk.` : expected.unit ? `A(z) ${expected.part} rész eredménye a(z) ${expected.unit} mértékegységgel hiányzik vagy hibás.` : `A(z) ${expected.part} rész eredménye hiányzik vagy hibás.` });
   }
-  return { total: answers.length, correct: verdicts.filter((v) => v.ok).length, verdicts, undecidable };
+  return { grade: { total: answers.length, correct: verdicts.filter((v) => v.ok).length, verdicts, undecidable }, numberHits };
 }
 
 /**

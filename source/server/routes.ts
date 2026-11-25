@@ -46,7 +46,17 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
-import { lessonResultsRouter } from "./lesson-result-email";
+import { lessonResultsRouter, resultPartialEmailEnabled } from "./lesson-result-email";
+import { resultCombinedEmailEnabled } from "./lesson-result-combine";
+import { createAdventRouter } from "./advent/routes";
+import { createAdventStore } from "./advent/store";
+import { createAdventPreviewRouter } from "./advent/preview";
+import { createAdventMailReportRouter } from "./advent/mail-report";
+import { sendAdventResult } from "./advent/result-email";
+import { adventClock, adventEnabled } from "./advent/clock";
+import { defaultAdventIdentityDeps, resolveAdventSubject } from "./advent/identity";
+import { SERVER_GRADE_BANK } from "./realtime/question-provider";
+import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
 
 import { isOpenRouterConfigured } from "./ai/OpenRouterProvider";
 import { studioRouter } from "./studio/routes";
@@ -70,6 +80,8 @@ import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
 import { playerAccountsEnabled } from "./player/require-player";
 import { getPlayerSessionId } from "./player/session";
+import { registerTrackRoutes } from "./tracks-routes";
+import { trackOption } from "@shared/tracks";
 import { getRealtime } from "./realtime";
 import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
@@ -882,6 +894,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/lessons", createArbiterRouter());
   // Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — CSRF-fel, mint a Próba (vendég is).
   app.use("/api/lessons", lessonResultsRouter);
+  // Adventi naptár (docs/specs/2026-11-18-adventi-naptar.md R8): az ADVENT_CALENDAR flag mögött (alapból KI → a végpontok 404-et
+  // adnak, a /status `{ enabled: false }`). Az író utak CSRF-tokenesek — a fenti kivétellistába szándékosan nem kerültek be.
+  const adventIdentity = defaultAdventIdentityDeps(dbPool);
+  const adventStore = createAdventStore(dbPool);
+  app.use("/api/advent", createAdventRouter({
+    store: adventStore,
+    bank: SERVER_GRADE_BANK,
+    christmas: CHRISTMAS_ITEMS,
+    enabled: () => adventEnabled(),
+    clock: (req) => adventClock(req),
+    resolve: (req, input) => resolveAdventSubject(req, input, adventIdentity),
+    // S5 (terv 18.1): a végleges eredménykor egyetlen levél az ADMIN_EMAILS listára — csak tanulói sorról, csak a bekapcsolt naptár
+    // útján (ez a router a kapcsoló mögött él); a küldés nem akasztja meg a választ.
+    onResult: ({ row, subject, phase }) => { void sendAdventResult({ store: adventStore, row, phase, firstName: subject.firstName }); },
+  }));
+  // Adventi naptár — admin-előnézet (terv 16.5, A16; végrehajtás S6): az admin-őr mögött, a kapcsolótól FÜGGETLENÜL (a bekapcsolás
+  // előtti tulajdonosi próbára — D-11); `?date=ÉÉÉÉ-HH-NN`, a saját előnézeti sor, levél nélkül; `DELETE` a saját sort törli (CSRF).
+  app.use("/api/admin/advent/preview", isAuthenticatedAdmin, createAdventPreviewRouter({
+    store: createAdventStore(dbPool),
+    bank: SERVER_GRADE_BANK,
+    christmas: CHRISTMAS_ITEMS,
+  }));
+  // Adventi naptár — a szülői levelek száraz összesítője (tulajdonosi P-056): az admin-őr mögött, a kapcsolótól függetlenül; csak olvas,
+  // címet nem ad ki. A valódi küldés alapból KI (`ADVENT_RESULT_EMAIL_MODE=send` nélkül a végleges eredmény sem küld és nem foglal).
+  app.use("/api/admin/advent/mail-report", isAuthenticatedAdmin, createAdventMailReportRouter({ store: adventStore }));
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
   registerLessonClipMedia(app, loadClipMedia);
@@ -986,7 +1023,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Frontend fetches this token and includes it in all mutating requests (POST/PUT/DELETE)
   app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
-    res.json({ csrfToken });
+    // Eredmény-e-mail B4b: a kör-kilét kötését (a kliens csak a rögzített párosítással egyező tokent küldi) a B4 kapcsolója hirdeti.
+    // Review #586: az összevont levél (U4b) is kikényszeríti a kötést — azt is hirdetni kell.
+    res.json({ csrfToken, ...(resultPartialEmailEnabled() || resultCombinedEmailEnabled() ? { resultOwnerBinding: true } : {}) });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks
@@ -1885,6 +1924,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN-ONLY route - Update material
+  // #1986: külön tananyagcsoportok (6-osztályos gimnáziumi felvételi) — saját csoportok és admin-tagság.
+  registerTrackRoutes(app, { pool: dbPool, invalidateFiles: invalidateHtmlFilesCache });
+
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
@@ -1907,6 +1949,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({
             message: "Az osztály értékének 0 és 12 között kell lennie"
           });
+        }
+        // #1986 (review #582): csoportos anyag évfolyama nem állítható el a csoport tartalmi évfolyamáról (gimi6 → 6.).
+        const tracked = await dbPool.query<{ tracks: string[] }>(`SELECT tracks FROM html_files WHERE id = $1`, [req.params.id]);
+        const clash = (tracked.rows[0]?.tracks ?? []).map((t) => trackOption(t)).find((o) => o && o.contentGrade !== classroom);
+        if (clash) {
+          return res.status(400).json({ message: `Ez az anyag a(z) „${clash.label}” csoportban van, ezért ${clash.contentGrade}. osztályos marad — előbb vedd ki a csoportból.` });
         }
         updates.classroom = classroom;
       }

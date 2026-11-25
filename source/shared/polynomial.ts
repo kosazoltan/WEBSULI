@@ -200,7 +200,9 @@ export function polynomialCandidates(text: string): Array<{ text: string; parsed
       return depth > 0 ? m : pre + "\n".repeat(label.length);
     })
     // Review #319: a mondatzáró „?” és „!” is határ („Bontsd ki: (x+5)²!”).
-    .replace(/[=;≠<>≤≥\n?!]|[,:](?=\s|$)|\.(?=\s|$)/g, "\n");
+    // T-1 (#121): a szóköz / szövegvég előtti TELJES pontsor és kipontozás is határ („10x..”, „10x…”) — hosszmegtartó csere; a
+    // tizedespont („2.5x”) szám előtt áll, nem határ.
+    .replace(/[=;≠<>≤≥\n?!]|[,:](?=\s|$)|[.…]+(?=\s|$)/g, (m: string) => "\n".repeat(m.length));
   const out: Array<{ text: string; parsed: Parsed; start: number; end: number }> = [];
   let chunkStart = 0;
   for (const chunk of marked.split("\n")) {

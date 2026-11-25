@@ -75,16 +75,34 @@ export type BuildPlanInput = {
   /** Az évad korábbi köreiben már kiosztott azonosítók és normalizált promptok. */
   usedIds?: ReadonlySet<string>;
   usedPrompts?: ReadonlySet<string>;
+  /**
+   * Az évad korábbi köreiben megmutatott kérdések, a LEGRÉGEBBI elöl (tulajdonosi döntés 2026-11-21: „Ismétlés a legrégebbiekből”).
+   * Csak akkor használja, ha egy ablak készletéből ismétlés nélkül már nem telik ki a hely: a hiányzó helyekre ezek közül az ablak
+   * készletébe tartozó, a tervben még nem szereplő első tételek kerülnek. Ahol van elég új kérdés, a terv ugyanaz, mint nélküle.
+   */
+  repeatable?: readonly string[];
 };
+
+const planRng = (season: number, round: number, subjectKey: string, grade: number) => createRng(seedFrom("advent", season, round, subjectKey, clampAdventGrade(grade)));
+const ALL_DOOR_DAYS = (): number[] => Array.from({ length: ADVENT_DOORS }, (_, i) => i + 1);
+
+/**
+ * Az ablakok elrendezése TERV NÉLKÜL is (ugyanaz, amit a terv tárolni fog): az állapot már az első megnyitás előtt a végleges,
+ * kevert sorrendet mutatja, így a rács játék közben nem rendeződik át (vak ellenőr S1).
+ */
+export function adventLayout(season: number, round: number, subjectKey: string, grade: number): number[] {
+  return planRng(season, round, subjectKey, grade).shuffle(ALL_DOOR_DAYS());
+}
 
 export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
   const grade = clampAdventGrade(input.grade);
   const perDoor = 1 + limitsForGrade(grade).maxRepairs;
-  const rng = createRng(seedFrom("advent", input.season, input.round, input.subjectKey, grade));
+  const rng = planRng(input.season, input.round, input.subjectKey, grade);
   const usedIds = new Set(input.usedIds ?? []);
   const usedPrompts = new Set(input.usedPrompts ?? []);
 
-  const days = Array.from({ length: ADVENT_DOORS }, (_, i) => i + 1);
+  const days = ALL_DOOR_DAYS();
+  // Az ELSŐ húzás az elrendezés — az `adventLayout` ugyanezt adja terv nélkül.
   const layout = rng.shuffle(days);
 
   /** A sorból az első `count` még nem használt tétel; a kivetteket használtnak jelöli. */
@@ -97,6 +115,26 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
       usedIds.add(item.id);
       usedPrompts.add(prompt);
       out.push(item.id);
+    }
+    return out;
+  };
+  /** Ismétlés a legrégebbiekből (döntés 2026-11-21): a sor tételei közül a legrégebben megmutatottak, a tervben még nem szereplők. */
+  const repeatOrder = input.repeatable ?? [];
+  const planIds = new Set<string>();
+  const planPrompts = new Set<string>();
+  const takeRepeated = (queue: readonly AdventItem[], count: number): string[] => {
+    const out: string[] = [];
+    if (count <= 0 || repeatOrder.length === 0) return out;
+    const inQueue = new Map(queue.map((item) => [item.id, item]));
+    for (const id of repeatOrder) {
+      if (out.length === count) break;
+      const item = inQueue.get(id);
+      if (!item) continue;
+      const prompt = normalizePrompt(item.prompt);
+      if (planIds.has(id) || planPrompts.has(prompt)) continue;
+      planIds.add(id);
+      planPrompts.add(prompt);
+      out.push(id);
     }
     return out;
   };
@@ -122,6 +160,7 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
     let ids: string[];
     if (isChristmasDoor(day, grade)) {
       ids = take(christmasQueue, perDoor);
+      ids.push(...takeRepeated(christmasQueue, perDoor - ids.length));
       doorSubjects[day] = CHRISTMAS_SUBJECT;
     } else {
       if (subjects.length === 0) throw new RangeError(`advent: nincs kérdés a(z) ${grade}. évfolyam bankjában`);
@@ -133,6 +172,16 @@ export function buildAdventPlan(input: BuildPlanInput): AdventPlan {
         if (ids.length === perDoor) break;
         ids.push(...take(cell(subject, tier), perDoor - ids.length));
       }
+      // Csak ha mindhárom szint új tételei elfogytak (a cellák ekkor már mind létrejöttek: a véletlen sorrend nem változik).
+      for (const tier of tierOrder(tierForDay(day))) {
+        if (ids.length === perDoor) break;
+        ids.push(...takeRepeated(cell(subject, tier), perDoor - ids.length));
+      }
+    }
+    for (const id of ids) {
+      planIds.add(id);
+      const item = findAdventItem(id, input.bank, input.christmas);
+      if (item) planPrompts.add(normalizePrompt(item.prompt));
     }
     if (ids.length < perDoor) throw new RangeError(`advent: elfogyott a kérdés (${grade}. évfolyam, ${day}. ablak, ${input.round}. kör)`);
     doors[day] = ids;
@@ -192,22 +241,14 @@ export function repairPlanDoor(
       if (known) usedPrompts.add(normalizePrompt(known.prompt));
     }
   }
-  const byId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   const free = (item: AdventItem) => !usedIds.has(item.id) && !usedPrompts.has(normalizePrompt(item.prompt));
   const existing = current.map((id) => findAdventItem(id, input.bank, input.christmas));
-  const christmasDoor = isChristmasDoor(day, grade);
   const subject = plan.subjects?.[day] ?? existing.map((q) => (q ? subjectOf(q) : null)).find((s) => s && s !== CHRISTMAS_SUBJECT) ?? null;
   let changed = false;
   const next = current.map((id, index) => {
     if (existing[index] || input.protectedIds?.has(id)) return id;
-    let candidates: AdventItem[];
-    if (christmasDoor) {
-      candidates = input.christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byId);
-    } else {
-      if (!subject) return id;
-      const inGrade = input.bank.filter((q) => q.grade === grade && q.subject === subject);
-      candidates = tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byId));
-    }
+    const candidates = replacementCandidates(day, grade, subject, input.bank, input.christmas);
+    if (!candidates) return id;
     const replacement = candidates.find(free);
     if (!replacement) return id;
     usedIds.add(replacement.id);
@@ -216,4 +257,66 @@ export function repairPlanDoor(
     return replacement.id;
   });
   return changed ? { plan: { ...plan, doors: { ...plan.doors, [day]: next } }, changed } : { plan, changed };
+}
+
+const byItemId = (a: AdventItem, b: AdventItem) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Egy ablak pótlási jelöltjei determinisztikus (azonosító szerinti) sorrendben: karácsonyi ablaknál az évfolyam karácsonyi tételei,
+ * különben a terv szerinti tárgy tételei a nap nehézségi sorrendjében. `null`, ha a tárgy nem ismert.
+ */
+function replacementCandidates(day: number, grade: number, subject: string | null, bank: readonly AdventBankItem[], christmas: readonly ChristmasItem[]): AdventItem[] | null {
+  // Karácsonyi nap VAGY karácsonyi tárgyú (pl. eltérő évfolyamú vendégtől átvett) hely: a karácsonyi készlet (PR-B 4. kör L4).
+  if (isChristmasDoor(day, grade) || subject === CHRISTMAS_SUBJECT) return christmas.filter((c) => c.minGrade <= grade && grade <= c.maxGrade).sort(byItemId);
+  if (!subject) return null;
+  const inGrade = bank.filter((q) => q.grade === grade && q.subject === subject);
+  return tierOrder(tierForDay(day)).flatMap((tier) => inGrade.filter((q) => q.tier === tier).sort(byItemId));
+}
+
+/**
+ * Ütközésmentesítés (GPT-vak L3 és 3. kör L2; terv A4, A36): két terv egyesítése után (névtelen → párosított átvétel) ugyanaz a kérdés
+ * két ablakba is kerülhet. A TÖRTÉNETI helyek (`historicalByDay`: ablakonként a már megválaszolt próbák száma — a terv első N helye) a
+ * próbákban élnek tovább; a TERV mégis egyedi marad: ha két történeti hely ugyanazt a kérdést hordozza, a nap szerinti első marad a
+ * tervben, a többi helyén a terv pótlást kap (a tárolt próba és visszajelzése érintetlen — a megválaszolt ablak a próbából olvas).
+ * A játszható helyeken (a próbák után) minden olyan kérdés pótlódik, amely bármely történeti helyen, korábbi játszható helyen vagy az
+ * évad korábbi köreiben már szerepelt (azonosító VAGY normalizált szöveg). A pótlás az ablak saját készletéből, determinisztikus.
+ */
+export function dedupePlanDoors(
+  plan: AdventPlan,
+  input: {
+    bank: readonly AdventBankItem[];
+    christmas: readonly ChristmasItem[];
+    grade: number;
+    usedIds: ReadonlySet<string>;
+    usedPrompts: ReadonlySet<string>;
+    historicalByDay: ReadonlyMap<number, number>;
+  },
+): { plan: AdventPlan; changed: boolean } {
+  const grade = clampAdventGrade(input.grade);
+  const seenIds = new Set(input.usedIds);
+  const seenPrompts = new Set(input.usedPrompts);
+  const promptOf = (id: string): string | null => {
+    const item = findAdventItem(id, input.bank, input.christmas);
+    return item ? normalizePrompt(item.prompt) : null;
+  };
+  const mark = (id: string) => { seenIds.add(id); const p = promptOf(id); if (p) seenPrompts.add(p); };
+  const taken = (id: string) => { const p = promptOf(id); return seenIds.has(id) || (p !== null && seenPrompts.has(p)); };
+  const free = (item: AdventItem) => !seenIds.has(item.id) && !seenPrompts.has(normalizePrompt(item.prompt));
+  const days = Object.keys(plan.doors).map(Number).filter((d) => Number.isInteger(d)).sort((a, b) => a - b);
+  const doors: Record<number, string[]> = {};
+  for (const day of days) doors[day] = [...(plan.doors[day] ?? [])];
+  let changed = false;
+  const replace = (day: number, index: number) => {
+    const replacement = replacementCandidates(day, grade, plan.subjects?.[day] ?? null, input.bank, input.christmas)?.find(free);
+    if (!replacement) return;
+    mark(replacement.id);
+    doors[day]![index] = replacement.id;
+    changed = true;
+  };
+  // 1) Történeti helyek (elsőbbség): a nap szerinti első előfordulás marad a tervben, a későbbi ismétlődés helye pótlást kap.
+  const historical = (day: number) => Math.min(input.historicalByDay.get(day) ?? 0, doors[day]!.length);
+  for (const day of days) for (let i = 0; i < historical(day); i++) { const id = doors[day]![i]!; if (taken(id)) replace(day, i); else mark(id); }
+  // 2) Játszható helyek: minden már szereplő kérdés pótlódik.
+  for (const day of days) for (let i = historical(day); i < doors[day]!.length; i++) { const id = doors[day]![i]!; if (taken(id)) replace(day, i); else mark(id); }
+  return changed ? { plan: { ...plan, doors: { ...plan.doors, ...doors } }, changed } : { plan, changed };
 }

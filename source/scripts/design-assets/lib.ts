@@ -249,7 +249,7 @@ export async function requestImage(
     signal: AbortSignal.timeout(opts.timeoutMs ?? IMAGE_TIMEOUT_MS),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${redact(text, opts.key).slice(0, 300)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${redactClip(text, opts.key, 300)}`);
   const json = JSON.parse(text) as { data?: Array<{ b64_json?: string; media_type?: string }>; usage?: unknown };
   const img = json.data?.[0];
   if (!img?.b64_json || !/^image\//.test(img.media_type ?? "image/png")) throw new Error("Üres vagy nem képtípusú válasz.");
@@ -329,4 +329,36 @@ export function redact(text: string, key: string): string {
   let out = key ? text.split(key).join("[kulcs]") : text;
   out = out.replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [kulcs]").replace(/sk-or-[A-Za-z0-9_-]+/g, "[kulcs]");
   return out;
+}
+
+/** Token-karakter az elővágáshoz: betű, szám, `+ / = _ - . ~ % \ @` (mint a kapuk `isCutRunChar`-ja). */
+const isCutRunChar = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+  || c === 43 || c === 47 || c === 61 || c === 95 || c === 45 || c === 46 || c === 126 || c === 37 || c === 92 || c === 64;
+
+/**
+ * Elővágás (docs/specs/2026-11-22-kitakaro-elovagas.md) a régi `redact(text, key).slice(0, max)` helyett: a forrás
+ * `max + max(64, kulcshossz)` karakterre vágva; a vágásponton átnyúló pontos kulcs-előfordulás és token-futás teljesen kimarad
+ * (lineáris hátrálás), utána a változatlan `redact`, majd `slice(0, max)`. A kimenet a régi kimenet előtagja.
+ */
+export function redactClip(input: string | null | undefined, keyIn: string | null | undefined, max: number): string {
+  const text = String(input ?? ""); // 1. vak kör L5: hiányzó szöveg → üres eredmény
+  const key = keyIn ?? "";
+  let p = max + Math.max(64, key.length);
+  if (text.length <= p) return redact(text, key).slice(0, max);
+  for (;;) {
+    const before = p;
+    if (key) {
+      const from = Math.max(0, p - key.length + 1);
+      const q = text.slice(from, p + key.length - 1).indexOf(key);
+      if (q >= 0 && from + q < p) p = from + q;
+    }
+    if (p > 0 && isCutRunChar(text.charCodeAt(p)) && isCutRunChar(text.charCodeAt(p - 1))) {
+      while (p > 0 && isCutRunChar(text.charCodeAt(p - 1))) p--;
+    }
+    // 1. vak kör L2: befejezetlen főági Bearer-egyezés (`Bearer` + whitespace a vágás előtt) teljesen kimarad.
+    let k = p;
+    while (k > 0 && /\s/.test(text[k - 1])) k--;
+    if (k < p && k >= 6 && text.slice(k - 6, k) === "Bearer") p = k - 6;
+    if (p === before) return redact(text.slice(0, p), key).slice(0, max);
+  }
 }

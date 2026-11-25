@@ -248,6 +248,100 @@ test("S4a: a különálló kinyerés draft térképet ment (jóváhagyásra vár
   }
 });
 
+// #264 / Kanban #11 (docs/specs/2026-11-23-maps-extract-tulajdonos.md): a kinyerés gyorsítótára csak a hívó saját térképét adja vissza.
+test("#264: a kinyerés gyorsítótára nem adja vissza más felhasználó térképét (E1)", async () => {
+  const { saveSingleRunMap, singleRunMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = [{ name: "idegen.txt", kind: "text" as const, content: "A fotoszintézis: fény, víz, szén-dioxid." }];
+  const map = { title: "Fotó", subject: "természettudomány", classroom: 6, transcript: files[0].content, fileTranscripts: { "idegen.txt": files[0].content },
+    concepts: [{ id: "foto", term: "fotoszintézis", definition: "Fényből cukor.", quote: "fotoszintézis", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "idegen.txt" }], corrections: [], visuals: [] };
+  // A másik tanár térképe a javítás előtti (tartalmi) lenyomattal.
+  const foreign = await saveSingleRunMap(map, files, "draft-other", "claude-opus-5-5", { draft: true, inputHash: singleRunMapHash(files, "Fotó") });
+  // Fizetős hívás nem indulhat: modellkulcs nélkül a saját kinyerés elutasul.
+  const keys = ["AI_INTEGRATIONS_ANTHROPIC_API_KEY", "AI_INTEGRATIONS_OPENAI_API_KEY", "OPENAI_API_KEY"] as const;
+  const savedKeys = keys.map((k) => process.env[k]);
+  for (const k of keys) process.env[k] = "";
+  try {
+    const result = await extractMapSingleRun({ files, title: "Fotó", ownerId: "draft-owner" }).catch((error: unknown) => error);
+    assert.notEqual((result as { mapId?: string }).mapId, foreign, "más felhasználó térképe nem jöhet vissza");
+    assert.ok(result instanceof Error, "a hívó saját kinyerést kap (kulcs nélkül elutasul), nem gyorsítótárat");
+  } finally {
+    keys.forEach((k, i) => { if (savedKeys[i] === undefined) delete process.env[k]; else process.env[k] = savedKeys[i]; });
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id=$1", [foreign]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id=$1", [foreign]);
+  }
+});
+
+test("#264: ugyanarra a tartalomra mindkét tanár a saját (gazda-kötött lenyomatú) térképét kapja vissza (E1, E2)", async () => {
+  const { saveSingleRunMap, singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = [{ name: "kozos.txt", kind: "text" as const, content: "A sejt: sejthártya, sejtplazma, sejtmag." }];
+  const map = { title: "Sejt", subject: "természettudomány", classroom: 6, transcript: files[0].content, fileTranscripts: { "kozos.txt": files[0].content },
+    concepts: [{ id: "sejt", term: "sejt", definition: "Az élet egysége.", quote: "sejt", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: "kozos.txt" }], corrections: [], visuals: [] };
+  const content = singleRunMapHash(files, "Sejt");
+  assert.notEqual(ownerMapHash(content, "draft-owner"), ownerMapHash(content, "draft-other"), "a lenyomat gazdánként különbözik");
+  assert.equal(ownerMapHash(content, "draft-owner"), ownerMapHash(content, "draft-owner"), "determinisztikus");
+  // Az egyedi `input_hash` mellett is mindkét térkép menthető.
+  const other = await saveSingleRunMap(map, files, "draft-other", "claude-opus-5-5", { draft: true, inputHash: ownerMapHash(content, "draft-other") });
+  const mine = await saveSingleRunMap(map, files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: ownerMapHash(content, "draft-owner") });
+  try {
+    assert.deepEqual(await extractMapSingleRun({ files, title: "Sejt", ownerId: "draft-owner" }), { mapId: mine, cached: true });
+    assert.deepEqual(await extractMapSingleRun({ files, title: "Sejt", ownerId: "draft-other" }), { mapId: other, cached: true });
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id = ANY($1)", [[other, mine]]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE id = ANY($1)", [[other, mine]]);
+  }
+});
+
+// PR #550 review (Sourcery): ugyanannak a gazdának két átfedő kinyerése ugyanarra a tartalomra — a második nem bukhat 502-vel az egyedi
+// `input_hash` miatt, miután a modellmunkát már kifizette.
+const raceFiles = (name: string, content: string) => [{ name, kind: "text" as const, content }];
+const raceMap = (name: string, content: string) => ({ title: "Verseny", subject: "természettudomány", classroom: 6, transcript: content, fileTranscripts: { [name]: content },
+  concepts: [{ id: "c1", term: "kör", definition: "Zárt görbe.", quote: "kör", type: "concept", examWeight: "core" as const, relatedIds: [], verbatimOk: true, sourceFile: name }], corrections: [], visuals: [] });
+
+test("PR #550: ha a mentés előtt egy párhuzamos kérés már elmentette a saját térképet (egyedi lenyomat), a kinyerés azt adja vissza, nem hibát", async () => {
+  const { saveSingleRunMap, singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = raceFiles("verseny.txt", "A kör egy zárt görbe.");
+  const hash = ownerMapHash(singleRunMapHash(files, "Verseny"), "draft-owner");
+  let rival: string | undefined;
+  try {
+    // A determinisztikus verseny: a gyorsítótár-keresés még üres; a modellmunka alatt a másik kérés menti el ugyanazt a lenyomatot.
+    const result = await extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, {
+      readSource: async () => {
+        rival = await saveSingleRunMap(raceMap("verseny.txt", files[0].content), files, "draft-owner", "claude-opus-5-5", { draft: true, inputHash: hash });
+        return { read: raceMap("verseny.txt", files[0].content), model: "claude-opus-5-5" };
+      },
+    });
+    assert.deepEqual(result, { mapId: rival, cached: true });
+    assert.equal((await dbPool.query("SELECT count(*)::int AS n FROM knowledge_maps WHERE input_hash=$1", [hash])).rows[0].n, 1);
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id IN (SELECT id FROM knowledge_maps WHERE input_hash=$1)", [hash]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE input_hash=$1", [hash]);
+  }
+});
+
+test("PR #550: ugyanannak a gazdának két egyidejű kinyerése ugyanarra a tartalomra egyetlen modellmunkát indít, mindkettő ugyanazt a térképet kapja", async () => {
+  const { singleRunMapHash, ownerMapHash, extractMapSingleRun } = await import("../server/studio/single-run/live");
+  const files = raceFiles("egyideju.txt", "A négyzet négy egyenlő oldalú téglalap.");
+  const hash = ownerMapHash(singleRunMapHash(files, "Verseny"), "draft-owner");
+  let reads = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const readSource = async () => { reads++; await gate; return { read: raceMap("egyideju.txt", files[0].content), model: "claude-opus-5-5" }; };
+  try {
+    const first = extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, { readSource });
+    const second = extractMapSingleRun({ files, title: "Verseny", ownerId: "draft-owner" }, { readSource });
+    // Mindkét kérés a modellmunka alatt átfed (egyik sem talál még mentett térképet).
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    release();
+    const [a, b] = await Promise.all([first, second]);
+    assert.equal(reads, 1, "a második kérés nem fizet újra a modellmunkáért");
+    assert.equal(a.mapId, b.mapId);
+    assert.deepEqual([a.cached, b.cached].sort(), [false, true]);
+  } finally {
+    await dbPool.query("DELETE FROM km_concepts WHERE map_id IN (SELECT id FROM knowledge_maps WHERE input_hash=$1)", [hash]);
+    await dbPool.query("DELETE FROM knowledge_maps WHERE input_hash=$1", [hash]);
+  }
+});
+
 // J5 (docs/specs/2026-10-16-egyfutas-atvilagitas.md): a megállt egyfutásos job a mentett részeiből folytatható, ugyanazon a jobon.
 test("J5: a megállt egyfutásos piszkozat folytatható; a foglalás saját / nem vitt jobra hat; ha a motor el sem indul, a job nem ragad „fut” állapotban", async () => {
   const { resumeSingleRun } = await import("../server/studio/lesson-pipeline-routes");

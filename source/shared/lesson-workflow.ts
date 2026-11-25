@@ -69,6 +69,29 @@ export type WorkflowVisit = {
   state: "running" | "done" | "error" | "waiting"; error?: string; tokensIn?: number; tokensOut?: number; cacheHits: number;
   /** Spec 2026-09-30 (U6, C10): a szolgáltatói gyorsítótárból olvasott / oda írt bemeneti tokenek. */
   cacheReadTokens?: number; cacheWriteTokens?: number;
+  /** Kanban #10 (2026-11-23): a látogatás tokenjeiből ennyi ment kvóta-átállással a tartalék szolgáltatón (OpenRouter) át. */
+  failover?: { provider: "openrouter"; calls: number; tokensIn: number; tokensOut: number };
+};
+/**
+ * Kvóta-átállás költségnapló-bejegyzése (tulajdonosi döntés 2026-11-23, kanban #10; docs/specs/2026-11-23-kvota-atallas-koltsegnaplo.md):
+ * egy OpenAI → OpenRouter tartalékra terelt hívás. Kulcsot és hibaüzenet-szöveget nem tartalmaz.
+ */
+export type QuotaFailoverRecord = {
+  /** ISO időbélyeg. */
+  at: string;
+  from: { provider: "openai"; model: string };
+  to: { provider: "openrouter"; model: string };
+  reason: "quota";
+  /** `quota-error`: most bukott a közvetlen hívás kvótahibával; `memory`: a 10 perces memória alatt egyből a tartalékra ment. */
+  trigger: "quota-error" | "memory";
+  /** `provider`: QuotaFailoverProvider (createStudioProvider); `direct`: withQuotaFailover (nyers SDK-kliens). */
+  path: "provider" | "direct";
+  ok: boolean;
+  tokensIn?: number; tokensOut?: number; cachedTokens?: number;
+  /** Bukott tartalékhívásnál a hiba osztályneve (üzenet nélkül). */
+  error?: string;
+  /** Futásban: a látogatás lépése. */
+  step?: string;
 };
 export type WorkflowView = {
   id: string; definition: WorkflowDefinition; state: "running" | "waiting" | "ready" | "done" | "error" | "interrupted";
@@ -93,6 +116,8 @@ export type WorkflowView = {
   history?: Array<{ state: WorkflowView["state"]; visits: WorkflowVisit[]; error?: string }>;
   /** Spec 2026-09-30-dinamikus-keret: a célzott javítóút egyszeri többletkeretei (ok + időpont), futásonként korlátozva. */
   repairGrants?: Array<{ reason: string; at: number }>;
+  /** Kanban #10: a futás kvóta-átállásai (utolsó 50), a tartalékhívás tokenjeivel. */
+  quotaFailovers?: QuotaFailoverRecord[];
 };
 /** Spec 2026-10-22-elmaradt-feladatok (S3): a tulajdonos által leállított futás üzenete (a futásnaplóban és az okosítás sorában). */
 export const WORKFLOW_STOPPED_MESSAGE = "A futást a tulajdonos leállította.";

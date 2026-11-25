@@ -1,0 +1,9 @@
+# Cogni-format adat-/séma-snapshot (ha a repónak nincs adatmodellje: üres marad)
+
+cogni:
+  kind: db_schema_snapshot
+  name: websuli-schema
+  generated: 2026-11-22
+
+  enums: {}
+  models: []
