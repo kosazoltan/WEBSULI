@@ -151,6 +151,19 @@ def now() -> str:
     return dt.datetime.now().isoformat(timespec="seconds")
 
 
+def now_tz() -> str:
+    """Időzónás helyi időbélyeg (az időrendi összevetéshez: next_step_at)."""
+    return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _utc(s: str) -> dt.datetime:
+    """ISO időbélyeg → UTC; a zóna nélküli (régi) értéket helyi időnek veszi."""
+    d = dt.datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        d = d.astimezone()
+    return d.astimezone(dt.timezone.utc)
+
+
 def m(t):
     """Maszkolt, üres → None."""
     if t is None:
@@ -259,7 +272,7 @@ def new_task(c, code: str, title: str, *, goal=None, origin=None, requirement_co
                        next_step_at,blocker,branch,spec,notes,created_at,updated_at,status_source)
                        VALUES(?,?,?,?,?,?,?,'beadva',?,?,?,?,?,?,?,?,?,?)""",
                     (code, m(title) or code, m(goal), m(origin), requirement_code, parent, int(priority), szelet, m(next_step),
-                     t if next_step else None, m(blocker), branch, spec, m(notes), t, t, source))
+                     now_tz() if next_step else None, m(blocker), branch, spec, m(notes), t, t, source))
     add_event(c, code, "letrehozva", f"{m(title)} ({source})", actor=actor, dedupe=f"letrehozva:{code}")
     if status != "beadva":
         set_status(c, code, status, actor=actor, source=source, blocker=blocker)
@@ -337,7 +350,7 @@ def update_fields(c, code: str, **kw) -> bool:
     if not ch:
         return False
     if "next_step" in ch and "next_step_at" not in kw:
-        ch["next_step_at"] = now()
+        ch["next_step_at"] = now_tz()
     sets = ", ".join(f"{k}=?" for k in ch)  # a kulcsok a fenti fix listából
     c.execute(f"UPDATE tasks SET {sets}, updated_at=? WHERE id=?", (*ch.values(), now(), t["id"]))
     fts_refresh(c, t["id"])
@@ -825,8 +838,8 @@ def sync_git(c, repo: str, base: str, napok: int, rep: dict):
                 ch |= set_unit(c, code, seq, seq <= ln["k"], evidence=f"commit {sha[:12]}", at=date[:19])
         ln, sha, date = lt["any"]
         t = get_task(c, code)
-        if ln["kovetkezo"] and (not t["next_step_at"] or date[:19] > t["next_step_at"][:19]):
-            ch |= update_fields(c, code, next_step=ln["kovetkezo"], next_step_at=date[:19])
+        if ln["kovetkezo"] and (not t["next_step_at"] or _utc(date) > _utc(t["next_step_at"])):
+            ch |= update_fields(c, code, next_step=ln["kovetkezo"], next_step_at=date)  # %cI: offsettel együtt
         rep["valtozas"] += ch
 
 
@@ -839,26 +852,53 @@ def gh_pr_list() -> list[dict]:
     return json.loads(r.stdout or "[]")
 
 
-def gh_open_threads(n: int) -> int:
+def gh_open_threads(n: int, run=subprocess.run) -> int:
+    """A nyitott (feloldatlan) review-szálak száma — MINDEN oldalt bejár (pageInfo); hiányos / hibás válasznál RuntimeError,
+    hogy a hívó a korábbi számot megőrizze (nem ír 0-t)."""
     owner, name = GH_REPO.split("/")
-    q = ("query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n)"
-         "{reviewThreads(first:100){nodes{isResolved}}}}}")
-    r = subprocess.run(["gh", "api", "graphql", "-f", f"query={q}", "-f", f"o={owner}", "-f", f"r={name}", "-F", f"n={n}"],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GH_TIMEOUT)
-    if r.returncode != 0:
-        raise RuntimeError(safe((r.stderr or r.stdout).strip()[:200]))
-    nodes = json.loads(r.stdout)["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
-    return sum(1 for x in nodes if not x["isResolved"])
+    q = ("query($o:String!,$r:String!,$n:Int!,$c:String){repository(owner:$o,name:$r){pullRequest(number:$n)"
+         "{reviewThreads(first:100,after:$c){nodes{isResolved} pageInfo{hasNextPage endCursor}}}}}")
+    total, cursor = 0, None
+    for _ in range(100):  # legfeljebb 10 000 szál; végtelen ciklus ellen
+        args = ["gh", "api", "graphql", "-f", f"query={q}", "-f", f"o={owner}", "-f", f"r={name}", "-F", f"n={n}"]
+        if cursor:
+            args += ["-f", f"c={cursor}"]
+        r = run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=GH_TIMEOUT)
+        if r.returncode != 0:
+            raise RuntimeError(safe((r.stderr or r.stdout).strip()[:200]))
+        try:
+            rt = json.loads(r.stdout)["data"]["repository"]["pullRequest"]["reviewThreads"]
+            nodes, info = rt["nodes"], rt["pageInfo"]
+            total += sum(1 for x in nodes if not x["isResolved"])
+            more, cursor = bool(info["hasNextPage"]), info.get("endCursor")
+        except (KeyError, TypeError, ValueError) as e:
+            raise RuntimeError(f"hiányos review-szál válasz (PR #{n}): {e.__class__.__name__}") from None
+        if not more:
+            return total
+        if not cursor:
+            raise RuntimeError(f"hiányos review-szál válasz (PR #{n}): nincs endCursor")
+    raise RuntimeError(f"túl sok review-szál oldal (PR #{n})")
 
 
 def sync_gh(c, gh_prs, gh_threads, rep: dict) -> list[dict]:
     """PR-állapot → feladat (OPEN: review, MERGED: beolvadt + merge-SHA, CLOSED: esemény); gazdátlan nyitott PR → PR-<n>."""
+    # 1) Hálózati gyűjtés NYITOTT írási tranzakció nélkül (a gyűjtő / más CLI közben írhat); 2) alkalmazás röviden.
+    c.commit()
     try:
         prs = gh_prs()
     except Exception as e:  # noqa: BLE001 — hálózat / gh hiba: a helyi részek ettől még lefutnak
         rep["nem_elerheto"].append("gh")
         rep["gh_hiba"] = safe(str(e))[:200]
         return []
+    threads: dict[str, int | None] = {}
+    for pr in prs:
+        if pr["state"] == "OPEN":
+            try:
+                threads[str(pr["number"])] = gh_threads(int(pr["number"])) if gh_threads else 0
+            except Exception:  # noqa: BLE001 — a korábbi szálszám marad
+                threads[str(pr["number"])] = None
+                if "gh-szalak" not in rep["nem_elerheto"]:
+                    rep["nem_elerheto"].append("gh-szalak")
     by_branch: dict[str, set] = {}
     for code, b in c.execute("SELECT code, branch FROM tasks WHERE branch IS NOT NULL"):
         by_branch.setdefault(b, set()).add(code)
@@ -882,12 +922,10 @@ def sync_gh(c, gh_prs, gh_threads, rep: dict) -> list[dict]:
         merge = (pr.get("mergeCommit") or {}).get("oid")
         extra = {"cim": pr["title"][:140], "merge": merge, "nyitott_szalak": 0}
         if st == "OPEN":
-            try:
-                extra["nyitott_szalak"] = gh_threads(int(n)) if gh_threads else 0
-            except Exception:  # noqa: BLE001 — a korábbi szálszám marad
-                extra = None
-                if "gh-szalak" not in rep["nem_elerheto"]:
-                    rep["nem_elerheto"].append("gh-szalak")
+            if threads.get(n) is None:
+                extra = None  # sikertelen szál-lekérés: a korábbi szálszám (és extra) marad
+            else:
+                extra["nyitott_szalak"] = threads[n]
         for code in sorted(codes):
             prev = c.execute("SELECT l.state FROM task_links l JOIN tasks t ON t.id=l.task_id WHERE t.code=? AND l.kind='pr' "
                              "AND l.ref=?", (code, n)).fetchone()
@@ -945,6 +983,7 @@ def sync(c, repo: str, base: str = "origin/main", napok: int = 45, gh_prs=None, 
     rep["uj"] += rq["uj"]
     rep["valtozas"] += rq["valtozas"]
     sync_git(c, repo, base, napok, rep)
+    c.commit()  # a követelmény- és git-rész írásai lezárva, mielőtt a gh-hívások (hálózat) indulnak
     if gh_prs:
         prs = sync_gh(c, gh_prs, gh_threads, rep)
     else:
