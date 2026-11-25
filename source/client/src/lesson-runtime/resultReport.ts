@@ -3,6 +3,7 @@ import { noteResultResponse } from "./resultAwaiting";
 import { apiRequest, resultPartialReady, warmResultToken } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
+import { attemptDeadline } from "@shared/attempt-deadline";
 import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapshotDue, type SnapshotState } from "@shared/quiz-round";
 import { isRetryableRequestError } from "@shared/request-retry";
 import { createRoundOwners, isFreshRound, roundHasActivity } from "@shared/round-owner";
@@ -161,19 +162,25 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
       const owner = roundOwners.bind(ownerKeyOf(storageKey, kind, roundId), seenFresh.current.has(experienceFingerprint({ ids: current.ids })));
       const mark = { roundId, count };
       state.pending = mark;
+      // Review #602: a határidő a TELJES kísérletre szól (az ujjlenyomat előkészítésétől) — lejáratkor a kísérlet saját függő jelzője
+      // felszabadul, és késői beküldés nem indul.
+      const deadline = attemptDeadline(SNAPSHOT_POST_TIMEOUT_MS);
+      const release = setTimeout(() => { if (state.pending === mark) state.pending = null; }, SNAPSHOT_POST_TIMEOUT_MS);
       void (async () => {
         let accepted = false;
         try {
-          const fingerprint = await getFingerprint().catch(() => undefined);
+          const fingerprint = await deadline.within(getFingerprint().catch(() => undefined));
+          const left = deadline.left();
+          if (left <= 0) return;
           const learnerNow = ({ ownerBinding }: { ownerBinding: boolean }) => (ownerBinding ? roundOwners.learnerFor(owner) : getLearnerToken() ?? undefined);
           const body = (ctx: { ownerBinding: boolean }) => {
             const learner = learnerNow(ctx);
             return { kind, roundId, partial: true, picks: Object.fromEntries(current.ids.map(id => [id, current.picks[id] ?? -1])), ...(fingerprint ? { fingerprint } : {}), ...(learner ? { learner } : {}), ...(current.startedAt > 0 ? { startedAt: current.startedAt } : {}), ...(current.lastAnsweredAt ? { lastAnsweredAt: current.lastAnsweredAt } : {}) };
           };
-          await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: true, timeout: SNAPSHOT_POST_TIMEOUT_MS });
+          await apiRequest("POST", `/api/lessons/${lessonId}/results`, body, { retries: 0, keepalive: true, timeout: left });
           accepted = true;
         } catch { /* hálózati hiba / 429 / 5xx / határidő: nem rögzül, a következő alkalommal újra megy */ }
-        finally { if (state.pending === mark) state.pending = null; }
+        finally { clearTimeout(release); if (state.pending === mark) state.pending = null; }
         if (!accepted) return;
         if (state.sent?.roundId !== roundId || state.sent.count < count) state.sent = mark;
         // A közben véglegesített kör késői 202-je nem írja vissza a jelzőt; körönként a legnagyobb elfogadott érték marad.
