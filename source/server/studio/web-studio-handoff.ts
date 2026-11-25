@@ -78,7 +78,11 @@ export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): {
       visualCount++; visualBytes += bytes; added = true;
       files.push({ name: unique(visual.name), kind: visual.kind, content: visual.content });
     }
-    if (added && !sources.some(s => s.url === source.url)) sources.push({ url: source.url, title: source.title });
+    if (added && !sources.some(s => s.url === source.url)) {
+      sources.push({ url: source.url, title: source.title });
+      // Review #593: a csak vizuális forrás pontos URL-je és címe a gyártáshoz is eljut (a fájlnév ehhez kevés: a query elveszhet).
+      files.push({ name: unique(`${names[index]}-forras.txt`), kind: "text", content: `Forrás: ${source.url}\nCím: ${source.title}\n\nEhhez a forráshoz csak kép / szkennelt dokumentum tartozik: ${files.filter(f => f.name.startsWith(names[index]) && f.kind !== "text").map(f => f.name).join(", ")}`.slice(0, 2000) });
+    }
   });
   return { files, sources };
 }

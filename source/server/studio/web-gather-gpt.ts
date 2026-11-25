@@ -71,8 +71,44 @@ export function usableSource(page: PublicPage): FetchedTeachingSource | undefine
     ...(page.format ? { format: page.format } : {}), ...(images.length ? { images } : {}), ...(page.needsOcr ? { needsOcr: true } : {}), ...(page.scan ? { scan: page.scan } : {}) };
   if (sourceIsErrorPage(source)) return undefined;
   if (source.text.trim().length >= MIN_SOURCE_CHARS) return source;
-  // W1b: szöveg nélkül is forrás a kép (JPG/PNG…) és a szkennelt PDF — a gyártás látó útja írja át.
-  return (page.format === "image" && images.length) || page.scan ? source : undefined;
+  // W1b: szöveg nélkül is forrás a kép (JPG/PNG…), a szkennelt PDF és a csak képet tartalmazó dokumentum (DOCX/PPTX…) — a
+  // gyártás látó útja írja át. Review #593: a döntés a méretszűrés után megmaradt képek jelenlétén múlik, nem a formátumon.
+  return images.length || page.scan ? source : undefined;
+}
+
+/** Review #593: dokumentum- vagy képcím (a vizuális kiegészítés célpontjai) — HTML oldalból nincs kép. */
+const VISUAL_URL = /\.(pdf|docx?|pptx?|ppt|odp|odt|mht(ml)?|jpe?g|png|webp|gif)$/i;
+export const VISUAL_ENRICH_MAX = 6;
+/**
+ * Review #593: az ELSŐDLEGES (Claude) gyűjtés a szövegeket a saját letöltőjével kapja, a képeket és a szkennelt PDF-et nem. Ezért
+ * a sikeres gyűjtés után a dokumentum- és képcímeket (legfeljebb 6) a védett dokumentum-móddal letöltjük, és ugyanazokkal a
+ * keretekkel (forrásonként ≤3 kép, összesen 12 MB) a forráshoz csatoljuk / csak vizuális forrásként hozzáadjuk. Hibatűrő: a
+ * kiegészítés hibája a szöveges gyűjtést nem rontja.
+ */
+export async function enrichWithVisuals(downloaded: FetchedTeachingSource[], urls: string[], opts: { signal?: AbortSignal; download?: (url: string, signal?: AbortSignal) => Promise<PublicPage> } = {}): Promise<FetchedTeachingSource[]> {
+  const download = opts.download ?? ((url: string, signal?: AbortSignal) => fetchPublicPage(url, { signal, documents: true }));
+  const isVisualUrl = (u: string) => { try { return VISUAL_URL.test(new URL(u).pathname); } catch { return false; } };
+  const targets = [...new Set([...downloaded.map(s => s.url), ...urls])].filter(isVisualUrl).slice(0, VISUAL_ENRICH_MAX);
+  if (!targets.length || opts.signal?.aborted) return downloaded;
+  const out = [...downloaded];
+  const settled = await Promise.allSettled(targets.map(url => download(url, opts.signal)));
+  for (const result of settled) {
+    if (result.status !== "fulfilled" || opts.signal?.aborted) continue;
+    const usable = usableSource(result.value);
+    if (!usable || (!usable.images?.length && !usable.scan)) continue;
+    const used = out.reduce((n, s) => n + visualBytes(s), 0);
+    const at = out.findIndex(s => s.url === usable.url || s.url === result.value.url);
+    if (at >= 0) {
+      const current = out[at];
+      const merged = { ...current, ...(usable.images?.length ? { images: usable.images } : {}), ...(usable.scan ? { scan: usable.scan } : {}) };
+      const fit = fitVisualBudget(merged, used - visualBytes(current));
+      if (fit) out[at] = fit;
+    } else if (out.length < GPT_GATHER_MAX_SOURCES) {
+      const fit = fitVisualBudget(usable, used);
+      if (fit && (fit.images?.length || fit.scan || fit.text.trim().length >= MIN_SOURCE_CHARS)) out.push(fit);
+    }
+  }
+  return out;
 }
 
 export type GptSearch = (request: { model: string; system: string; user: string; signal?: AbortSignal }) => Promise<{ output: ResponsesOutputItem[]; usage?: { input_tokens?: number; output_tokens?: number } }>;

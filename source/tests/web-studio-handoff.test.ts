@@ -112,12 +112,18 @@ test("B3 + B4: kép → image, szkennelt PDF → pdf, beágyazott kép → image
   const scan = { url: "https://pelda.hu/szkennelt.pdf", title: "Szkennelt", text: "", format: "pdf" as const, images: [], needsOcr: true, scan: { mime: "application/pdf" as const, dataUrl: "data:application/pdf;base64,JVBERi0=" } };
   const doc = { ...page(1), format: "docx" as const, images: [png(2), png(3)] };
   const { files, sources } = webSourcesToOneStepFiles([doc, photo, scan]);
-  assert.deepEqual(files.map(f => f.kind), ["text", "image", "image", "image", "pdf"]);
+  // Review #593: a csak vizuális forrás mellé egy rövid forrásfejléc (URL + cím) is jár a gyártáshoz.
+  assert.deepEqual(files.map(f => f.kind), ["text", "image", "image", "image", "text", "pdf", "text"]);
+  const header = files.filter(f => f.kind === "text" && f.name.endsWith("-forras.txt"));
+  assert.equal(header.length, 2);
+  assert.match(header[0].content, /^Forrás: https:\/\/pelda\.hu\/terkep\.png\nCím: Térkép/);
+  assert.match(header[1].content, /szkennelt\.pdf/);
   assert.equal(new Set(files.map(f => f.name)).size, files.length);
   assert.ok(files.find(f => f.kind === "pdf")?.content.startsWith("data:application/pdf;base64,"));
   assert.deepEqual(sources.map(s => s.url), [doc.url, photo.url, scan.url]);
   const crowd = webSourcesToOneStepFiles(Array.from({ length: 5 }, (_, i) => ({ url: `https://pelda.hu/kep${i}.png`, title: `K${i}`, text: "", format: "image" as const, images: [png(10 + i, 3 * 1024 * 1024), png(20 + i)] })));
   const visual = crowd.files.filter(f => f.kind !== "text");
+  assert.ok(crowd.files.filter(f => f.kind === "text").every(f => f.content.startsWith("Forrás: https://pelda.hu/kep")));
   assert.ok(visual.length <= MAX_VISUAL_FILES);
   assert.ok(visual.reduce((s, f) => s + Math.ceil(f.content.length * 3 / 4), 0) <= MAX_VISUAL_BYTES);
 });
