@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bankPacketContract, experienceQuizSchema, QUIZ_FORMATS, quizFormatProblems } from "../shared/lesson-experience";
+import { bankPacketContract, experienceQuizSchema, QUIZ_FORMATS, quizDuplicateKey, quizFormatProblems } from "../shared/lesson-experience";
 import { gradeQuiz } from "../shared/lesson-result-email";
 import { strictPacketSchema } from "../server/studio/bank-schema";
 
@@ -52,4 +52,22 @@ test("a szerződés a típusokat és a keverést kéri (változatosság BE); a s
   assert.equal(strictQuiz.safeParse(quizItem).success, false, "a strict séma a mezőt kéri");
   const kiQuiz = strictPacketSchema({ methodMin: 0, taskCount: 0, taskTarget: 0, taskMax: 0, quizCount: 1, quizTarget: 1, quizMax: 1, language: false }).shape.quiz.element;
   assert.equal(kiQuiz.safeParse(quizItem).success, true, "KI: a régi séma (format nélkül)");
+});
+
+test("review #603: a számolós opció tört, vegyes tört és tagolt egész is lehet (mértékegységgel is)", () => {
+  for (const options of [["1/2", "1/3", "2/3"], ["1/2 kg", "1/4 kg", "3/4 kg"], ["1 000", "10 000", "100"], ["2 1/2", "1 1/2", "3"], ["−3,5 °C", "3,5 °C", "0 °C"], ["5 km/h", "10 km/h", "15 km/h"]]) {
+    const r = experienceQuizSchema.safeParse({ ...base, format: "number", options, question: "Mennyi?" });
+    assert.equal(r.success, true, `${options.join(" | ")}: ${r.success ? "" : r.error.issues.map(i => i.message).join("; ")}`);
+  }
+  for (const options of [["fél", "harmad", "negyed"], ["kg", "g", "t"]]) {
+    assert.equal(experienceQuizSchema.safeParse({ ...base, format: "number", options, question: "Mennyi?" }).success, false, options.join(" | "));
+  }
+});
+
+test("review #603: a kakukktojás-kérdés kulcsa az opciókészlettel együtt (eltérő készlet nem ismétlődés; azonos készlet átrendezve igen)", () => {
+  const q = (options: string[]) => ({ question: "Melyik nem illik a sorba?", options });
+  assert.notEqual(quizDuplicateKey(q(["alma", "körte", "szilva", "répa"])), quizDuplicateKey(q(["kutya", "macska", "ló", "asztal"])));
+  assert.equal(quizDuplicateKey(q(["alma", "körte", "szilva", "répa"])), quizDuplicateKey(q(["répa", "szilva", "körte", "alma"])));
+  const odd = (question: string, options: string[]) => ({ question, options, format: "oddOneOut" });
+  assert.notEqual(quizDuplicateKey(odd("Melyik a kakukktojás?", ["1", "3", "5", "6"])), quizDuplicateKey(odd("Melyik a kakukktojás?", ["2", "4", "7", "8"])));
 });
