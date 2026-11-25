@@ -1,7 +1,7 @@
 // docs/specs/2026-11-23-vak-kor-kivezetes.md: a helyi (GPU) ellenőr tiszta függvényei.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
+import { buildPrompt, classifyModelResponse, reviewChunk, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
 
 const DIFF = [
   'diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1 +1 @@', '-x', '+y',
@@ -145,4 +145,38 @@ test('töredék (review #588): a középső töredék újradarabolása megtartja
   assert.match(again[0], /töredék 1\/\d+; eleje: vágott; vége: vágott/, 'az örökölt vágott eleje megmarad');
   assert.match(again.at(-1), /eleje: vágott; vége: vágott/, 'az örökölt vágott vége megmarad');
   assert.ok(again.every((x) => (x.split('\n')[0].match(/töredék/g) || []).length === 1), 'egy jelölés fejlécenként');
+});
+
+test('classifyModelResponse: a token repeat limit 500 értelmezhetetlen válasz (felezés), a többi hiba változatlan', () => {
+  assert.deepEqual(classifyModelResponse(500, '{"error":"prediction aborted, token repeat limit reached"}'), { kind: 'loop' });
+  assert.deepEqual(classifyModelResponse(404, '{"error":"model not found"}'), { kind: 'unavailable' });
+  assert.deepEqual(classifyModelResponse(500, '{"error":"CUDA error: out of memory"}'), { kind: 'error' });
+  assert.deepEqual(classifyModelResponse(200, '{"message":{"content":"{}"}}'), { kind: 'ok', content: '{}' });
+  assert.deepEqual(classifyModelResponse(200, 'nem json'), { kind: 'ok', content: '' });
+});
+
+// Review #590: a callModelOnce → reviewChunk út helyettesített Ollama-válaszokkal (helyi HTTP-szerver).
+async function withFakeOllama(handler, fn) {
+  const { createServer } = await import('node:http');
+  const srv = createServer((req, res) => { let b = ''; req.on('data', (d) => { b += d; }); req.on('end', () => { const [status, body] = handler(JSON.parse(b).messages[0].content); res.writeHead(status, { 'content-type': 'application/json' }); res.end(body); }); });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  try { return await fn(`http://127.0.0.1:${srv.address().port}`); } finally { srv.close(); }
+}
+const LOOP = [500, JSON.stringify({ error: 'prediction aborted, token repeat limit reached' })];
+const ok = (line) => [200, JSON.stringify({ message: { content: JSON.stringify({ verdict: 'CONCERNS', findings: [{ line, severity: 'medium', issue: `lelet ${line}` }] }) } })];
+const bigChunk = () => { const body = Array.from({ length: 300 }, (_, i) => `+sor${i + 1} = ${'x'.repeat(30)}`); return { file: 'n.py', text: ['diff --git a/n.py b/n.py', '--- /dev/null', '+++ b/n.py', '@@ -0,0 +1,300 @@', ...body].join('\n') + '\n' }; };
+
+test('reviewChunk (review #590): a nagy darab token-repeat 500-ára felez, a gyermekdarabok leleteit hiánytalanul gyűjti', async () => {
+  const chunk = bigChunk();
+  const calls = [];
+  const res = await withFakeOllama((prompt) => { const m = /\+(\d+),(\d+) @@/.exec(prompt.slice(prompt.indexOf('<<<BEGIN'))); calls.push(Number(m[2])); return Number(m[2]) >= 300 ? LOOP : ok(Number(m[1])); }, (url) => reviewChunk(url, 'x', chunk, 0));
+  assert.ok(Array.isArray(res), 'van eredmény (nem null)');
+  assert.equal(calls.filter((n) => n >= 300).length, 2, 'a nagy darab két próbája hurok');
+  assert.ok(res.length >= 2, 'a gyermekdarabok leletei mind megvannak');
+  assert.equal(res[0].line, 1, 'az első gyermekdarab az 1. sornál kezd');
+});
+
+test('reviewChunk (review #590): tartós hurok → null (sikertelen ellenőrzés, nem üres leletlista)', async () => {
+  const res = await withFakeOllama(() => LOOP, (url) => reviewChunk(url, 'x', bigChunk(), 0));
+  assert.equal(res, null);
 });
