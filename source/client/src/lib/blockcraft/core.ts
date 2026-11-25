@@ -551,13 +551,12 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     st.ores = st.ores.filter((r) => r.x !== o.x || r.y !== o.y || r.z !== o.z);
   };
 
-  function ensureRuneNear(): void {
-    // Az elfogyott / elbányászott (pl. lerakott blokk alá került) érc kikerül a listából.
-    st.ores = st.ores.filter((o) => vGet(st.world, o.x, o.y, o.z) === RUNE_ORE);
-    const p = opts.player();
-    if (nearestRune(st.ores, p.x, p.z).dist <= RUNE_NEAR_RADIUS) return;
-    if (st.ores.length >= RUNE_MAX) {
-      // A legtávolabbi érc „átköltözik” a játékos közelébe.
+  /**
+   * Közös kapacitáskezelés (review #484, core.ts:600): ha a lista RUNE_MAX-on áll, a játékostól legtávolabbi érc eltűnik
+   * (levegő + runeGone), hogy az új érc beférjen — a felfedezéses beszúrás is ezen megy át (a nézet csak 32 jelzőfényt rajzol).
+   */
+  function makeRoomForRune(p: { x: number; z: number }): void {
+    while (st.ores.length >= RUNE_MAX) {
       let far = 0;
       let farD = -1;
       st.ores.forEach((o, i) => {
@@ -572,6 +571,14 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       emit({ type: "runeGone", ore: gone });
       st.ores.splice(far, 1);
     }
+  }
+
+  function ensureRuneNear(): void {
+    // Az elfogyott / elbányászott (pl. lerakott blokk alá került) érc kikerül a listából.
+    st.ores = st.ores.filter((o) => vGet(st.world, o.x, o.y, o.z) === RUNE_ORE);
+    const p = opts.player();
+    if (nearestRune(st.ores, p.x, p.z).dist <= RUNE_NEAR_RADIUS) return;
+    makeRoomForRune(p);
     const ore = spawnRuneOreNear(st.world, rng, p.x, p.z);
     if (ore) {
       st.ores.push(ore);
@@ -597,6 +604,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
     emit({ type: "mined", x: target.x, y: target.y, z: target.z, t, xp });
     if (reveal) {
       const ore = { x: target.x, y: target.y, z: target.z };
+      makeRoomForRune(opts.player());
       st.ores.push(ore);
       revealedAt = clock;
       emit({ type: "runeSpawn", ore });
@@ -639,10 +647,17 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
    */
   function touchRune(at: Pos): boolean {
     if (st.phase !== "play") return false;
-    if (st.lock && !st.lock.resolved) return false; // egyszerre egy zár
     if (vGet(st.world, at.x, at.y, at.z) !== RUNE_ORE) return false;
+    // Review #484 (core.ts:645, L2): az elutasított érintés elfogyasztja a tartást — a fix lépésű hurok később NEM nyit
+    // kérdést új lenyomás nélkül (a gyerek szándékosan, újra érinti meg az ércet).
+    const reject = () => {
+      st.mining.pressing = false;
+      st.mining.pressMs = 0;
+      return false;
+    };
+    if (st.lock && !st.lock.resolved) return reject(); // egyszerre egy zár
     const q = opts.questions();
-    if (q && (q.finished() || !q.canAsk())) return false;
+    if (q && (q.finished() || !q.canAsk())) return reject();
     // Saját másolat csak tényleges érintéskor (a tartás minden lépésben hívja — a hurokban nincs foglalás, review #484 L4).
     const ore = { x: at.x, y: at.y, z: at.z };
     if (!q) {
@@ -658,7 +673,7 @@ export function createRuneMine(opts: RuneMineOptions): RuneMine {
       breakRune(ore, "free");
       return true;
     }
-    return false;
+    return reject();
   }
 
   function clearResolvedLock(): void {
