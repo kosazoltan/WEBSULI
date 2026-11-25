@@ -46,7 +46,8 @@ import { withCurriculum } from "./curriculum";
 import { loadCurriculumContent } from "./curriculum/load";
 import { MATERIAL_CAPTURE_SCRIPT, rewriteLocationAssignments, withLearnerScript } from "./lib/material-capture";
 import { SPEECH_BRIDGE_SCRIPT } from "./lib/speech-bridge";
-import { lessonResultsRouter } from "./lesson-result-email";
+import { lessonResultsRouter, resultPartialEmailEnabled } from "./lesson-result-email";
+import { resultCombinedEmailEnabled } from "./lesson-result-combine";
 import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
 import { createAdventPreviewRouter } from "./advent/preview";
@@ -79,6 +80,8 @@ import { createPlayerAdminRouter } from "./player/admin-routes";
 import { playerLinkBaseUrl } from "./player/email-template";
 import { playerAccountsEnabled } from "./player/require-player";
 import { getPlayerSessionId } from "./player/session";
+import { registerTrackRoutes } from "./tracks-routes";
+import { trackOption } from "@shared/tracks";
 import { getRealtime } from "./realtime";
 import { createRtRouter } from "./routes/rt";
 import { ViewDedup } from "./lib/view-dedup";
@@ -1020,7 +1023,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Frontend fetches this token and includes it in all mutating requests (POST/PUT/DELETE)
   app.get('/api/csrf-token', (req: Request, res) => {
     const csrfToken = generateToken(req);
-    res.json({ csrfToken });
+    // Eredmény-e-mail B4b: a kör-kilét kötését (a kliens csak a rögzített párosítással egyező tokent küldi) a B4 kapcsolója hirdeti.
+    // Review #586: az összevont levél (U4b) is kikényszeríti a kötést — azt is hirdetni kell.
+    res.json({ csrfToken, ...(resultPartialEmailEnabled() || resultCombinedEmailEnabled() ? { resultOwnerBinding: true } : {}) });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks
@@ -1919,6 +1924,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ADMIN-ONLY route - Update material
+  // #1986: külön tananyagcsoportok (6-osztályos gimnáziumi felvételi) — saját csoportok és admin-tagság.
+  registerTrackRoutes(app, { pool: dbPool, invalidateFiles: invalidateHtmlFilesCache });
+
   app.patch("/api/html-files/:id", isAuthenticatedAdmin, async (req: Request, res) => {
     try {
       // Admin authentication required
@@ -1941,6 +1949,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({
             message: "Az osztály értékének 0 és 12 között kell lennie"
           });
+        }
+        // #1986 (review #582): csoportos anyag évfolyama nem állítható el a csoport tartalmi évfolyamáról (gimi6 → 6.).
+        const tracked = await dbPool.query<{ tracks: string[] }>(`SELECT tracks FROM html_files WHERE id = $1`, [req.params.id]);
+        const clash = (tracked.rows[0]?.tracks ?? []).map((t) => trackOption(t)).find((o) => o && o.contentGrade !== classroom);
+        if (clash) {
+          return res.status(400).json({ message: `Ez az anyag a(z) „${clash.label}” csoportban van, ezért ${clash.contentGrade}. osztályos marad — előbb vedd ki a csoportból.` });
         }
         updates.classroom = classroom;
       }

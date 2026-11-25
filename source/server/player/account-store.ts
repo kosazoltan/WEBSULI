@@ -384,6 +384,8 @@ export function createPlayerAccountStore(pool: Db) {
         );
         const sessions = await client.query(`DELETE FROM session WHERE sess -> 'player' ->> 'id' = $1`, [id]);
         const account = await client.query(`DELETE FROM player_accounts WHERE id = $1`, [id]);
+        // #1986 (review #582): a postafiók csoport-hozzárendelése is törlődik — a törlés a címet és a fiókadatokat ígéri.
+        await client.query(`DELETE FROM track_assignments WHERE email_key = $1`, [accountEmailKey(email)]);
         await renumberMailboxDuplicates(client, accountEmailKey(email));
         return { account: account.rowCount ?? 0, codes: codes.rowCount ?? 0, sessions: sessions.rowCount ?? 0 };
       });

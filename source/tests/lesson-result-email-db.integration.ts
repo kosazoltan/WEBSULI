@@ -15,7 +15,7 @@ assert.equal(url.pathname, "/websuli_test");
 assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a-f0-9]{12}$/);
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, roundKeyOf, sendLessonResult, sendPracticeResult, setResultSender } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, roundKeyOf, sendLessonResult, sendPracticeResult, setResultSender, setFinalMarkerFault, setOwnerCheckFault, setFinalClaimFault, setPairingFault } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; html: string; to: string }> = [];
 /** S4: a fixture első feladata gépileg szigorított csoporttal (a minta egy szava kötelező, `tightened`-ként jelölve). */
@@ -391,4 +391,152 @@ test("S4c: a küszöb alatt nincs lazítás; ≥ 20 kör és ≥ 40 % téves elu
   assert.equal((await db.select().from(lessons).where(eq(lessons.id, "result-tightened")))[0].version, 2);
   const runs = await db.execute(sql`select snapshot->>'state' as state, snapshot->'definition'->>'mode' as mode from lesson_workflow_runs where owner_id = 's4c-owner'`);
   assert.ok(runs.rows.some((r) => (r as { mode: string; state: string }).mode === "relax" && (r as { state: string }).state === "done"), JSON.stringify(runs.rows));
+});
+
+/* Bontás B4a (#510 R27, R42, R47 szerver, R49 c): körönként egy végleges levél, kiléttől függetlenül — a `RESULT_PARTIAL_EMAIL` kapcsoló mögött. */
+const postQuiz = (roundId: string, fingerprint: string, extra: Record<string, unknown> = {}) => {
+  const q = lesson.experience!.quiz;
+  return fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "quiz", roundId, picks: { [q[0].id]: q[0].correctIndex }, fingerprint, ...extra }) });
+};
+const withFlag = async (value: string | undefined, fn: () => Promise<void>) => {
+  const previous = process.env.RESULT_PARTIAL_EMAIL;
+  if (value === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = value;
+  try { await fn(); } finally { if (previous === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = previous; }
+};
+
+test("B4a: kapcsoló KI — a főági viselkedés változatlan (két kilét két levélpár, jelzősor nem íródik)", async () => {
+  await withFlag(undefined, async () => {
+    sent.length = 0;
+    assert.equal((await postQuiz("b4-off", "fp-a")).status, 202);
+    await waitFor(() => sent.length === 2);
+    const res = await postQuiz("b4-off", "fp-b");
+    assert.deepEqual(await res.json(), { queued: true });
+    await waitFor(() => sent.length === 4);
+    assert.equal(sent.length, 4);
+    const marker = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKeyOf("final-round", "quiz", "b4-off"))));
+    assert.equal(marker.length, 0, "KI állásban nem íródik végleges jelzősor");
+  });
+});
+
+test("B4a (R27): kapcsoló BE — ugyanannak a körnek más kilétű ismétlése duplikátum, második levél nem megy; azonos kilét a pótlásra fut", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-a")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-b")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-on", "fp-a")).json(), { queued: true }, "azonos kilét: a címzettenkénti pótlásra fut");
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 2, "egy levélpár a körre");
+  });
+});
+
+test("B4a (R42): a jelzősor után, a 202 előtt megszakadt első kérés — az eredeti beküldő ismétlése küld, más kilét duplikátum", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    setFinalClaimFault(() => { throw new Error("megszakadt"); });
+    try { assert.equal((await postQuiz("b4-r42", "fp-a")).status, 500); } finally { setFinalClaimFault(null); }
+    assert.deepEqual(await (await postQuiz("b4-r42", "fp-b")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-r42", "fp-a")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (R49 c, R51 L2): a jelzősor írásának és a tulajdonos-lekérdezésnek az átmeneti hibája 503 a 202 előtt; az élettartam-frissítés hibája nem", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    setFinalMarkerFault(stage => { if (stage === "insert") throw new Error("db"); });
+    try { assert.equal((await postQuiz("b4-503", "fp-a")).status, 503); } finally { setFinalMarkerFault(null); }
+    assert.deepEqual(await (await postQuiz("b4-503", "fp-a")).json(), { queued: true }, "a hiba után rögzítés nélkül újrapróbálható");
+    await waitFor(() => sent.length === 2);
+    setOwnerCheckFault(() => { throw new Error("db"); });
+    try { assert.equal((await postQuiz("b4-503", "fp-b")).status, 503); } finally { setOwnerCheckFault(null); }
+    setFinalMarkerFault(stage => { if (stage === "ttl") throw new Error("db"); });
+    try { assert.deepEqual(await (await postQuiz("b4-503", "fp-b")).json(), { queued: false, duplicate: true }, "a tulajdonos-ellenőrzés a ttl-hiba után is fut"); }
+    finally { setFinalMarkerFault(null); }
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (R47 szerver): a párosítás feloldásának átmeneti hibája BE állásban 503 (nem vendég); KI állásban a régi vendég-út", async () => {
+  setPairingFault(() => { throw new Error("db"); });
+  try {
+    await withFlag("on", async () => {
+      sent.length = 0;
+      assert.equal((await postQuiz("b4-pair", "fp-a", { learner: "token-xyz" })).status, 503);
+      await new Promise(r => setTimeout(r, 200));
+      assert.equal(sent.length, 0, "rögzítés és levél nélkül");
+    });
+    await withFlag(undefined, async () => {
+      assert.deepEqual(await (await postQuiz("b4-pair-off", "fp-a", { learner: "token-xyz" })).json(), { queued: true });
+      await waitFor(() => sent.length === 2);
+    });
+  } finally { setPairingFault(null); }
+});
+
+test("B4a (PR #571 review): BE állásban csak ismeretlen azonosítójú beküldés nem foglal jelzőt — egy későbbi más kilétű érvényes beküldés küld", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    const res = await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b4-empty", picks: { "nincs-ilyen": 0 }, fingerprint: "fp-x" }) });
+    assert.deepEqual(await res.json(), { queued: false });
+    assert.deepEqual(await (await postQuiz("b4-empty", "fp-y")).json(), { queued: true });
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2);
+  });
+});
+
+test("B4a (PR #571 review): a duplikátum a levéltől független feladatmérést nem hagyja ki", async () => {
+  await withFlag("on", async () => {
+    sent.length = 0;
+    const task = lesson.experience!.tasks[0];
+    const post = (fp: string, ip: string) => fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ kind: "tasks", roundId: "b4-tasks-dup", answers: { [task.id]: task.sample }, fingerprint: fp }) });
+    assert.deepEqual(await (await post("fp-t1", "10.0.0.1")).json(), { queued: true });
+    assert.deepEqual(await (await post("fp-t2", "10.0.0.2")).json(), { queued: false, duplicate: true });
+    await new Promise(r => setTimeout(r, 600));
+    const rows = await db.select().from(taskResults).where(eq(taskResults.lessonId, "result-published"));
+    const keys = new Set(rows.filter(r => r.roundKey === roundKeyOf("guest:fp-t1", "tasks", "b4-tasks-dup") || r.roundKey === roundKeyOf("guest:fp-t2", "tasks", "b4-tasks-dup")).map(r => r.roundKey));
+    assert.equal(keys.size, 2, "mindkét beküldő feladateredménye rögzül");
+    assert.equal(sent.filter(m => /— Feladatok —/.test(m.subject)).length, 2, `levélpár csak egy: ${JSON.stringify(sent.map(m => m.subject.slice(0, 80)))}`);
+  });
+});
+
+test("B4a (PR #571 review, vállalt átmenet): a KI alatt elküldött kör BE-n — legfeljebb egy további levélpár (az új kilét rögzít), utána duplikátum", async () => {
+  await withFlag(undefined, async () => {
+    sent.length = 0;
+    await postQuiz("b4-transition", "fp-old");
+    await waitFor(() => sent.length === 2);
+  });
+  await withFlag("on", async () => {
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-new")).json(), { queued: true });
+    await waitFor(() => sent.length === 4);
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-third")).json(), { queued: false, duplicate: true });
+    assert.deepEqual(await (await postQuiz("b4-transition", "fp-old")).json(), { queued: true }, "az eredeti kilét a saját során fut (pótlás)");
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 4, "az eredeti kilét mindkét címzettje már kézbesített — nincs újabb levél");
+  });
+});
+
+test("B5a-0: kapcsoló nélkül a pillanatkép (`partial: true`) NEM végleges — 202 { queued: false }, levél és kézbesítési sor nélkül", async () => {
+  const previous = process.env.RESULT_PARTIAL_EMAIL;
+  delete process.env.RESULT_PARTIAL_EMAIL;
+  try {
+    sent.length = 0;
+    const q = lesson.experience!.quiz;
+    const res = await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b5a0-partial", picks: { [q[0].id]: q[0].correctIndex }, fingerprint: "fp-p", partial: true }) });
+    assert.equal(res.status, 202);
+    assert.deepEqual(await res.json(), { queued: false, partial: true });
+    await new Promise(r => setTimeout(r, 300));
+    assert.equal(sent.length, 0);
+    const rows = await db.select().from(lessonResultEmails).where(and(eq(lessonResultEmails.lessonId, "result-published"), eq(lessonResultEmails.roundKey, roundKeyOf("guest:fp-p", "quiz", "b5a0-partial"))));
+    assert.equal(rows.length, 0, "a kör kulcsa nem foglalódik le — a későbbi végleges beküldés küldhet");
+    assert.equal((await fetch(`${base}/api/lessons/result-published/results`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "quiz", roundId: "b5a0-partial", picks: { [q[0].id]: q[0].correctIndex }, fingerprint: "fp-p" }) })).status, 202);
+    await waitFor(() => sent.length === 2);
+    assert.equal(sent.length, 2, "a végleges beküldés a pillanatkép után is küld");
+  } finally { if (previous === undefined) delete process.env.RESULT_PARTIAL_EMAIL; else process.env.RESULT_PARTIAL_EMAIL = previous; }
 });

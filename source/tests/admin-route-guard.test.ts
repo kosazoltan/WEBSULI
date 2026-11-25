@@ -37,6 +37,7 @@ const PINNED_ADMIN_ENDPOINTS = [
   "GET /api/static-audit",
   "POST /api/html-files",
   "PATCH /api/html-files/:id",
+  "PUT /api/html-files/:id/tracks", // #1986: anyag csoporttagsága (kézi admin-írás)
   "POST /api/html-files/reorder",
   "DELETE /api/html-files/:id",
   "POST /api/html-files/:id/send-email",
@@ -56,6 +57,7 @@ const PINNED_ADMIN_ENDPOINTS = [
 const OWN_DATA = new Set(["POST /api/player/export", "POST /api/player/account/delete/start", "POST /api/player/account/delete"]);
 
 const PUBLIC_ENDPOINTS: Record<string, string> = {
+  "GET /api/tracks/mine": "#1986: a bejelentkezett fiók saját csoportjai (vendégnek üres lista; csak a munkamenet saját fiókkulcsa)",
   "GET /auth/google": "Google-belépés indítása (OAuth)",
   "GET /auth/google/callback": "Google OAuth visszahívás (Passport, session-regenerate)",
   "POST /api/login": "helyi belépés — Origin-allowlist + login-korlát",
@@ -64,8 +66,10 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
   "POST /api/client-error": "böngészős hibajelentés — Origin-allowlist + IP-korlát + napi plafon",
   "GET /api/design-assets/:id/thumb": "nyilvános arculati kép (csak olvasás)",
   "GET /api/design-assets/:id": "nyilvános arculati kép (csak olvasás)",
+  "GET /api/source-images/:id": "D1H: a lecke kivágott forrásképe (nyilvános, tartalomcímzett, csak olvasás)",
   "POST /api/lessons/arbiter": "nyilvános döntőbíró — Origin-allowlist + IP-korlát, munkamenet-jog nélkül",
   "POST /api/lessons/:lessonId/results": "tanulói eredmény e-mail az adminoknak — CSRF + korlát",
+  "POST /api/lessons/:lessonId/results/status": "U4d: a saját várakozó eredményrész lekérdezése (a beküldéssel azonos kilét, csak tasks/quiz/null) — CSRF + korlát",
   "GET /api/advent/status": "adventi naptár — a kártya láthatósága; mellékhatás nélkül, flag mögött",
   "GET /api/advent/state": "adventi naptár — saját állapot olvasása; mellékhatás nélkül (sort nem hoz létre), IP-korlát",
   "POST /api/advent/grade": "adventi naptár — saját sor (évfolyam), CSRF + alanyonkénti és IP-korlát",

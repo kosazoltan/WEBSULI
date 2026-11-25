@@ -50,6 +50,8 @@ export const htmlFiles = pgTable("html_files", {
   content: text("content").notNull(),
   description: text("description"),
   classroom: integer("classroom").notNull().default(1),
+  /** #1986 (migrations/0046): külön tananyagcsoport-tagság (shared/tracks.ts), pl. ["gimi6"]. */
+  tracks: text("tracks").array().notNull().default(sql`'{}'::text[]`),
   contentType: varchar("content_type").notNull().default('html'),
   displayOrder: integer("display_order").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -245,6 +247,13 @@ export type InsertTag = z.infer<typeof insertTagSchema>;
 export type Tag = typeof tags.$inferSelect;
 
 // Material Tags - Many-to-many
+/** #1986 (migrations/0046): fiók–csoport hozzárendelés a P-020 fiókkulcsán (Google- és játékos-fiók). */
+export const trackAssignments = pgTable("track_assignments", {
+  track: varchar("track", { length: 32 }).notNull(),
+  emailKey: varchar("email_key", { length: 254 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({ pk: primaryKey({ columns: [table.track, table.emailKey] }) }));
+
 export const materialTags = pgTable("material_tags", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   materialId: varchar("material_id").notNull().references(() => htmlFiles.id),
@@ -1174,6 +1183,47 @@ export const lessonResultEmails = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({ roundUnique: uniqueIndex("lesson_result_emails_round_unique").on(table.lessonId, table.kind, table.roundKey) }),
+);
+
+/** U4 (docs/specs/2026-11-24-osszevont-eredmenylevel.md): a kétrészes lecke félretett végleges részeredménye (0047). */
+/** D1H-1 (migrations/0049): a forrás kivágott képei, tartalomcímzetten (sha256). */
+export const lessonSourceImages = pgTable("lesson_source_images", {
+  id: char("id", { length: 64 }).primaryKey(),
+  mime: varchar("mime", { length: 32 }).notNull(),
+  bytes: bytea("bytes").notNull(),
+  sourceUrl: text("source_url"),
+  sourceFile: text("source_file"),
+  page: smallint("page"),
+  credit: text("credit").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const lessonResultPending = pgTable(
+  "lesson_result_pending",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    lessonId: varchar("lesson_id").notNull().references(() => lessons.id, { onDelete: "cascade" }),
+    ownerKey: varchar("owner_key", { length: 128 }).notNull(),
+    kind: varchar("kind", { length: 8 }).notNull().$type<"tasks" | "quiz">(),
+    roundId: varchar("round_id", { length: 128 }).notNull(),
+    graded: jsonb("graded"),
+    learner: jsonb("learner"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    sentReason: varchar("sent_reason", { length: 8 }).$type<"pair" | "timeout">(),
+    /** U4b review #586 (0048): a pár közös kulcsa és a sikeres kézbesítés ideje (kézbesítetlen pár újrapróbálható). */
+    pairKey: char("pair_key", { length: 64 }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  },
+  (table) => ({
+    // Review #585: a 0047-es migráció CHECK-jei azonos néven (sémaexportból létrehozott táblán is éljenek).
+    kindCheck: check("lesson_result_pending_kind_check", sql`${table.kind} IN ('tasks', 'quiz')`),
+    sentReasonCheck: check("lesson_result_pending_sent_reason_check", sql`${table.sentReason} IN ('pair', 'timeout')`),
+    openHasContent: check("lesson_result_pending_open_has_content", sql`${table.sentAt} IS NOT NULL OR (${table.graded} IS NOT NULL AND ${table.learner} IS NOT NULL)`),
+    openUnique: uniqueIndex("lesson_result_pending_open_unique").on(table.lessonId, table.ownerKey, table.kind).where(sql`sent_at IS NULL`),
+    openAge: index("lesson_result_pending_open_age").on(table.createdAt).where(sql`sent_at IS NULL`),
+    undelivered: index("lesson_result_pending_undelivered").on(table.sentAt).where(sql`sent_at IS NOT NULL AND delivered_at IS NULL`),
+  }),
 );
 
 /**

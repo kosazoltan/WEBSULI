@@ -647,6 +647,9 @@ app.use((req, res, next) => {
       // K1b: a tiltás-karbantartás (kulcsrotáció-egyeztetés, megőrzés) csak élesben / PLAYER_BAN_MAINTENANCE=on mellett.
       const playerStore = createPlayerStore(dbPool);
       startPlayerCodeSweeper(() => playerStore.purgeOldCodes(), globalThis, banMaintenanceEnabled() ? playerStore.banMaintenance : null);
+      // U4c: az összevont eredménylevél söprője (lejárt rész jelölt levele, kézbesítetlen pótlása) — kapcsolótól függetlenül, E2E-ben nem.
+      const { startLessonResultSweeper } = await import("./lesson-result-sweeper");
+      startLessonResultSweeper();
       // Adventi naptár (terv E23, 16.6; végrehajtás S6): a régi névtelen / előnézeti sorok és a korábbi évadok értesítő-foglalásainak
       // takarítása induláskor és 24 óránként — a kapcsolótól függetlenül, E2E-ben nem.
       const adventStore = createAdventStore(dbPool);

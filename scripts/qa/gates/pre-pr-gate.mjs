@@ -13,6 +13,7 @@ import {
   STATUS, argValue, cmdResult, createGate, externalResult, isMain, makeContext, readEvidence, resolveVerdict, verdictResult, writeEvidence, writeLog,
 } from './lib.mjs';
 import { evidenceRecord, runPrePushSteps } from './pre-push-gate.mjs';
+import { feladatSzinkron } from './feladat-szinkron.mjs';
 import { stemOf } from './stage-gate.mjs';
 
 export const WRAPPER_CONFIG = 'playwright.gate.local.mts';
@@ -207,6 +208,8 @@ async function main() {
   // A pre-push bizonyítékot csak zöld esetben írjuk felül (egy korábbi zöld push-kaput egy bukott PR-kapu ne töröljön).
   if (code === 0) writeEvidence(ctx.evDir, `pre-push-${head}`, { ...rec, kind: 'pre-push', via: 'pre-pr-gate' });
   gate.log(`[pre-pr-gate] bizonyíték: pre-pr-${head.slice(0, 12)}${code === 0 ? ` + pre-push-${head.slice(0, 12)}` : ''} (ok=${code === 0})`);
+  // K-FELADATDB: a feladat-nyilvántartás szinkronja — nem blokkoló, a kapu eredményét nem érinti.
+  gate.log(`[pre-pr-gate] feladat-nyilvántartás: ${feladatSzinkron({ exec, root }).note}`);
   process.exit(code);
 }
 

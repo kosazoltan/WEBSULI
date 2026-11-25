@@ -14,6 +14,7 @@ import { readSourceStation, runSingleLesson, SingleRunError, singleRunResumable,
 import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { and, eq, or } from "drizzle-orm";
 import { SOURCE_VISUALS_SCHEMA_VERSION } from "../../../shared/source-visuals";
+import { sourceImagesEnabled } from "../../../shared/source-image";
 
 
 /**
@@ -73,12 +74,13 @@ export async function prepareFiles(files: ExtractorFile[]): Promise<ExtractorFil
 }
 
 /** A különálló kinyerés tartalmi lenyomata: ugyanazok a fájlok ugyanazt a térképet adják vissza (nincs második modellhívás). */
-export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled()): string {
+export function singleRunMapHash(files: ExtractorFile[], title?: string, sourceVisuals: boolean = sourceVisualsEnabled(), sourceImages: boolean = sourceImagesEnabled()): string {
   // Review #261: egyértelmű (JSON) kódolás — a fájlhatár nem csúszhat el (egy fájl tartalma nem utánozhat két fájlt).
   // A leltár funkciókapcsolója: KI állapotban a lenyomat a kapcsoló előttivel azonos (a régi térkép változatlanul visszajön).
   // Review J4 (S1a), BE állapotban: a lenyomat része a vizuális leltár sémaverziója — a leltár előtti, a KI állapotban kinyert vagy a
   // régi sémájú térképet ugyanarra a fájlra nem adja vissza jelzés nélkül; a séma változásakor új kinyerés készül.
-  return createHash("sha256").update(JSON.stringify(["single-run-map-2", ...(sourceVisuals ? [`source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`] : []), title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
+  // Review #596: a képkapcsoló BE állapotában a leltár photo + crop mezőket is kér — a régi (kivágás nélküli) térkép nem jöhet vissza.
+  return createHash("sha256").update(JSON.stringify(["single-run-map-2", ...(sourceVisuals ? [`source-visuals-${SOURCE_VISUALS_SCHEMA_VERSION}`] : []), ...(sourceVisuals && sourceImages ? ["source-images-1"] : []), title?.trim() ?? "", files.map((f) => [f.name, f.kind, f.content])])).digest("hex");
 }
 
 /**

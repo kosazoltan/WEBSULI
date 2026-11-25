@@ -7,6 +7,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { setupAuth } from "./auth";
 import { designAssetsRouter } from "./design-assets";
+import { sourceImagesRouter } from "./source-images";
 import errorReportRouter from "./routes/error-report";
 import clientErrorRouter from "./routes/client-error";
 import staticAuditRouter from "./routes/static-audit";
@@ -22,6 +23,8 @@ export async function mountAppRoutes(app: Express): Promise<Server> {
   app.use("/api/client-error", clientErrorRouter);
   app.use("/api/static-audit", staticAuditRouter);
   app.use("/api/design-assets", designAssetsRouter);
+  // D1H-1: a forrás kivágott képei (docs/specs/2026-11-25-d1h-kivagott-kep.md).
+  app.use("/api/source-images", sourceImagesRouter);
 
   return registerRoutes(app);
 }

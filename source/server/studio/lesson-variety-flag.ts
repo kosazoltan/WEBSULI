@@ -3,11 +3,16 @@ import { storedVarietyMarker } from "../../shared/lesson-feedback-openers";
 import { openingFormById } from "../../shared/lesson-opener";
 
 /**
- * Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (5. szakasz 1. pont): a tananyag-változatosság kapcsolója — `on` = BE, bármi más
- * és a hiány = KI (alapérték). A környezetet KIZÁRÓLAG ez a függvény olvassa; élesben a bekapcsolás tulajdonosi döntés a lánc végén.
+ * A tananyag-változatosság kapcsolója (spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md 5.1; tulajdonosi döntés 2026-11-24:
+ * „azonnal minden új leckére” — docs/specs/2026-11-24-valtozatossag-alapbol-be.md): élesben ALAPBÓL BE; az explicit `on` / `off`
+ * mindig nyer (`off` = vészfék). A környezetet KIZÁRÓLAG ez a függvény olvassa.
  */
 export function lessonVarietyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return (env.STUDIO_LESSON_VARIETY ?? "").trim().toLowerCase() === "on";
+  const v = (env.STUDIO_LESSON_VARIETY ?? "").trim().toLowerCase();
+  if (v === "on") return true;
+  if (v === "off") return false;
+  // Beállítás nélkül: élesben (NODE_ENV=production, a `start` szkript) BE; tesztben és fejlesztésben a régi KI alap marad.
+  return (env.NODE_ENV ?? "").trim() === "production";
 }
 
 /**

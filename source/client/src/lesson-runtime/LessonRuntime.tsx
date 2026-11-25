@@ -1,6 +1,7 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { lessonHeaderGradeLabel } from "@shared/classrooms";
-import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand, Image as ImageIcon } from "lucide-react";
+import { SourceImageAnim } from "./blocks/source-image";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -320,6 +321,8 @@ export function LessonBlock({
       // S2a (review B1): hibás paraméterű forrás-ábrából a rajzoló semmit nem rajzol — fejléc üres törzzsel nem jelenhet meg, a blokk kimarad.
       if (sourceVisualProblems(block)) return null;
       // S2a (review J3): a szabálydoboz tónusfelirata a doboz SAJÁT fejléce — külön blokkfejléc nélkül (nem hangzik el és nem látszik kétszer).
+      // Review #594 (D1H): a kivágott forráskép a fejlécét maga rajzolja — betölthetetlen képnél a teljes blokk eltűnik.
+      if (block.animKind === "sourceImage") return <SourceImageAnim params={block.params} caption={block.caption} head={<BlockHead icon={ImageIcon} label={label ?? "Kép a forrásból"} kind="animate" />} />;
       if (block.animKind === "ruleBox") return <div className="space-y-2" data-block="animate"><Anim params={block.params} caption={block.caption} label={label} /></div>;
       // Review #279: a mozgókép és a próba blokk is blokkfejlécet kap (a sáv jelzőjével), mint a többi négy típus.
       return <div className="space-y-2" data-block="animate"><BlockHead icon={PlayCircle} label={label ?? "Mozgókép"} kind="animate" /><Anim params={block.params} caption={block.caption} /></div>;
