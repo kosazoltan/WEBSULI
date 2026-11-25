@@ -24,6 +24,6 @@ export * from "./promptFit";
 export * from "./speech";
 export * from "./useQuestionDirector";
 export * from "./pointerTap";
-export { default as InlineQuestion, INLINE_QUESTION_SKINS, PlaySpeechToggle, type InlineQuestionProps, type InlineQuestionSkin } from "./InlineQuestion";
+export { default as InlineQuestion, INLINE_QUESTION_SKINS, PLAY_QUESTION_RECHECK_EVENT, PlaySpeechToggle, type InlineQuestionProps, type InlineQuestionSkin } from "./InlineQuestion";
 export { default as WhyButton, type WhyButtonProps } from "./WhyButton";
 export { default as ResultReview, RESULT_REVIEW_EXPLANATION_MAX, clipExplanation, type ResultReviewProps } from "./ResultReview";

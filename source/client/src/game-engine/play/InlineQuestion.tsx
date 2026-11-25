@@ -41,6 +41,12 @@ import WhyButton from "./WhyButton";
 
 export type InlineQuestionSkin = "ocean" | "rock" | "mine" | "neon" | "arena" | "space" | "storm";
 
+/**
+ * Újramérés-kérés (window-esemény): a befogadó játék küldi, ha a prompt sorkorlátját (CSS-változó) utólag módosította —
+ * az átméretezés-figyelő ezt nem látja (review #484). A mérés újrafut, a szint csak tovább léphet.
+ */
+export const PLAY_QUESTION_RECHECK_EVENT = "play-question-recheck";
+
 export const INLINE_QUESTION_SKINS: readonly InlineQuestionSkin[] = ["ocean", "rock", "mine", "neon", "arena", "space", "storm"];
 
 export type InlineQuestionProps = {
@@ -181,6 +187,10 @@ export default function InlineQuestion({
       last = now;
       remeasure();
     };
+    // Review #484: a befogadó játék a prompt sorkorlátját (CSS-változó) utólag szűkítheti — erre a mérés újrafut, de a szint
+    // NEM nullázódik (csak tovább léphet 0 → 1 → 2): így a levágott kérdés megkapja a „Mutasd”-ot, oszcilláció pedig nincs.
+    const recheck = () => setFit((cur) => ({ ...cur, epoch: cur.epoch + 1 }));
+    window.addEventListener(PLAY_QUESTION_RECHECK_EVENT, recheck);
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     if (typeof document !== "undefined" && document.fonts?.ready) {
@@ -190,6 +200,7 @@ export default function InlineQuestion({
     }
     return () => {
       alive = false;
+      window.removeEventListener(PLAY_QUESTION_RECHECK_EVENT, recheck);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
     };

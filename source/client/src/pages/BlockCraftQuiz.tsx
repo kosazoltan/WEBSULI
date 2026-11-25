@@ -101,6 +101,7 @@ import { requestGameFrame, cancelGameFrame } from "@/game-engine/mobile";
 import { useVocabQuizSource, vocabLevelForGrade, type VocabQuiz } from "@/game-engine/vocab";
 import {
   InlineQuestion,
+  PLAY_QUESTION_RECHECK_EVENT,
   ResultReview,
   bankPlayQuestion,
   createPointerTapTracker,
@@ -3245,7 +3246,11 @@ export default function BlockCraftQuiz() {
         const chromeBelow = card.getBoundingClientRect().bottom - pr.bottom;
         const room = bottomLimit - reserve - pr.top - Math.max(0, chromeBelow);
         const lines = Math.max(2, Math.min(7, Math.floor(room / lh)));
-        if (root.style.getPropertyValue("--bc-pq-lines") !== String(lines)) root.style.setProperty("--bc-pq-lines", String(lines));
+        if (root.style.getPropertyValue("--bc-pq-lines") !== String(lines)) {
+          root.style.setProperty("--bc-pq-lines", String(lines));
+          // Review #484: a szűkebb korlát levághatja a korábban beférő promptot — a kérdés-sáv mérje újra („Mutasd”).
+          window.dispatchEvent(new Event(PLAY_QUESTION_RECHECK_EVENT));
+        }
         if (!landscape) {
           const key = runes.map((el) => el.textContent ?? "").join("\u0001");
           if (runeFit.key !== key) {
