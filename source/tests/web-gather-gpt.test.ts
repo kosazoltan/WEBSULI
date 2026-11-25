@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { checkFetchUrl, fetchPublicPage, htmlToText, isPublicAddress, type RawRequest, type RawResponse } from "../server/studio/safe-fetch";
-import { candidateUrls, gatherWebSourcesGpt, usableSource } from "../server/studio/web-gather-gpt";
+import { candidateUrls, fitVisualBudget, GATHER_VISUAL_BUDGET, gatherWebSourcesGpt, usableSource } from "../server/studio/web-gather-gpt";
 
 /*
  * Spec 2026-10-15-tartalek-b4-webgyujtes (tulajdonosi döntés): a webes forrásgyűjtés GPT-6.1 Sol tartaléka — a GPT keres, a
@@ -204,4 +204,12 @@ test("B2: usableSource — kép és szkennelt PDF szöveg nélkül elfogadva, hi
   assert.equal(usableSource({ url: "https://a.hu/x", title: "Korlátozva", text: "", format: "image", images: [img(10)] }), undefined, "hibaoldal-cím");
   const many = usableSource({ url: "https://a.hu/d.pdf", title: "d", text: "x".repeat(400), format: "docx", images: [img(10), img(2_000_000), img(20), img(30), img(40)] });
   assert.deepEqual(many?.images?.map(i => i.bytes), [10, 20, 30]);
+});
+
+test("B2: a gyűjtés vizuális kerete — fölötte a szöveges forrás szövegként marad, a csak vizuális kimarad", () => {
+  const img = { mime: "image/png", dataUrl: "data:image/png;base64,AA==", bytes: 1_000_000, sourceUrl: "https://a.hu/k.png" };
+  const textual = { url: "https://a.hu/d", title: "d", text: "x".repeat(400), images: [img] };
+  assert.equal(fitVisualBudget(textual, 0), textual);
+  assert.deepEqual(fitVisualBudget(textual, GATHER_VISUAL_BUDGET), { url: "https://a.hu/d", title: "d", text: "x".repeat(400) });
+  assert.equal(fitVisualBudget({ url: "https://a.hu/k.png", title: "k", text: "", format: "image", images: [img] }, GATHER_VISUAL_BUDGET), undefined);
 });

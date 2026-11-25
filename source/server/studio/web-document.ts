@@ -7,9 +7,11 @@ import { decodeTransfer, mimeParam, readDocxText, readMhtText, sniffImageMime, s
  */
 export type WebFormat = "pdf" | "docx" | "pptx" | "odp" | "odt" | "ppt" | "mht" | "image" | "html" | "text";
 export type WebImage = { mime: string; dataUrl: string; bytes: number; sourceUrl: string; name?: string };
-export type WebDocument = { format: WebFormat; title: string; text: string; images: WebImage[]; needsOcr: boolean };
+/** W1b: a szkennelt (szövegréteg nélküli) PDF nyers másolata a látó átíráshoz (≤ `maxScanBytes`). */
+export type WebScan = { mime: "application/pdf"; dataUrl: string };
+export type WebDocument = { format: WebFormat; title: string; text: string; images: WebImage[]; needsOcr: boolean; scan?: WebScan };
 
-export const WEB_DOCUMENT_LIMITS = { maxImages: 8, maxImageBytes: 2 * 1024 * 1024, maxEntryBytes: 20 * 1024 * 1024, maxTotalBytes: 60 * 1024 * 1024, maxPdfPages: 120 } as const;
+export const WEB_DOCUMENT_LIMITS = { maxImages: 8, maxImageBytes: 2 * 1024 * 1024, maxEntryBytes: 20 * 1024 * 1024, maxTotalBytes: 60 * 1024 * 1024, maxPdfPages: 120, maxScanBytes: 8 * 1024 * 1024 } as const;
 
 const ZIP_SIG = [0x50, 0x4b, 0x03, 0x04];
 const CFB_SIG = Buffer.from("d0cf11e0a1b11ae1", "hex");
@@ -296,7 +298,9 @@ async function readPdf(bytes: Buffer): Promise<WebDocument> {
     }
     // A3: a szövegréteg nélküli (szkennelt) PDF nem hiba — a W1b látó modellel írja át; a vegyes PDF sem veszíthet oldalt.
     const needsOcr = empty > 0;
-    return { format: "pdf", title: "", text: needsOcr && empty === pdf.numPages ? "" : pages.join("\n\n"), images: [], needsOcr };
+    // W1b: a szkennelt PDF nyersen megy tovább a látó átíráshoz (a vegyes PDF is — a képes oldalai különben elvesznének).
+    const scan: WebScan | undefined = needsOcr && bytes.length <= WEB_DOCUMENT_LIMITS.maxScanBytes ? { mime: "application/pdf", dataUrl: `data:application/pdf;base64,${bytes.toString("base64")}` } : undefined;
+    return { format: "pdf", title: "", text: needsOcr && empty === pdf.numPages ? "" : pages.join("\n\n"), images: [], needsOcr, ...(scan ? { scan } : {}) };
   } finally { await pdf.destroy(); }
 }
 

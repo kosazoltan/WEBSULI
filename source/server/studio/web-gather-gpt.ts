@@ -47,11 +47,32 @@ export function candidateUrls(output: readonly ResponsesOutputItem[], max = GPT_
 }
 
 /** A letöltött oldal a Claude-úttal azonos szabállyal forrás-e (min. 80 karakter, nem hibaoldal). */
+/** W1b: forrásonként legfeljebb ennyi kép kerül tovább, egyenként legfeljebb ekkora (a mentett munkafolyamat mérete miatt). */
+export const SOURCE_IMAGE_LIMITS = { perSource: 3, maxBytes: 1024 * 1024 } as const;
+
+/** W1b: a gyűjtés teljes vizuális terhe (képek + szkennelt PDF) — a mentett munkafolyamat-ellenőrzőpont mérete miatt. */
+export const GATHER_VISUAL_BUDGET = 12 * 1024 * 1024;
+const visualBytes = (s: FetchedTeachingSource) => (s.images ?? []).reduce((n, i) => n + i.bytes, 0) + (s.scan ? Math.ceil(s.scan.dataUrl.length * 3 / 4) : 0);
+/**
+ * A keret fölött a forrás vizuális része elhagyva: a szöveges forrás szövegként marad, a csak vizuális forrás kimarad.
+ * `used`: az eddig elfogadott források vizuális terhe.
+ */
+export function fitVisualBudget(source: FetchedTeachingSource, used: number): FetchedTeachingSource | undefined {
+  if (used + visualBytes(source) <= GATHER_VISUAL_BUDGET) return source;
+  if (source.text.trim().length < MIN_SOURCE_CHARS) return undefined;
+  const { images: _images, scan: _scan, ...textOnly } = source;
+  return textOnly;
+}
+
 export function usableSource(page: PublicPage): FetchedTeachingSource | undefined {
+  const images = (page.images ?? []).filter(i => i.bytes <= SOURCE_IMAGE_LIMITS.maxBytes).slice(0, SOURCE_IMAGE_LIMITS.perSource);
   const source: FetchedTeachingSource = { url: page.url, title: page.title || page.url, text: page.text,
     // Review #592: a dokumentum-mód metaadatai (formátum, képek, szkennelt rész) a W1b-nek megmaradnak.
-    ...(page.format ? { format: page.format } : {}), ...(page.images?.length ? { images: page.images } : {}), ...(page.needsOcr ? { needsOcr: true } : {}) };
-  return source.text.trim().length >= MIN_SOURCE_CHARS && !sourceIsErrorPage(source) ? source : undefined;
+    ...(page.format ? { format: page.format } : {}), ...(images.length ? { images } : {}), ...(page.needsOcr ? { needsOcr: true } : {}), ...(page.scan ? { scan: page.scan } : {}) };
+  if (sourceIsErrorPage(source)) return undefined;
+  if (source.text.trim().length >= MIN_SOURCE_CHARS) return source;
+  // W1b: szöveg nélkül is forrás a kép (JPG/PNG…) és a szkennelt PDF — a gyártás látó útja írja át.
+  return (page.format === "image" && images.length) || page.scan ? source : undefined;
 }
 
 export type GptSearch = (request: { model: string; system: string; user: string; signal?: AbortSignal }) => Promise<{ output: ResponsesOutputItem[]; usage?: { input_tokens?: number; output_tokens?: number } }>;
@@ -117,7 +138,8 @@ export async function gatherWebSourcesGpt(input: WebResearchChatRequest, opts: {
       const batch = await Promise.allSettled(candidates.slice(i, i + GPT_GATHER_CONCURRENCY).map((url) => download(url, opts.signal)));
       for (const result of batch) {
         if (result.status !== "fulfilled") continue;
-        const source = usableSource(result.value);
+        const usable = usableSource(result.value);
+        const source = usable && fitVisualBudget(usable, sources.reduce((n, s) => n + visualBytes(s), 0));
         if (source && !sources.some((s) => s.url === source.url) && sources.length < GPT_GATHER_MAX_SOURCES) sources.push(source);
       }
     }

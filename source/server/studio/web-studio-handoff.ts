@@ -17,6 +17,9 @@ import { LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 /** The scope classifier receives every source at once — the web pages are capped to fit its window. */
 export const MAX_SOURCE_CHARS = 60_000;
 export const MAX_TOTAL_CHARS = 200_000;
+/** W1b: a gyártásba átadott vizuális fájlok (kép, szkennelt PDF) összkerete. */
+export const MAX_VISUAL_FILES = 6;
+export const MAX_VISUAL_BYTES = 10 * 1024 * 1024;
 /** A page cut to fit the remaining budget must keep at least this much; a page that fits whole always goes. */
 const MIN_TAIL_CHARS = 2_000;
 export const STUDIO_POLL_MS = 3_000;
@@ -56,6 +59,26 @@ export function webSourcesToOneStepFiles(downloaded: FetchedTeachingSource[]): {
     budget -= content.length;
     files.push({ name: names[index], kind: "text", content });
     sources.push({ url: source.url, title: source.title });
+  });
+  // W1b: a kép (JPG/PNG…), a szkennelt PDF és a dokumentumok beágyazott képei vizuális fájlként mennek a gyártásba — a látó út
+  // (`single-run/conversation.ts`: input_image / input_file) olvassa őket. Összkeret: darabszám és méret (a mentett futás miatt is).
+  let visualCount = 0, visualBytes = 0;
+  const used = new Set(files.map(f => f.name));
+  const unique = (name: string) => { let n = name.slice(0, 250); for (let i = 2; used.has(n); i++) n = `${name.slice(0, 245)}-${i}`; used.add(n); return n; };
+  const ext = (mime: string) => (mime === "image/jpeg" ? "jpg" : mime.split("/")[1] ?? "bin");
+  downloaded.forEach((source, index) => {
+    const visuals = [
+      ...(source.images ?? []).map((img, k) => ({ kind: "image" as const, name: `${names[index]}-kep-${k + 1}.${ext(img.mime)}`, content: img.dataUrl })),
+      ...(source.scan ? [{ kind: "pdf" as const, name: `${names[index]}-szkennelt.pdf`, content: source.scan.dataUrl }] : []),
+    ];
+    let added = false;
+    for (const visual of visuals) {
+      const bytes = Math.ceil((visual.content.length - visual.content.indexOf(",") - 1) * 3 / 4);
+      if (visualCount >= MAX_VISUAL_FILES || visualBytes + bytes > MAX_VISUAL_BYTES) continue;
+      visualCount++; visualBytes += bytes; added = true;
+      files.push({ name: unique(visual.name), kind: visual.kind, content: visual.content });
+    }
+    if (added && !sources.some(s => s.url === source.url)) sources.push({ url: source.url, title: source.title });
   });
   return { files, sources };
 }
