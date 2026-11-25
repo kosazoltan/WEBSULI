@@ -27,6 +27,8 @@ de csak OLVASVA (import / hivatkozás); az igazság forrása az SQL.
   vagy elfogadási feltétele, `round(100 * (kész egység + teljesült feltétel) / (összes egység + összes feltétel))`; ha egyik sincs,
   az állapotból becsült érték (`alap` jelöléssel): beadva 0, tervezve 5, folyamatban 30, review 70, beolvadt 85, elesitve 90,
   elo_ellenorizve 95, kesz 100, blokkolt/elvetve/felulirva 0.
+  Szülőfeladatnál minden (nem elvetett / felülírt) gyerek egy további „egység”, a gyerek saját %-ával (`v_sajat_keszultseg`),
+  így a szülő %-a a gyerekek haladását is mutatja.
 - D3 Állapotgép (fő lánc): `beadva → tervezve → folyamatban → review → beolvadt → elesitve → elo_ellenorizve → kesz`. A fő láncon
   előre szabad ugrani (pl. tervezve → beolvadt, ha a PR beolvadt), hátra csak `review → folyamatban` (változtatást kértek) és
   `beolvadt|elesitve → folyamatban` (visszavonás, regresszió). Mellékállapotok: `blokkolt` (bármely nem lezártból; onnan a fő lánc

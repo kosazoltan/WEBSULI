@@ -100,16 +100,28 @@ CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(code, title, goal, next_
 
 _PCT_CASE = " ".join(f"WHEN '{s}' THEN {p}" for s, p in PCT_ALAP.items())
 VIEWS = {
-    "v_keszultseg": f"""
-SELECT x.*, CASE WHEN x.nu + x.nk > 0 THEN CAST(round(100.0 * (x.du + x.mk) / (x.nu + x.nk)) AS INTEGER)
-                 ELSE CASE x.status {_PCT_CASE} ELSE 0 END END AS pct,
-       CASE WHEN x.nu + x.nk > 0 THEN 'meres' ELSE 'allapot' END AS alap
-FROM (SELECT t.id AS task_id, t.code, t.status,
+    # saját mérés (egység + feltétel; tartalék: állapot) — a gyerekfeladatok ebből számítanak
+    "v_sajat_keszultseg": f"""
+SELECT x.*, CASE WHEN x.nu + x.nk > 0 THEN 100.0 * (x.du + x.mk) / (x.nu + x.nk)
+                 ELSE CASE x.status {_PCT_CASE} ELSE 0 END END AS sajat
+FROM (SELECT t.id AS task_id, t.code, t.parent, t.status,
         (SELECT count(*) FROM task_units u WHERE u.task_id = t.id) AS nu,
         (SELECT coalesce(sum(u.done), 0) FROM task_units u WHERE u.task_id = t.id) AS du,
         (SELECT count(*) FROM task_criteria k WHERE k.task_id = t.id) AS nk,
         (SELECT coalesce(sum(k.met), 0) FROM task_criteria k WHERE k.task_id = t.id) AS mk
       FROM tasks t) x""",
+    # a szülő %-a: saját egységek + feltételek + gyerekfeladatonként egy „egység” a gyerek saját %-ával (elvetett / felülírt
+    # gyerek nem számít); kézzel nem írható, mindig számított
+    "v_keszultseg": f"""
+SELECT y.task_id, y.code, y.status, y.nu, y.du, y.nk, y.mk, y.nc,
+       CASE WHEN y.nu + y.nk + y.nc > 0 THEN CAST(round((100.0 * (y.du + y.mk) + y.cp) / (y.nu + y.nk + y.nc)) AS INTEGER)
+            ELSE CASE y.status {_PCT_CASE} ELSE 0 END END AS pct,
+       CASE WHEN y.nu + y.nk + y.nc > 0 THEN 'meres' ELSE 'allapot' END AS alap
+FROM (SELECT s.*,
+        (SELECT count(*) FROM v_sajat_keszultseg g WHERE g.parent = s.code AND g.status NOT IN ('elvetve', 'felulirva')) AS nc,
+        (SELECT coalesce(sum(g.sajat), 0) FROM v_sajat_keszultseg g
+          WHERE g.parent = s.code AND g.status NOT IN ('elvetve', 'felulirva')) AS cp
+      FROM v_sajat_keszultseg s) y""",
     "v_task_pr": """
 SELECT l.task_id, l.ref AS pr, l.state, l.extra FROM task_links l
 WHERE l.kind = 'pr' AND l.id = (SELECT l2.id FROM task_links l2 WHERE l2.task_id = l.task_id AND l2.kind = 'pr'
@@ -661,6 +673,7 @@ def sync_requirements(c) -> dict:
         return rep
     reqs = _rows(c.execute("SELECT code,title,category,status,superseded_by FROM requirements ORDER BY date, code"))
     covered = {r[0] for r in c.execute("SELECT requirement_code FROM tasks WHERE requirement_code IS NOT NULL")}
+    covered |= {r[0] for r in c.execute("SELECT ref FROM task_links WHERE kind='requirement'")}  # „lefedi” kötések
     codes = {r[0] for r in c.execute("SELECT code FROM tasks")}
     for r in reqs:
         if r["status"] not in OPEN_REQ or r["superseded_by"] or r["code"] in covered:
@@ -928,6 +941,81 @@ def cmd_szinkron(c, a):
     _out(a, rep, txt)
 
 
+# ---------------------------------------------------------------- visszatöltés (kurált ismert feladatok)
+FIELDS_VT = ("goal", "origin", "requirement_code", "parent", "szelet", "next_step", "blocker", "branch", "spec", "notes")
+
+
+def _full_sha(repo: str | None, sha: str) -> str:
+    if repo:
+        r = _git(repo, "rev-parse", "-q", "--verify", f"{sha}^{{commit}}")
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    return sha
+
+
+def visszatoltes(c, path: str, repo: str | None = None) -> dict:
+    """Idempotens: új feladat létrehozása; meglévőnél csak a hiányzó mező / egység / feltétel / hivatkozás pótlása, és az
+    állapot csak előre (az állapotgép szerint) lép. A kapcsoló-döntések INSERT OR IGNORE-ral kerülnek be."""
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    rep = {"uj": 0, "valtozas": 0}
+    for f in d.get("feladatok", []):
+        code = f["code"]
+        fields = {k: f.get(k) for k in FIELDS_VT if f.get(k) is not None}
+        t = get_task(c, code)
+        if not t:
+            new_task(c, code, f["title"], priority=f.get("priority", 3), source="visszatoltes", actor="visszatoltes", **fields)
+            rep["uj"] += 1
+            rep["valtozas"] += 1
+        else:
+            fill = {k: v for k, v in fields.items() if t[k] in (None, "")}
+            if fill:
+                rep["valtozas"] += update_fields(c, code, **fill)
+        tid = _tid(c, code)
+        n_u = c.execute("SELECT count(*) FROM task_units WHERE task_id=?", (tid,)).fetchone()[0]
+        for title in f.get("egysegek", [])[n_u:]:
+            add_unit(c, code, title)
+            rep["valtozas"] += 1
+        for seq in range(1, int(f.get("egysegek_kesz", 0)) + 1):
+            rep["valtozas"] += set_unit(c, code, seq, True, evidence=f.get("bizonyitek"))
+        n_k = c.execute("SELECT count(*) FROM task_criteria WHERE task_id=?", (tid,)).fetchone()[0]
+        for i, k in enumerate(f.get("kriteriumok", []), start=1):
+            k = k if isinstance(k, dict) else {"text": k}
+            if i > n_k:
+                add_criterion(c, code, k["text"])
+                rep["valtozas"] += 1
+            if k.get("met"):
+                rep["valtozas"] += set_criterion(c, code, i, True, evidence=k.get("evidence") or f.get("bizonyitek"))
+        links = [("pr", str(n), None) for n in f.get("prs", [])]
+        links += [("commit", _full_sha(repo, s), "main") for s in f.get("commits", [])]
+        links += [("spec", s, None) for s in ([f["spec"]] if f.get("spec") else []) + f.get("specek", [])]
+        links += [("requirement", r, None) for r in ([f["requirement_code"]] if f.get("requirement_code") else []) + f.get("lefedi", [])]
+        links += [("flag", n, None) for n in f.get("kapcsolok", [])]
+        links += [("kanban", k, None) for k in f.get("kanban", [])]
+        links += [(x["kind"], x["ref"], x.get("state")) for x in f.get("linkek", [])]
+        for kind, ref, st in links:
+            rep["valtozas"] += link(c, code, kind, ref, state=st)
+        want = f.get("status", "beadva")
+        cur = get_task(c, code)["status"]
+        if want != cur and can_transition(cur, want) and (want in MELLEK or cur in MELLEK
+                                                           or FO_LANC.index(want) > FO_LANC.index(cur)):
+            try:
+                rep["valtozas"] += set_status(c, code, want, actor="visszatoltes", source="visszatoltes",
+                                              evidence=f.get("bizonyitek"))
+            except AllapotHiba:  # pl. kesz nyitott feltétellel: marad, jelentjük
+                rep.setdefault("kihagyva", []).append(code)
+    for k in d.get("kapcsolo_dontesek", []):
+        rep["valtozas"] += flag_decision(c, k["name"], k["value"], k["decided_at"], source=k.get("source"),
+                                         task_code=k.get("task_code"))
+    c.commit()
+    return rep
+
+
+def cmd_visszatoltes(c, a):
+    rep = visszatoltes(c, a.fajl, repo=a.repo)
+    _out(a, rep, lambda: print(f"visszatöltés: új feladat {rep['uj']}, változás {rep['valtozas']}"
+                                + (f"; kihagyott állapot: {', '.join(rep['kihagyva'])}" if rep.get("kihagyva") else "")))
+
+
 COMMANDS: dict = {}
 
 
@@ -1003,6 +1091,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--napok", type=int, default=45)
     p.add_argument("--no-gh", action="store_true")
     p.add_argument("--fetch", action="store_true")
+    p = add("visszatoltes", cmd_visszatoltes, "kurált ismert feladatok + kapcsoló-döntések betöltése (idempotens)")
+    p.add_argument("--fajl", default=str(HERE / "feladatok.json"))
     return ap
 
 

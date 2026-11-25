@@ -76,7 +76,7 @@ class Migracio(Alap):
         self.assertEqual(szamok(), elotte)
         nevek = {r[0] for r in self.c.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")}
         for t in ("tasks", "task_units", "task_criteria", "task_links", "task_events", "flag_decisions", "feladat_meta",
-                  "tasks_fts", "v_keszultseg", "v_nyitott", "v_kapcsolo_dontesek"):
+                  "tasks_fts", "v_sajat_keszultseg", "v_keszultseg", "v_nyitott", "v_kapcsolo_dontesek"):
             self.assertIn(t, nevek)
         self.assertEqual(self.c.execute("SELECT value FROM feladat_meta WHERE key='sema_verzio'").fetchone()[0],
                          str(F.SEMA_VERZIO))
@@ -149,6 +149,19 @@ class Keszultseg(Alap):
         self.assertEqual(F.progress(self.c, "T-5")["pct"], 70)
         F.set_status(self.c, "T-5", "beolvadt", actor="teszt")
         self.assertEqual(F.progress(self.c, "T-5")["pct"], 85)
+
+    def test_szulo_a_gyerekek_meresevel(self):
+        F.new_task(self.c, "SZ", "Szülő")
+        F.add_criterion(self.c, "SZ", "összesített feltétel")
+        F.new_task(self.c, "SZ-1", "Gyerek 1", parent="SZ")
+        for i in range(2):
+            F.add_unit(self.c, "SZ-1", f"e{i}")
+        F.set_unit(self.c, "SZ-1", 1, True)
+        F.new_task(self.c, "SZ-2", "Gyerek 2", parent="SZ", status="kesz")
+        F.new_task(self.c, "SZ-3", "Elvetett gyerek", parent="SZ", status="elvetve")
+        # (0 feltétel-teljesülés + 50% + 100%) / (1 feltétel + 2 gyerek) = 50
+        self.assertEqual(F.progress(self.c, "SZ")["pct"], 50)
+        self.assertEqual(F.progress(self.c, "SZ")["alap"], "meres")
 
 
 class AllapotSor(unittest.TestCase):
