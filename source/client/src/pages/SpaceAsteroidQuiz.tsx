@@ -1314,6 +1314,7 @@ export default function SpaceAsteroidQuiz() {
   const listHoldRef = useRef(false);
   /** Teszt-kampó: üres pálya (a menet többi része változatlan). */
   const noEnemiesRef = useRef(false);
+  const noSpawnRef = useRef(false);
   /** „Engedd el, és lőj újra” jelzés: eddig látszik (kristály-óra, ms); `bulletAnsweredRef`: a gyerek már válaszolt lövéssel. */
   const holdHintUntilRef = useRef(0);
   const bulletAnsweredRef = useRef(false);
@@ -1373,7 +1374,7 @@ export default function SpaceAsteroidQuiz() {
     return { boxWidthPx: rect.width, boxHeightPx: rect.height, boxTopPx: rect.top, viewport: { width: window.innerWidth, height: window.innerHeight }, safeTopPx };
   }, []);
   const decideCrystalZone = useCallback(
-    (prompt: string, reservePx = 0) => crystalZoneFor({ ...sceneMetrics(), prompt, reservePx }),
+    (prompt: string, reservePx = 0, answersButton = false) => crystalZoneFor({ ...sceneMetrics(), prompt, reservePx, answersButton }),
     [sceneMetrics],
   );
   /**
@@ -1393,7 +1394,7 @@ export default function SpaceAsteroidQuiz() {
     // A mag az új aréna-méretből számol; a találat-vizsgálat (`crystalAt`) és a rajz ugyanezt a helyet olvassa.
     const legendNow = longLabelsRef.current ? decideLegend(pres.question.quiz.prompt, pres.options.map((o) => o.label)) : null;
     setLegend(legendNow);
-    rezoneCrystals(list, decideCrystalZone(pres.question.quiz.prompt, legendNow?.reservePx ?? 0), 1);
+    rezoneCrystals(list, decideCrystalZone(pres.question.quiz.prompt, legendNow?.reservePx ?? 0, legendNow !== null), 1);
     // Érdemi elmozdulásnál az élesítés újraindul (a kristály az új helyén is kapjon előjelzést).
     if (list.some((c, i) => Math.hypot(c.homeX - before[i]!.x, c.homeY - before[i]!.y) > 0.3)) crystalShownAtRef.current = armClockRef.current;
   };
@@ -1411,7 +1412,7 @@ export default function SpaceAsteroidQuiz() {
       const legendNow = long ? decideLegend(p.question.quiz.prompt, labels) : null;
       longLabelsRef.current = long;
       setLegend(legendNow);
-      crystalsRef.current = spawnCrystals(p, decideCrystalZone(p.question.quiz.prompt, legendNow?.reservePx ?? 0), runRngRef.current.crystal.next);
+      crystalsRef.current = spawnCrystals(p, decideCrystalZone(p.question.quiz.prompt, legendNow?.reservePx ?? 0, legendNow !== null), runRngRef.current.crystal.next);
       // Élesítés (review #486 M2, KSZ-11): a kristály ≥ CRYSTAL_ARM_MS-ig látszik, mielőtt választható; a korábbi tűz-nyomás nem válaszol.
       crystalShownAtRef.current = armClockRef.current;
       // Hosszú / a gombba nem férő válasznál a kristályon a sorszám áll, a TELJES szövegek NEM blokkoló jelmagyarázatban látszanak
@@ -1797,7 +1798,7 @@ export default function SpaceAsteroidQuiz() {
         };
       },
       forceState: (rawPatch) => {
-        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; bombs?: number; lastLife?: boolean; crystalAgeMs?: number; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
+        const patch = rawPatch as typeof rawPatch & { bossFinale?: boolean; shipX?: number; powerLevel?: number; noEnemies?: boolean; noSpawn?: boolean; bombs?: number; lastLife?: boolean; crystalAgeMs?: number; questionItem?: { id: string; prompt: string; options: string[]; correctIndex: number } };
         // Teszt (review #486 M1): a főellenfél elesik, EGY élettel, és egy ellenséges lövedék a hajón repül még — a győzelem végleges.
         if (patch.bossFinale === true && phaseRef.current === "play") bossFinaleRef.current();
         // Teszt (review #486 L1): hármas lövés (`powerLevel`) és üres pálya (`noEnemies`), hogy a zuhanó ellenfelek ne nyeljék el a lövedéket.
@@ -1810,6 +1811,8 @@ export default function SpaceAsteroidQuiz() {
           powerTimerRef.current = 600;
         }
         if (typeof patch.noEnemies === "boolean") noEnemiesRef.current = patch.noEnemies;
+        // Teszt: `noSpawn` — új ellenfél nem érkezik, a meglévők (pl. a rossz kristály szilánkjai) maradnak.
+        if (typeof patch.noSpawn === "boolean") noSpawnRef.current = patch.noSpawn;
         // Teszt (vak 4. kör L2): a kristályok „kora” — pl. 495 ms: a következő képkocka az élesítési határ fölé viszi.
         if (typeof patch.crystalAgeMs === "number") crystalShownAtRef.current = armClockRef.current - patch.crystalAgeMs;
         // Teszt (vak 3. kör L6): az utolsó élet elvesztése ugyanazon az úton, mint az ütközésnél (a kijelzés megvárásával).
@@ -2270,7 +2273,9 @@ export default function SpaceAsteroidQuiz() {
     gameElapsedRef.current += dt;
 
     // Spawn logika a hullámon belül — elapsed óra, nem fali idő (kvíz alatt áll)
-    if (!waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
+    // Teszt-kampó (`noEnemies`): az üres pályán NINCS spawn — különben a spawnolt-és-azonnal-törölt ellenfelek a hullámot
+    // pillanatok alatt lezárnák, és a menet néhány mp alatt véget érne (review #486, CI: L1 / L2 tesztek).
+    if (!noEnemiesRef.current && !noSpawnRef.current && !waveIntermissionRef.current && enemiesSpawnedThisWaveRef.current < enemiesPerWaveRef.current) {
       const spawnInterval = waveSpawnInterval(waveRef.current, driverRef.current?.pace.intensity() ?? 0) * gradeEase(gradeRef.current).spawnScale;
       const emptyField = enemiesRef.current.length === 0;
       if (spawnReady({
@@ -3278,7 +3283,15 @@ export default function SpaceAsteroidQuiz() {
         mesh.scale.set(size, size, size);
         if (chip && cw > 0 && ch > 0) {
           projectTmp.set(c.x, c.y, 0.2).project(camera);
-          const px = (projectTmp.x * 0.5 + 0.5) * cw;
+          // Review #486 (CI 360×640): a széles (hosszú szavú) gomb a szélső sávban kilógott a vászonból — a gomb vízszintesen a
+          // vásznon belül marad (a szélesség kérdésenként egyszer mérve; az eltolás néhány px, a 3D kristály a helyén marad).
+          let half = Number(chip.dataset.halfW);
+          if (!(half > 0)) {
+            half = chip.offsetWidth / 2;
+            if (half > 0) chip.dataset.halfW = String(half);
+          }
+          const rawPx = (projectTmp.x * 0.5 + 0.5) * cw;
+          const px = half > 0 && cw > 2 * half + 4 ? Math.min(cw - half - 2, Math.max(half + 2, rawPx)) : rawPx;
           const py = (-projectTmp.y * 0.5 + 0.5) * ch;
           chip.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -50%)`;
         }

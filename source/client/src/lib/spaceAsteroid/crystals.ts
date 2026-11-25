@@ -311,11 +311,21 @@ export function worldYAtScreenFrac(frac: number): number {
 
 /** A kérdés-kártya fix részei (px): fejléc (jelvény + időcsík + szünet), lábléc (állapot-sor) és a belső térközök. */
 export const PLAY_QUESTION_CARD_CHROME_PX = 92;
-/** A kártya a nézet tetejétől ennyi px-re kezdődik (`index.css`: `--play-question-top` = biztonsági sáv + 80; fekvőn + 60). */
+/**
+ * A kártya a nézet tetejétől ennyi px-re kezdődik. A játék SAJÁT kártya-teteje (`SpaceAsteroidQuiz.tsx`:
+ * `.play-question[data-skin="space"] { --play-question-top: biztonsági sáv + 96px }`) felülírja a közös `index.css` értékét
+ * (+80; fekvőn +60) — review #486 (CI 844×390): a régi becslés 36 px-szel magasabbra tette a kártyát, a kristály-sor alá csúszott.
+ */
+export const SPACE_QUESTION_TOP_OFFSET_PX = 96;
 export function playQuestionTopPx(vp: PromptViewport, safeTopPx: number): number {
-  const landscape = vp.width > vp.height && vp.height <= 520;
-  return Math.max(4, safeTopPx) + (landscape ? 60 : 80);
+  void vp;
+  return Math.max(4, safeTopPx) + SPACE_QUESTION_TOP_OFFSET_PX;
 }
+
+/** Fekvő telefon (a lap `@media (orientation: landscape) and (max-height: 520px)` ága). */
+export const isLandscapePhone = (vp: PromptViewport): boolean => vp.width > vp.height && vp.height <= 520;
+/** Fekvőn a „Válaszok” gomb a nézet alján, `bottom: 8px` (a lap CSS-e): a kristály-sor alja e fölött marad. */
+export const LANDSCAPE_ANSWERS_BUTTON_BOTTOM_PX = 8;
 
 /** A kártya becsült magassága (px): a prompt becsült sorai + a fix részek. Óvatos (a becslő széles betűt feltételez). */
 export function estimateCardHeightPx(prompt: string, vp: PromptViewport): number {
@@ -350,17 +360,34 @@ export function crystalZoneFor(args: {
   safeTopPx: number;
   /** A kártya alatt a jelmagyarázat által elfoglalt hely (px; `legendLayoutFor().reservePx`): a kristály-sorok ez alatt kezdődnek. */
   reservePx?: number;
+  /** Jelmagyarázat-mód (hosszú válaszok): fekvőn lent középen a „Válaszok” gomb áll, a kristály (csak szám, 64 px) e fölött marad. */
+  answersButton?: boolean;
 }): CrystalBounds {
   const h = Math.max(1, args.boxHeightPx);
   const reserve = Math.max(0, args.reservePx ?? 0);
   const cardBottom = cardBottomPxFor(args.viewport, args.safeTopPx, args.prompt) + reserve;
   const topFrac = Math.min(reserve > 0 ? LEGEND_ZONE_TOP_MAX_FRAC : 0.7, Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h));
   const bottomFrac = Math.min(0.85, Math.max(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h, CRYSTAL_ZONE_BOTTOM_FRAC));
+  const aspect = args.boxWidthPx / h;
+  const halfWidth = Math.min(GAME_W / 2, visibleHalfWidth(CAMERA_FOV_DEG, aspect, CAMERA_Z));
+  if (args.answersButton === true && isLandscapePhone(args.viewport)) {
+    // Review #486 (CI 844×390): fekvőn a kártya és a lent középen álló „Válaszok” gomb közti sáv alacsony. A kristály-sorok ebbe a
+    // sávba kerülnek; ha két sor (≥ CRYSTAL_MIN_ROW_GAP_PX) nem fér, EGY sor (a fekvő nézet elég széles négy gombnak).
+    const lowestFrac = (args.viewport.height - LANDSCAPE_ANSWERS_BUTTON_BOTTOM_PX - LEGEND_BUTTON_PX - 6 - CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h;
+    if (bottomFrac > lowestFrac) {
+      // a kártya alatti sor helye a 70%-os korlát NÉLKÜL (fekvőn a korlát a kártyára tolná a sort)
+      const underCard = Math.max(0.05, (cardBottom + 10 + CRYSTAL_CHIP_HALF_PX - args.boxTopPx) / h);
+      const twoRows = lowestFrac - underCard >= CRYSTAL_MIN_ROW_GAP_PX / h;
+      const rowFrac = Math.min(underCard, lowestFrac);
+      const upper = worldYAtScreenFrac(twoRows ? underCard : rowFrac);
+      const lower = worldYAtScreenFrac(twoRows ? lowestFrac : rowFrac);
+      return crystalBounds({ halfWidth, minY: lower, maxY: upper, minHeight: Math.max(0, upper - lower) });
+    }
+  }
   const topY = worldYAtScreenFrac(topFrac);
   const bottomY = worldYAtScreenFrac(bottomFrac);
-  const aspect = args.boxWidthPx / h;
   return crystalBounds({
-    halfWidth: Math.min(GAME_W / 2, visibleHalfWidth(CAMERA_FOV_DEG, aspect, CAMERA_Z)),
+    halfWidth,
     minY: bottomY,
     maxY: topY,
     minHeight: Math.max(CRYSTAL_MIN_ZONE_HEIGHT, topY - worldYAtScreenFrac(topFrac + CRYSTAL_MIN_ROW_GAP_PX / h)),

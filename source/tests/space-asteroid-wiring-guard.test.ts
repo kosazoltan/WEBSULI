@@ -134,7 +134,7 @@ test("J6a: a renderer a közös gyárral készül (KSZ-8), a WebGL-környezet el
 test("J6a: a kristály-zónát a mag dönti el egyszer (nincs DOM-mérés / képkockánkénti átrendezés), és a nem látható gomb láthatósága képkockánként egyeztetett", () => {
   assert.match(code, /crystalZoneFor\(\{/);
   // SZÁNDÉK változatlan (a zónát a mag dönti el, egyszer): a jelmagyarázat helyfoglalása (vak 3. kör L1) a zóna bemenete lett.
-  assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), runRngRef\.current\.crystal\.next\)/);
+  assert.match(code, /spawnCrystals\(p, decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0, legendNow !== null\), runRngRef\.current\.crystal\.next\)/);
   assert.doesNotMatch(code, /querySelector<HTMLElement>\('\[data-testid="sa-question"\]/, "a lap nem méri a kérdés-kártyát");
   // SPEC-VÁLTOZÁS 2026-11-17 (Vercel-lelet, átméretezés): az átrendezés csak az átméretezés ágon (`rezoneNowRef`) engedett; a RAJZ továbbra sem rendez át.
   assert.doesNotMatch(code.slice(code.indexOf("const render = (now: number)")), /rezoneCrystals\(/, "a rajz nem rendezi át a kristályokat");
@@ -210,7 +210,7 @@ test("review #486 (CI): a shader-előmelegítés csak a KHR_parallel_shader_comp
 
 test("review #486 (Vercel): átméretezés / elforgatás nyitott kérdésnél a mag új aréna-méretből számolja újra a kristályok helyét, és az élesítés újraindul", () => {
   assert.match(code, /camera\.updateProjectionMatrix\(\);\s*rezoneNowRef\.current\(\);/);
-  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), 1\)/);
+  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0, legendNow !== null\), 1\)/);
   assert.match(code, /crystalShownAtRef\.current = armClockRef\.current;\s*\n?\s*};/);
 });
 
@@ -265,8 +265,8 @@ test("vak 3. kör L1: a jelmagyarázat HELYET FOGLAL (a kristály-zóna a számo
   assert.match(legend, /className="sa-answers-open"/, "a gomb a jelmagyarázat konténerében van");
   assert.match(legend, /className="sa-legend-list"/, "a lista saját, görgethető elem");
   assert.match(code, /legendLayoutFor\(\{ \.\.\.sceneMetrics\(\), labels, prompt \}\)/, "a lap a magban számolt elrendezést használja");
-  assert.match(code, /decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\)/, "a kristály-zóna a jelmagyarázat alatt kezdődik (kérdés bemutatásakor)");
-  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0\), 1\)/, "átméretezéskor is");
+  assert.match(code, /decideCrystalZone\(p\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0, legendNow !== null\)/, "a kristály-zóna a jelmagyarázat alatt kezdődik (kérdés bemutatásakor)");
+  assert.match(code, /rezoneCrystals\(list, decideCrystalZone\(pres\.question\.quiz\.prompt, legendNow\?\.reservePx \?\? 0, legendNow !== null\), 1\)/, "átméretezéskor is");
   assert.doesNotMatch(page, /\.sa-answers-open \{ position: absolute; right: 8px; bottom: 8px;/, "a régi, a szövegre lebegő elhelyezés visszatért");
   assert.doesNotMatch(page, /\.sa-legend \{[^}]*bottom: 6px;/, "a régi, alulról nőő (a kristályokra felnövő) jelmagyarázat visszatért");
   assert.match(page, /\.sa-legend-list \{[^}]*max-height: var\(--sa-legend-list, 120px\); overflow-y: auto;/, "a lista magassága korlátos, belül görgethető");

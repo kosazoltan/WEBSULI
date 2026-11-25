@@ -768,8 +768,9 @@ test.describe("vak 3. kör L2 — a csak szilánkokat leölő bomba nem ad comb�
     await expect(crystals(page)).toHaveCount(4, { timeout: 5_000 });
     await closeList(page);
     await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
-    // az új ellenfelek kiürülés után sem érkeznek: csak a szilánkok lesznek a pályán
-    await force(page, { noEnemies: false });
+    // új ellenfél nem érkezik (`noSpawn`), a szilánkokat viszont már nem törli a kampó: csak a szilánkok lesznek a pályán
+    // (review #486, CI: a régi `noEnemies: false` után a spawn újraindult — a „kiürült hullám” feltevés nem tartott)
+    await force(page, { noEnemies: false, noSpawn: true });
     await page.locator('[data-testid="sa-crystals"] [data-correct="false"]').first().click();
     await expect.poll(async () => (await probe(page)).shards, { timeout: 3_000 }).toBe(3);
     const before = await probe(page);

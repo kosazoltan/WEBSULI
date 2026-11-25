@@ -58,7 +58,9 @@ for (const vp of VIEWPORTS) {
         }
         assert.ok(lay.listPx >= 44, "a lista használható magasságú");
         // a jelmagyarázat miatt a zóna nem csúszhat lejjebb a jelmagyarázat nélküli zóna korlátjánál (a doboz 70%-a)
-        assert.ok(zone.maxY >= worldYAtScreenFrac(0.7) - 1e-6, "a zóna teteje legfeljebb a doboz 70%-ánál kezdődik");
+        // (fekvőn a jelmagyarázat nem foglal függőleges helyet — reservePx = 0 —, a sort a kártya és a „Válaszok” gomb közti sáv
+        // határozza meg; ezt a „fekvőn a kristály-sor(ok) a kártya ALATT és a gomb FÖLÖTT” teszt méri — review #486, CI 844×390)
+        if (!lay.landscape) assert.ok(zone.maxY >= worldYAtScreenFrac(0.7) - 1e-6, "a zóna teteje legfeljebb a doboz 70%-ánál kezdődik");
         void PLAYER_Y_MAX;
       }
     });
@@ -96,7 +98,7 @@ test("review #486 (CI 844×390): fekvőn a kristály-sor(ok) a kártya ALATT és
   for (const prompt of ["Melyik állítás igaz?", PROMPT_LONG]) {
     for (const boxTopPx of [0]) {
       const boxHeightPx = vp.height - boxTopPx;
-      const zone = crystalZoneFor({ boxWidthPx: vp.width, boxHeightPx, boxTopPx, viewport: vp, prompt, safeTopPx: 0 });
+      const zone = crystalZoneFor({ boxWidthPx: vp.width, boxHeightPx, boxTopPx, viewport: vp, prompt, safeTopPx: 0, answersButton: true });
       const upperTop = screenPxOf(zone.maxY, boxTopPx, boxHeightPx) - CRYSTAL_CHIP_HALF_PX;
       const lowerBottom = screenPxOf(zone.minY, boxTopPx, boxHeightPx) + CRYSTAL_CHIP_HALF_PX;
       const buttonTop = vp.height - 8 - LEGEND_BUTTON_PX;
