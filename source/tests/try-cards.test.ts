@@ -23,7 +23,7 @@ const BAD: Record<string, unknown> = {
 
 test("az öt kártyafajta a sémában; a modellnek nem hirdetve", () => {
   for (const k of Object.keys(GOOD)) assert.ok((TRY_KINDS as readonly string[]).includes(k), k);
-  assert.deepEqual([...PROMPT_TRY_KINDS], ["dragSort", "fillBlank", "match"]);
+  for (const k of Object.keys(GOOD)) assert.ok(!(PROMPT_TRY_KINDS as readonly string[]).includes(k), `${k}: a kártyát a V3b hirdeti`);
 });
 
 test("séma: a helyes kártya átmegy, a hibás elutasítva", () => {

@@ -49,7 +49,8 @@ test("becslés: ≤ 5% eltérés 2, ≤ 15% 1, különben 0", () => {
 });
 
 test("séma: a helyes specifikáció átmegy, a hibás elutasítva; a modellnek hirdetett fajták a régi hármas", () => {
-  assert.deepEqual([...PROMPT_TRY_KINDS], ["dragSort", "fillBlank", "match"]);
+  // V2b (dokumentált spec-változás): a gyártás az öt új fajtát is hirdeti.
+  for (const k of ["dragSort", "fillBlank", "match"]) assert.ok((PROMPT_TRY_KINDS as readonly string[]).includes(k), k);
   for (const k of ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"]) assert.ok((TRY_KINDS as readonly string[]).includes(k), k);
   const good: Record<string, unknown> = {
     trueFalseSeries: { statements: [{ text: "A víz 100 °C-on forr.", answer: true }, { text: "A jég meleg.", answer: false }] },
