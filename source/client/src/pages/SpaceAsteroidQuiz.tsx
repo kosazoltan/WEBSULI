@@ -1600,7 +1600,13 @@ export default function SpaceAsteroidQuiz() {
    */
   const endRun = useCallback((wonIn: boolean, forcedCorrect?: number, afterReveal = false) => {
     // A főellenfél legyőzése VÉGLEGES (review #486 M1): az 1,5 mp-es robbanás-ablakban semmi nem írhatja át „Kör vége”-re.
-    if (runEndedRef.current) return;
+    if (runEndedRef.current) {
+      // A már rögzített menet (pl. a megoldás-kijelzésre váró utolsó élet) a szünet menü „Kör vége” pontjára AZONNAL az eredményt
+      // mutatja (review #486, Vercel): az `endRound` a függő időzítőket — a kijelzés-várót is — törli, így más nem nyitná meg.
+      // Az eredmény nem íródik át (győzelem marad győzelem); a kijelzés-vár (afterReveal) hívás továbbra sem csinál semmit.
+      if (!afterReveal && phaseRef.current === "play") setPhase("over");
+      return;
+    }
     const won = wonIn || bossDefeatedRef.current;
     runEndedRef.current = true;
     runOverRef.current = true;

@@ -3150,3 +3150,7 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 - A kristály-felirat beférése a SOR-számot is méri (mohó tördelés a mért szóközzel, kötőjeles törés); háromnál több sor → jelmagyarázat.
 - A fekvő jelmagyarázat magassága a közös rácssorok maximumából, a 18 px-es sorszámjel minimumával (`landscapeLegendHeightPx`).
 - Álló nézetben helyhiánynál tömör mód: a kártya alatt nincs lista és nincs helyfoglalás, a „Válaszok” gomb a vezérlők fölötti alsó sávban; a teljes lista a gombbal nyílik. SPEC-VÁLTOZÁS a fedés-mérőben: tömör módban nincs mért szövegsor.
+
+### J6a — review #486, 3. kör (2026-11-25)
+- A már rögzített menet (a megoldás-kijelzésre váró utolsó élet) alatt a szünet menü „Kör vége” pontja azonnal az eredményképernyőt nyitja; az eredmény nem íródik át. Ok: az `endRound` a kijelzés-várót is törli, a `runEndedRef` őr pedig korábban csendben visszatért.
+- Teszt: `space-asteroid-play.spec.ts` „review #486 (Vercel) … „Kör vége” pontja azonnal az eredményképernyőt nyitja” (RED `3a76d23b`).
