@@ -205,9 +205,23 @@ async function callModelOnce(url, model, prompt) {
     // lelet-szövegen belüli ismétlő hurkot töri meg (2026-11-23, PR-C AdventCalendar.tsx: 1500 tokenes, lezáratlan „issue”).
     body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
   });
-  if (r.status === 404) throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
-  if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);
-  return (await r.json()).message?.content ?? '';
+  const out = classifyModelResponse(r.status, await r.text());
+  if (out.kind === 'unavailable') throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
+  if (out.kind === 'error') throw new Error(`ollama HTTP ${r.status}`);
+  if (out.kind === 'loop') process.stderr.write('[local-review] a modell ismétlő hurokba esett (token repeat limit) — a darab felezve\n');
+  return out.kind === 'ok' ? out.content : '';
+}
+
+/**
+ * Az Ollama-válasz besorolása (docs/specs/2026-11-25-helyi-ellenor-ismetlo-hurok.md). A „token repeat limit” 500 a modell ismétlő
+ * hurka — determinisztikus (seed 42), az újrapróba ugyanide jut —, ezért értelmezhetetlen válasznak számít: üres tartalom → a
+ * `reviewChunk` felezi a darabot. A 404 elérhetetlen modell, minden más nem-OK válasz átmeneti hiba.
+ */
+export function classifyModelResponse(status, body) {
+  if (status === 404) return { kind: 'unavailable' };
+  if (status === 500 && /token repeat limit/i.test(String(body))) return { kind: 'loop' };
+  if (status < 200 || status >= 300) return { kind: 'error' };
+  try { return { kind: 'ok', content: JSON.parse(body).message?.content ?? '' }; } catch { return { kind: 'ok', content: '' }; }
 }
 
 /** Egy darab ellenőrzése: 2 próbálkozás; ha a válasz így is értelmezhetetlen (a 9B modell nagy darabon ismétlő hurokba esik és a
