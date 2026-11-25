@@ -1,21 +1,20 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { sampleIds } from "@shared/lesson-experience-score";
+import { newRoundNonce, ROUND_NONCE } from "@shared/round-id";
 
 const roundSchema = z.object({
   ids: z.array(z.string()), answers: z.record(z.string()).default({}), picks: z.record(z.number().int().min(0).max(3)).default({}),
   sampleViewed: z.array(z.string()).default([]), startedAt: z.number().nonnegative(), finishedAt: z.number().positive().optional(),
   // Eredmény-e-mail B1b (R2): az utolsó kvízválasz ideje — a beküldés 7 napos korhatára ehhez mér (régebbi tárolt körben nincs: ott a kezdés számít).
   lastAnsweredAt: z.number().positive().optional(),
+  // B8 (docs/specs/2026-11-25-eredmeny-email-b8.md): a kör 128 bites véletlen azonosító-magja (`r2-<nonce>`); a régi kliens sémája eldobja.
+  nonce: z.string().regex(ROUND_NONCE).optional(),
 });
 export type ExperienceRound = z.infer<typeof roundSchema>;
-export function experienceFingerprint(value: unknown): string {
-  let hash = 2166136261;
-  for (const c of JSON.stringify(value)) hash = Math.imul(hash ^ c.charCodeAt(0), 16777619);
-  return (hash >>> 0).toString(36);
-}
+export { experienceFingerprint } from "@shared/experience-fingerprint";
 export function useExperienceRound(bank: Array<{ id: string }>, count: number, storageKey: string, sample = () => sampleIds(bank, count)) {
-  const fresh = (): ExperienceRound => ({ ids: sample(), answers: {}, picks: {}, sampleViewed: [], startedAt: 0 });
+  const fresh = (): ExperienceRound => ({ ids: sample(), answers: {}, picks: {}, sampleViewed: [], startedAt: 0, nonce: newRoundNonce() });
   const [round, setRound] = useState<ExperienceRound>(() => {
     try {
       const parsed = roundSchema.safeParse(JSON.parse(localStorage.getItem(storageKey) ?? "null"));

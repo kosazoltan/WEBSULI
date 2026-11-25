@@ -8,6 +8,7 @@ import { answeredCount, quizRoundComplete, roundActivityAt, roundTooOld, snapsho
 import { isRetryableRequestError } from "@shared/request-retry";
 import { createRoundOwners, isFreshRound, roundHasActivity } from "@shared/round-owner";
 import { createOutboxStore, outboxEntryExpired, outboxFailureAction, rejectedKeyOf, type OutboxEntry } from "@shared/result-outbox";
+import { roundIdOf, sentFlagsOf } from "@shared/round-id";
 import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
 import { experienceFingerprint, type ExperienceRound } from "./useExperienceRound";
 
@@ -55,12 +56,19 @@ const flagSet = (flag: string) => { if (sentInMemory.has(flag)) return true; try
 const rejectedInMemory = new Set<string>();
 const isRejected = (flag: string) => { if (rejectedInMemory.has(flag)) return true; try { return !!localStorage.getItem(rejectedKeyOf(flag)); } catch { return false; } };
 const markRejected = (flag: string) => { rejectedInMemory.add(flag); try { localStorage.setItem(rejectedKeyOf(flag), "1"); } catch { /* a memóriabeli jelző véd a lapon */ } };
+/** B8: a kör MINDEN „már elküldve” jelzője (az új és a régi azonosítóé) íródik a sikeres küldés után. */
+function markSent(flags: readonly string[]): void {
+  for (const flag of flags) {
+    sentInMemory.add(flag);
+    try { localStorage.setItem(flag, "1"); } catch { /* a memóriabeli jelző + a szerver egyedi kulcsa véd */ }
+  }
+}
 class OutboxEntryExpired extends Error {}
 /** A sor ürítése: minden esedékes, nem úton lévő bejegyzés elindul (nem várják egymást, R20). Sosem dob. */
 export function drainResultOutbox(): void {
   const now = Date.now();
   for (const entry of outbox.read()) {
-    if (flagSet(entry.flag) || isRejected(entry.flag)) { outbox.remove(entry.id); continue; }
+    if ([entry.flag, ...(entry.alsoFlags ?? [])].some(flagSet) || isRejected(entry.flag)) { outbox.remove(entry.id); continue; }
     // R30: a 7 napnál régebbi tevékenységű bejegyzés küldés nélkül kikerül.
     if (outboxEntryExpired(entry, now)) { outbox.remove(entry.id); continue; }
     const state = outboxAttempts.get(entry.id);
@@ -81,8 +89,7 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<void> {
     };
     const response = await apiRequest("POST", `/api/lessons/${entry.lessonId}/results`, body, { resultTimes: entry.times, retries: 0, keepalive: entry.kind === "quiz" });
     noteResultResponse(entry.lessonId, response);
-    sentInMemory.add(entry.flag);
-    try { localStorage.setItem(entry.flag, "1"); } catch { /* a memóriabeli jelző + a szerver egyedi kulcsa véd */ }
+    markSent([entry.flag, ...(entry.alsoFlags ?? [])]);
     try { localStorage.removeItem(entry.partialKey); } catch { /* nincs mit törölni */ }
     roundOwners.clear(entry.ownerKey);
     outboxAttempts.delete(entry.id);
@@ -111,11 +118,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const fresh = experienceFingerprint({ ids: round.ids });
     if (isFreshRound(kind, round)) { seenFresh.current.add(fresh); return; }
     if (!roundHasActivity(kind, round)) return;
-    const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
-    // L5: a már elküldött körhöz (újratöltéskor) nem keletkezik kilét-rekord.
-    const sentFlag = `${storageKey}:${kind}:sent:${roundId}`;
-    if (sentInMemory.has(sentFlag)) return;
-    try { if (localStorage.getItem(sentFlag)) return; } catch { /* privát mód: memóriában rögzül */ }
+    const roundId = roundIdOf(round);
+    // L5: a már elküldött körhöz (újratöltéskor) nem keletkezik kilét-rekord. B8: bármelyik azonosító jelzője számít.
+    if (sentFlagsOf(storageKey, kind, round).some(flagSet)) return;
     roundOwners.bind(ownerKeyOf(storageKey, kind, roundId), seenFresh.current.has(fresh));
   }, [kind, round, storageKey]);
   const [timedOut, setTimedOut] = useState(false);
@@ -133,10 +138,11 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     // B1b (R2): az a LE NEM ZÁRT kör, amelynek az UTOLSÓ VÁLASZA 7 napnál régebbi, utólag nem megy el (a lezárt kör a tanuló döntése: az
     // megy). A régen megnyitott, de ma megválaszolt kör megy — a korhatár nem a kvíz-fül első megnyitásához mér.
     if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
-    const roundId = `round-${experienceFingerprint({ ids: round.ids, startedAt: round.startedAt })}`;
-    const flag = `${storageKey}:${kind}:sent:${roundId}`;
-    if (sentInMemory.has(flag) || sending.current.has(flag)) return;
-    try { if (localStorage.getItem(flag)) return; } catch { /* privát módban a szerver egyedi kulcsa véd */ }
+    // B8: `r2-<nonce>` (régi körnél a régi azonosító); a „már elküldve” jelző bármelyik azonosítóé lehet (régi kliens, másik fül).
+    const roundId = roundIdOf(round);
+    const flags = sentFlagsOf(storageKey, kind, round);
+    const flag = flags[0]!;
+    if (sending.current.has(flag) || flags.some(flagSet)) return;
     if ((pageAttempts.get(flag) ?? 0) >= RESULT_REPORT_ATTEMPTS) return;
     // R47: legkésőbb a lezáráskor rögzül (ha a tevékenység-effekt még nem futott le).
     const ownerKey = ownerKeyOf(storageKey, kind, roundId);
@@ -151,7 +157,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         : { kind, roundId, picks: Object.fromEntries(round.ids.map(id => [id, round.picks[id] ?? -1])) };
       // R30: lezárt körnél a sorba kerülés ideje, le nem zártnál a kör utolsó tevékenysége.
       const activityAt = round.finishedAt ? Date.now() : roundActivityAt(round) || Date.now();
-      outbox.add({ id: `${lessonId}|${flag}`, lessonId, kind, body, times, flag, partialKey: `${storageKey}:${kind}:partial:${roundId}`, ownerKey, owner, activityAt });
+      outbox.add({ id: `${lessonId}|${flag}`, lessonId, kind, body, times, flag, alsoFlags: flags.slice(1), partialKey: `${storageKey}:${kind}:partial:${roundId}`, ownerKey, owner, activityAt });
       drainResultOutbox();
       return;
     }
@@ -190,8 +196,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
             if (!round.finishedAt && roundTooOld(roundActivityAt(round), Date.now())) return;
           }
         }
-        sentInMemory.add(flag);
-        try { localStorage.setItem(flag, "1"); } catch { /* a memóriabeli jelző + a szerver egyedi kulcsa véd */ }
+        markSent(flags);
         // B5b (R8 takarítás): a végleges siker után a kör pillanatkép-jelzője törlődik.
         try { localStorage.removeItem(`${storageKey}:${kind}:partial:${roundId}`); } catch { /* nincs mit törölni */ }
         roundOwners.clear(ownerKey);
@@ -221,13 +226,12 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     const sendSnapshot = (current: ExperienceRound) => {
       const count = answeredCount(current);
       if (current.finishedAt || quizRoundComplete(current) || count === 0 || roundTooOld(roundActivityAt(current), Date.now())) return;
-      const roundId = `round-${experienceFingerprint({ ids: current.ids, startedAt: current.startedAt })}`;
-      const sentFlag = `${storageKey}:${kind}:sent:${roundId}`;
+      const roundId = roundIdOf(current);
+      const sentFlags = sentFlagsOf(storageKey, kind, current);
       const key = `${storageKey}:${kind}:partial:${roundId}`;
       const state = snapshotState.current;
-      if (sentInMemory.has(sentFlag)) return;
+      if (sentFlags.some(flagSet)) return;
       try {
-        if (localStorage.getItem(sentFlag)) return;
         const stored = Number(localStorage.getItem(key)) || 0;
         if (stored > 0 && (state.sent?.roundId !== roundId || state.sent.count < stored)) state.sent = { roundId, count: stored };
       } catch { /* privát mód: a munkamenet állapota marad */ }
@@ -258,7 +262,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
         if (!accepted) return;
         if (state.sent?.roundId !== roundId || state.sent.count < count) state.sent = mark;
         // A közben véglegesített kör késői 202-je nem írja vissza a jelzőt; körönként a legnagyobb elfogadott érték marad.
-        try { if (!localStorage.getItem(sentFlag) && count > (Number(localStorage.getItem(key)) || 0)) localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
+        try { if (!sentFlags.some(f => localStorage.getItem(f)) && count > (Number(localStorage.getItem(key)) || 0)) localStorage.setItem(key, String(count)); } catch { /* elég a munkamenet állapota */ }
       })();
     };
     snapshotRef.current = snapshot;
@@ -269,7 +273,7 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
     return () => { snapshotRef.current = () => {}; document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", snapshot); snapshot(); };
   }, [lessonId, kind, storageKey]);
   // R3: a kör AZONOSSÁGÁNAK változásakor a lebontó ág az ELHAGYOTT körről küld (a `committed` ekkor még a lecserélt kör).
-  const roundIdentity = `${round.startedAt}|${round.ids.join(",")}`;
+  const roundIdentity = `${round.nonce ?? ""}|${round.startedAt}|${round.ids.join(",")}`;
   useEffect(() => () => { snapshotRef.current(); }, [roundIdentity]);
   // Szándékosan a pillanatkép-effekt UTÁN és függőség nélkül: minden megjelenítés után frissül, a lebontó ág még az előzőt látja.
   useEffect(() => { committed.current = round; });
