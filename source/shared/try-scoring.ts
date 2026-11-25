@@ -10,11 +10,14 @@
  * - estimate: relatív eltérés ≤ 5% → 2; ≤ 15% → 1; különben 0 (max 2).
  * Ítélet: pont = max → „teljes”; 0 < pont < max → „részleges”; 0 → „rossz”.
  */
+import { wordGridProblems } from "./word-grid";
 export const V2_TRY_KINDS = ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"] as const;
 export type V2TryKind = (typeof V2_TRY_KINDS)[number];
 /** V3a: kártyaformák és döntés–következmény (a `try` keretben; pontozás csak a döntésnél: legjobb = 1, más = 0). */
 export const V3_TRY_KINDS = ["flipCard", "stepReveal", "didYouKnow", "decision", "flashcards"] as const;
 export type V3TryKind = (typeof V3_TRY_KINDS)[number];
+/** V5a: szókereső és keresztrejtvény (rácsgenerátor: shared/word-grid.ts). */
+export const V5_TRY_KINDS = ["wordSearch", "crossword"] as const;
 
 export type Verdict = "teljes" | "részleges" | "rossz";
 export type TryScore = { points: number; max: number; verdict: Verdict };
@@ -155,6 +158,8 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     if (num(s.min) === undefined || num(s.max) === undefined || n.min >= n.max) p.push("A számegyenesnek min < max kell.");
     if (!Number.isFinite(n.target) || n.target < n.min || n.target > n.max) p.push("A cél a számegyenesen belül legyen.");
     if (!(n.tolerance > 0) || n.tolerance > (n.max - n.min) / 4) p.push("A tűrés pozitív, és legfeljebb a tartomány negyede.");
+  } else if (kind === "wordSearch" || kind === "crossword") {
+    p.push(...wordGridProblems(kind, spec));
   } else if (kind === "flipCard") {
     const f = readFlipCard(spec);
     if (!f.front || !f.back) p.push("A fordítókártyának eleje és hátoldala is kell.");
