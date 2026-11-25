@@ -135,10 +135,10 @@ test("review #607: a 202-vel nyugtázott VÉGLEGES levél háttérlánca a küld
 
 test("review #607: a felülírás-ellenőrzés újrapróbájának várakozását az ürítés előrehozza (nem 60 s)", async () => {
   let faults = 2;
+  // a kör véglegesítése (előtte pillanatkép érkezett): a végleges ág a felülírás-ellenőrzésen megy át
+  await post("s-supersede", { picks: picksOf(2), partial: true });
   setRoundStateFault((stage) => { if (stage === "partialSent" && faults > 0) { faults -= 1; throw new Error("átmeneti DB-hiba"); } });
   try {
-    // a kör véglegesítése (előtte pillanatkép érkezett): a végleges ág a felülírás-ellenőrzésen megy át
-    await post("s-supersede", { picks: picksOf(2), partial: true });
     await post("s-supersede", { picks: picksOf(25) });
     await sleep(300);
     const t0 = Date.now();

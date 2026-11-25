@@ -79,6 +79,10 @@ function defer(run: () => void): void {
   timer.unref?.();
   deferred.set(timer, run);
 }
+/** Review #607: az újrapróba előtti várakozás (`retryDelayMs`), amelyet a leállítási ürítés előrehoz (a `deferred` része). */
+function retryPause(): Promise<void> {
+  return new Promise<void>(resolve => defer(resolve));
+}
 
 /**
  * PR #495 (Codex P2): a foglalás felszabadítása korlátozott újrapróbával — ha a küldés bukik ÉS az első `array_remove` is átmeneti
@@ -328,12 +332,18 @@ function schedulePartial(key: string, owner: string, answered: number, send: (ve
   partialVersions.delete(key);
   if (partialVersions.size >= MAX_FINALIZED_ROUNDS) partialVersions.delete(partialVersions.keys().next().value!);
   partialVersions.set(key, version);
+  // Review #607: leállítás közben a pillanatkép időzítő NÉLKÜL, azonnal nyilvántartva indul (a `setTimeout(0)` és a nyilvántartás
+  // közti résben az ürítés üresnek láthatná a halmazt).
+  if (shuttingDown) {
+    void track(keep.send(version)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
+    return;
+  }
   const timer = setTimeout(() => {
     const entry = pendingPartials.get(key);
     if (!entry || entry.version !== version) return;
     pendingPartials.delete(key);
     void track(entry.send(version)).catch(error => logger.error(`[LESSON-RESULT] a félbehagyott kvíz küldése nem sikerült: ${errorClass(error)}`));
-  }, shuttingDown ? 0 : partialDelayMs);
+  }, partialDelayMs);
   timer.unref?.();
   pendingPartials.set(key, { timer, version, ...keep });
 }
@@ -562,21 +572,23 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
     const outcome = await pairOrPark({ lessonId: lessonIdF, ownerKey: who, kind: part.kind, roundId: body.roundId, graded: part, learner });
     if (outcome.type === "alreadySent") {
       // Review #586: a kézbesítetlen pár (leállás, szolgáltatói hiba, nincs címzett) a kör ismételt beküldésére újra kézbesül.
-      if (outcome.redeliver) void deliverCombined(lessonIdF, outcome.redeliver, false).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
+      if (outcome.redeliver) void track(deliverCombined(lessonIdF, outcome.redeliver, false)).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
       return res.status(202).json({ queued: false, alreadySent: true });
     }
     if (outcome.type === "parked") return res.status(202).json({ queued: false, awaiting: outcome.awaiting });
-    void deliverCombined(lessonIdF, outcome, true).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
+    void track(deliverCombined(lessonIdF, outcome, true)).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
     return res.status(202).json({ queued: true, combined: true });
   }
   if (!combinedOn && isTwoPartExperience(experience)) {
     // Review #586 (kapcsoló-időszakok): KI állásban a korábban (BE alatt) félretett részek a régi úton, egyrészes levélként mennek.
     // Review #586/#589: a kézbesítés nyoma csak sikeres küldés után, a kézbesítési zár alatt — a kézbesítetlen sort a söprő (U4c) pótolja.
-    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(p => deliverStoredPart(lessonIdF, p))))
+    void track(takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(p => deliverStoredPart(lessonIdF, p)))))
       .catch(error => logger.error("[LESSON-RESULT] félretett részek kiürítése hiba:", error));
   }
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
-  void (paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => {
+  // Review #607: a 202 UTÁNI teljes háttérlánc (névlekérdezés, körzár, felülírás-ellenőrzés, küldés) nyilvántartott — a leállítási
+  // ürítés a küldés megkezdése előtt is megvárja (különben a pool lezárása elveszítené a már nyugtázott levelet).
+  void track((paired && !userId ? Promise.resolve(paired.name) : learnerName(userId)).then(learner => {
     const deliver = (g: GradedTasks | GradedQuiz) => sendLessonResult({ lessonId: lessonIdF, roundKey, learner,
       ...(paired ? { learnerId: paired.id, ...(!userId ? { learnerFirst: paired.firstName } : {}) } : {}), guest: !userId && !paired, graded: g });
     if (!finalizing) return deliver(graded);
@@ -588,7 +600,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
         try { superseded = await partialAlreadySent(lessonIdF, body.roundId); }
         catch (error) {
           logger.warn(`[LESSON-RESULT] a felülírás-ellenőrzés átmenetileg hibázott (${attempt + 1}. próba): ${errorClass(error)}`);
-          await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          await retryPause();
         }
       }
       // Helyi ellenőr 35501fd3: a végleges levél nem veszhet el (a 202 már kiment) — bizonyíthatatlan állapotban a FELTÉTELES felülíró
@@ -598,7 +610,7 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
       const supersedes: boolean | "unknown" = superseded === null ? "unknown" : superseded;
       return deliver(supersedes ? { ...graded, meta: { ...graded.meta, supersedesPartial: supersedes } } : graded);
     });
-  }).catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
+  })).catch(error => logger.error("[LESSON-RESULT] háttérküldés hiba:", error));
   return res.status(202).json({ queued: true });
   } catch (error) { next(error); }
 });
@@ -622,8 +634,8 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
       const outcome = await pairWithRetry({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } });
       if (outcome.type === "parked") return { awaiting: outcome.awaiting };
       // U4d: a párosítás eredménye azonnal megy vissza (a gyakorlókör válasza erre vár), a levél a háttérben — a tartós pótlás a söprőé.
-      if (outcome.type === "paired") void deliverCombined(input.lessonId, outcome, true).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
-      if (outcome.type === "alreadySent" && outcome.redeliver) void deliverCombined(input.lessonId, outcome.redeliver, false).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
+      if (outcome.type === "paired") void track(deliverCombined(input.lessonId, outcome, true)).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
+      if (outcome.type === "alreadySent" && outcome.redeliver) void track(deliverCombined(input.lessonId, outcome.redeliver, false)).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
       return { awaiting: null };
     }
   }

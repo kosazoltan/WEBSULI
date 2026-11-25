@@ -30,3 +30,8 @@ egymás után futnak.
 
 ## Visszavonás
 Revert; a kapcsolók (RESULT_PARTIAL_EMAIL) változatlanok.
+
+## Review #607 (2026-11-25)
+- A 202 utáni TELJES háttérlánc nyilvántartott (`track`): a végleges levél névlekérdezése, körzára, felülírás-ellenőrzése és küldése, valamint az összevont / félretett részek kézbesítése — az ürítés a küldés megkezdése előtt is megvárja.
+- A felülírás-ellenőrzés újrapróbájának várakozása (`retryPause`) a halasztott futtatások része: az ürítés azonnal előrehozza.
+- Leállítás közben érkező pillanatkép időzítő nélkül, azonnal nyilvántartva indul (nincs rés a `setTimeout(0)` és a nyilvántartás között).
