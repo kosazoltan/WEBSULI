@@ -14,7 +14,7 @@ assert.match(process.env.WEBSULI_DISPOSABLE_DB ?? "", /^websuli-learning-test-[a
 process.env.ADMIN_EMAILS = "admin-a@example.test, admin-b@example.test";
 process.env.RESULT_PARTIAL_EMAIL = "on";
 const { db, dbPool } = await import("../server/db");
-const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount, flushLessonResults, resetResultShutdownForTests } = await import("../server/lesson-result-email");
+const { lessonResultsRouter, setResultSender, setPartialDelay, setRetryDelay, pendingPartialCount, flushLessonResults, resetResultShutdownForTests, setRoundStateFault } = await import("../server/lesson-result-email");
 
 const sent: Array<{ subject: string; to: string }> = [];
 let failing = false;
@@ -123,4 +123,28 @@ test("B6 / R41: az ürítés UTÁN érkező pillanatkép nem vár 60 s-ot (azonn
   await waitFor(() => partialMails().length === 2);
   assert.equal(partialMails().length, 2);
   assert.equal(pendingPartialCount(), 0);
+});
+
+test("review #607: a 202-vel nyugtázott VÉGLEGES levél háttérlánca a küldés előtt is nyilvántartott — az azonnali ürítés megvárja", async () => {
+  const res = await post("s-chain", { picks: picksOf(25) });
+  assert.equal(res.status, 202);
+  const result = await flushLessonResults(5000);
+  assert.equal(finalMails().length, 2, "az ürítés visszatérésekor a végleges levél már kiment");
+  assert.equal(result.left, 0);
+});
+
+test("review #607: a felülírás-ellenőrzés újrapróbájának várakozását az ürítés előrehozza (nem 60 s)", async () => {
+  let faults = 2;
+  setRoundStateFault((stage) => { if (stage === "partialSent" && faults > 0) { faults -= 1; throw new Error("átmeneti DB-hiba"); } });
+  try {
+    // a kör véglegesítése (előtte pillanatkép érkezett): a végleges ág a felülírás-ellenőrzésen megy át
+    await post("s-supersede", { picks: picksOf(2), partial: true });
+    await post("s-supersede", { picks: picksOf(25) });
+    await sleep(300);
+    const t0 = Date.now();
+    const result = await flushLessonResults(5000);
+    assert.ok(Date.now() - t0 < 4000, `nem várta ki a 60 s-os újrapróbát: ${Date.now() - t0} ms`);
+    assert.equal(finalMails().length, 2, "a végleges levél az ürítésen belül kiment");
+    assert.equal(result.left, 0);
+  } finally { setRoundStateFault(null); }
 });
