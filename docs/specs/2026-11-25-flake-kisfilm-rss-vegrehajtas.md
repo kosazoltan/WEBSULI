@@ -9,3 +9,5 @@ használt, és a kör kimaradt. A main ágon is reprodukálható (3 futásból 2
 1. RED: a teszt 400 MB-os ballaszttal determinisztikusan bukik (a memóriaőr a valódi RSS-t látja).
 2. GREEN: a `startLessonClipWorker` gyártója opcionálisan `rss` mérőt adhat (teszt: 0 bájt); élesben változatlanul `process.memoryUsage().rss`.
 3. Kapulánc, PR. Élesben nincs viselkedésváltozás (a mérő alapértéke azonos).
+
+4. Review #599 (Copilot): a 400 MB-os ballaszt minden futáskor memóriát foglalt — helyette hívásszámláló igazolja a befecskendezett mérő használatát (a mérő kiiktatására a teszt determinisztikusan bukik).

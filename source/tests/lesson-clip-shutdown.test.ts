@@ -22,13 +22,14 @@ test("leállítás: a kisfilmworker időzítői leállnak, új kör nem indul (v
   t.mock.timers.tick(10 * 60_000);
   assert.deepEqual([built, maintenance], [0, 0]);
   // FLAKE-KISFILM-RSS: a memóriaőr a VALÓDI folyamat RSS-ét mérte — a tesztfolyamat 320 MB körül ingadozott, és az első kör néha
-  // kimaradt. A tesztben a mérés befecskendezett (0 bájt); a ballaszt a régi viselkedést determinisztikusan bukóvá teszi.
-  const ballast = Buffer.alloc(400 * 1024 * 1024, 1);
-  assert.equal(startLessonClipWorker(store, () => { built++; return { deps, model: "m", maintenance: () => { maintenance++; }, rss: () => 0 }; }, { LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
+  // kimaradt. A tesztben a mérés befecskendezett (0 bájt); a hívásszámláló igazolja, hogy a worker a befecskendezett mérőt használja
+  // (review #599: memóriaballaszt nélkül — a párhuzamos tesztfolyamatokat nem terheli).
+  let rssCalls = 0;
+  assert.equal(startLessonClipWorker(store, () => { built++; return { deps, model: "m", maintenance: () => { maintenance++; }, rss: () => { rssCalls++; return 0; } }; }, { LESSON_CLIPS_AUTO: "on", OPENROUTER_API_KEY: "k" }), "auto");
   const settle = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
   t.mock.timers.tick(90_000); await settle();
   assert.equal(rounds, 1, "az első kör elindult");
-  assert.ok(ballast.length > 0);
+  assert.ok(rssCalls > 0, "a memóriaőr a befecskendezett mérőt kérdezte");
   assert.equal(maintenance, 1, "gyártó módban minden kör előtt söpör (nem csak induláskor)");
   t.mock.timers.tick(3 * 60_000); await settle();
   assert.deepEqual([rounds, maintenance], [2, 2]);
