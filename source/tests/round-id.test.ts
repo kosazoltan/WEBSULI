@@ -37,3 +37,27 @@ test("B8: a kliens lenyomat-függvénye a közös modulé (a régi azonosító b
     return (hash >>> 0).toString(36);
   })());
 });
+
+// Review #613 (Codex, Copilot, Vercel): a nonce elvesztése (a régi kliens visszaírása) nem válthat azonosítót.
+const mapStore = () => { const m = new Map<string, string>(); return { m, getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); } }; };
+test("review #613: a megkezdett kör nonce-a a régi azonosító szerint tartósan megmarad, és nonce-vesztés után visszatöltődik", async () => {
+  const { rememberRoundNonce, recoverRoundNonce } = await import("../shared/round-id");
+  const store = mapStore();
+  const round = { ids: ["a", "b"], startedAt: 1_700_000_000_000, nonce: "0123456789abcdef0123456789abcdef" };
+  rememberRoundNonce(store, "lesson:quiz", round);
+  const dropped = { ids: round.ids, startedAt: round.startedAt };
+  const back = recoverRoundNonce(store, "lesson:quiz", dropped);
+  assert.equal(roundIdOf(back), roundIdOf(round), "a visszatöltött kör azonosítója az eredeti r2");
+  // el nem kezdett körhöz nincs alias (a régi azonosító a kezdéstől függ)
+  const s2 = mapStore();
+  rememberRoundNonce(s2, "lesson:quiz", { ...round, startedAt: 0 });
+  assert.equal(s2.m.size, 0);
+});
+test("review #613: a tartós sor bejegyzésének ELSŐDLEGES jelzője a régi (a B7-es ürítő is a régi kliens jelzőjét írja)", async () => {
+  const { outboxFlagsOf } = await import("../shared/round-id");
+  const round = { ids: ["a", "b"], startedAt: 1_700_000_000_000, nonce: "0123456789abcdef0123456789abcdef" };
+  const { flag, alsoFlags } = outboxFlagsOf("lesson", "quiz", round);
+  const legacyFlag = sentFlagsOf("lesson", "quiz", { ids: round.ids, startedAt: round.startedAt })[0];
+  assert.equal(flag, legacyFlag, "a B7-es ürítő (csak entry.flag-et ír) a régi kliens jelzőjét állítja");
+  assert.deepEqual(alsoFlags, [sentFlagsOf("lesson", "quiz", round)[0]]);
+});
