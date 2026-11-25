@@ -557,6 +557,8 @@ function makeBlockMaterials(lite = false) {
       const m = new THREE.MeshLambertMaterial({ map: tex });
       if (options.emissive !== undefined) m.emissive.set(options.emissive);
       if (options.emissiveIntensity !== undefined) m.emissiveIntensity = options.emissiveIntensity;
+      // Review #484: az emissziós térkép nélkül a teljes blokk (a sötét kőalap is) egységes fehér fényt kapna — csak a jel izzik.
+      if (options.emissiveMap !== undefined) m.emissiveMap = options.emissiveMap;
       return m;
     }
     return new THREE.MeshStandardMaterial({
