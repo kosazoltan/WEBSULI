@@ -8,11 +8,15 @@ import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 test.use({ serviceWorkers: "block" });
 
 async function mock(page: Page) {
+  let state: "tasks" | "quiz" | null = null;
   await page.route("**/api/**", async route => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
+    // Review #591: a figyelmeztetés forrása a szerver állapota (`/results/status`), a beküldés után újrakérdezve.
+    if (path === "/api/lessons/lesson-w/results/status") return route.fulfill({ json: { awaiting: state } });
     if (path === "/api/lessons/lesson-w/results" && req.method() === "POST") {
       const kind = (req.postDataJSON() as { kind: string }).kind;
+      state = kind === "tasks" ? "quiz" : null;
       return route.fulfill({ status: 202, json: kind === "tasks" ? { queued: false, awaiting: "quiz" } : { queued: true, combined: true } });
     }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
@@ -43,4 +47,19 @@ test("E7: a feladatok után a kvízre váró figyelmeztetés látszik (tetején 
   for (let i = 0; i < 25; i++) await quiz.nth(i).getByRole("button").first().click();
   await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
   await expect(notice).toHaveCount(0);
+});
+
+test("E7b: újratöltés után a szerver állapota alapján a figyelmeztetés ismét látszik", async ({ page }) => {
+  await mock(page);
+  // A később regisztrált útvonal fut elébb: a status a kvíz utáni szerverállapotot adja, minden más a közös helyettesítésre esik.
+  await page.route("**/api/**", async route => {
+    if (new URL(route.request().url()).pathname === "/api/lessons/lesson-w/results/status") return route.fulfill({ json: { awaiting: "tasks" } });
+    return route.fallback();
+  });
+  await page.goto("/preview/wait-fixture");
+  const notice = page.getByTestId("result-awaiting");
+  await expect(notice.first()).toBeVisible();
+  await expect(notice.first()).toContainText("szöveges feladatokat");
+  await page.reload();
+  await expect(notice.first()).toBeVisible();
 });

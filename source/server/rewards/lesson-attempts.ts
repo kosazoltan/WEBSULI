@@ -13,6 +13,7 @@ import { expiryFor, SECTION_REWARD_COOLDOWN_MS } from "./coupons";
 import { recordRoundOutcomes } from "../catalog/outcomes";
 import { logger } from "../lib/logger";
 import { raceAwaiting, type AwaitingPart } from "../../shared/result-awaiting";
+import { resultCombinedEmailEnabled } from "../lesson-result-combine";
 
 /** U4d: a lezáró válasz legfeljebb ennyit vár az összevont levél párosítására (a levél maga a háttérben megy). */
 export const PRACTICE_AWAITING_WAIT_MS = 3_000;
@@ -23,6 +24,12 @@ export const PRACTICE_AWAITING_WAIT_MS = 3_000;
  */
 async function withResultAwaiting(view: PracticeView, done: Attempt | null, userId: string): Promise<PracticeView & { resultAwaiting?: AwaitingPart }> {
   if (!done) return view;
+  // Review #591: kapcsoló KI → a régi, azonnali válasz (nincs várakozás a levélre); BE → legfeljebb a párosításig vár.
+  if (!resultCombinedEmailEnabled()) {
+    void import("../lesson-result-email").then(m => m.sendPracticeResult({ userId, attemptId: done.id, lessonId: done.lessonId, questions: done.questions, answers: done.answers }))
+      .catch(error => logger.warn(`[PRACTICE] Az eredmény-e-mail nem indult: ${error instanceof Error ? error.message : String(error)}`));
+    return view;
+  }
   const pending = import("../lesson-result-email")
     .then(m => m.sendPracticeResult({ userId, attemptId: done.id, lessonId: done.lessonId, questions: done.questions, answers: done.answers }))
     .then(r => r.awaiting);

@@ -40,8 +40,9 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
   const mounted = useRef(true);
   const save = (data: PracticeView & { resultAwaiting?: unknown }) => {
     setRound(data); onFinished(!!data.finishedAt);
-    // U4d: a kör lezáró válasza hozza az összevont levél várakozó részét; a teljesen megválaszolt kör enélkül törli a jelzést.
-    if (data.resultAwaiting || data.questions.every(q => q.answer)) noteResultResponse(lessonId, data);
+    // U4d (review #591): a kör lezárása (teljes megválaszolás vagy kihagyásos zárás) / betöltése után a szerver állapotát kérdezzük újra —
+    // a válasz maga nem töröl és nem állít jelzést (a forrás a `/results/status`).
+    if (data.resultAwaiting || data.finishedAt || data.questions.every(q => q.answer)) noteResultResponse(lessonId, data);
     try { localStorage.setItem(key, data.id); } catch { /* The server still owns the saved round. */ }
   };
   const run = async (action: () => Promise<PracticeView>) => {

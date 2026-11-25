@@ -1,38 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAwaitingStore, raceAwaiting } from "../shared/result-awaiting";
+import { asAwaiting, createLatest, raceAwaiting } from "../shared/result-awaiting";
 
-/** U4d (docs/specs/2026-11-24-osszevont-eredmenylevel-vegrehajtas.md, 4. pont): a kliens „várakozó rész” tára és a szerver időkorlátja. */
+/** U4d (review #591): sorszámozott állapot-lekérdezés és a szerver időkorlátja. */
 
-const memoryStorage = () => { const m = new Map<string, string>(); return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, v); }, removeItem: (k: string) => { m.delete(k); } }; };
-
-test("tár: beállítás, olvasás, törlés; másik lecke független", () => {
-  const store = createAwaitingStore(() => memoryStorage());
-  assert.equal(store.get("l1"), null);
-  store.set("l1", "tasks");
-  assert.equal(store.get("l1"), "tasks");
-  assert.equal(store.get("l2"), null, "másik lecke független");
-  store.set("l2", "quiz");
-  store.clear("l1");
-  assert.equal(store.get("l1"), null);
-  assert.equal(store.get("l2"), "quiz");
+test("createLatest: a korábbi, később érkező válasz nem érvényes; kulcsonként független", () => {
+  const l = createLatest();
+  const a = l.next("l1"); const b = l.next("l1"); const c = l.next("l2");
+  assert.equal(l.isLatest("l1", a), false, "a régebbi (pl. lassú) válasz elvész");
+  assert.equal(l.isLatest("l1", b), true);
+  assert.equal(l.isLatest("l2", c), true);
 });
 
-test("tár: írhatatlan tárolónál memóriában működik; érvénytelen érték nem jön vissza", () => {
-  const broken = { getItem: () => { throw new Error("tiltva"); }, setItem: () => { throw new Error("tiltva"); }, removeItem: () => { throw new Error("tiltva"); } };
-  const store = createAwaitingStore(() => broken);
-  store.set("l1", "quiz");
-  assert.equal(store.get("l1"), "quiz");
-  const s2 = memoryStorage(); s2.setItem("websuli:result-awaiting:l9", "valami");
-  assert.equal(createAwaitingStore(() => s2).get("l9"), null);
-});
-
-test("tár: feliratkozó értesül a változásról", () => {
-  const store = createAwaitingStore(() => memoryStorage());
-  const seen: Array<string | null> = [];
-  const off = store.subscribe("l1", v => seen.push(v));
-  store.set("l1", "tasks"); store.clear("l1"); off(); store.set("l1", "quiz");
-  assert.deepEqual(seen, ["tasks", null]);
+test("asAwaiting: csak tasks / quiz", () => {
+  assert.equal(asAwaiting("tasks"), "tasks");
+  assert.equal(asAwaiting("quiz"), "quiz");
+  assert.equal(asAwaiting("valami"), null);
+  assert.equal(asAwaiting(undefined), null);
 });
 
 test("raceAwaiting: érték, időtúllépés és hiba → null", async () => {

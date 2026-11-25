@@ -1,34 +1,18 @@
 /**
  * U4d — az összevont eredménylevél „várakozó rész” állapota (docs/specs/2026-11-24-osszevont-eredmenylevel-vegrehajtas.md, 4. pont).
- * Leckénkénti tár: a szerver `awaiting` válasza ide íródik, a hiányzó rész sikeres beküldése törli. Írhatatlan tárolónál memóriában.
+ * Review #591: az állapot forrása a SZERVER (`POST /api/lessons/:id/results/status`, a beküldéssel azonos tulajdonoskulccsal) — nincs
+ * helyi, kilét nélküli tár. A kliens minden lekérdezést sorszámoz; csak a legutolsó válasza érvényes (a korábbi, később érkező elvész).
  */
 export type AwaitingPart = "tasks" | "quiz";
-type StorageLike = { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void };
 
-const keyOf = (lessonId: string) => `websuli:result-awaiting:${lessonId}`;
-const valid = (v: unknown): v is AwaitingPart => v === "tasks" || v === "quiz";
+export const asAwaiting = (v: unknown): AwaitingPart | null => (v === "tasks" || v === "quiz" ? v : null);
 
-export function createAwaitingStore(storage: () => StorageLike | null) {
-  const memory = new Map<string, AwaitingPart | null>();
-  const listeners = new Map<string, Set<(v: AwaitingPart | null) => void>>();
-  const notify = (lessonId: string, v: AwaitingPart | null) => { for (const fn of listeners.get(lessonId) ?? []) fn(v); };
-  const get = (lessonId: string): AwaitingPart | null => {
-    if (memory.has(lessonId)) return memory.get(lessonId) ?? null;
-    try { const v = storage()?.getItem(keyOf(lessonId)); return valid(v) ? v : null; } catch { return null; }
-  };
-  const write = (lessonId: string, v: AwaitingPart | null) => {
-    memory.set(lessonId, v);
-    try { const s = storage(); if (s) { if (v) s.setItem(keyOf(lessonId), v); else s.removeItem(keyOf(lessonId)); } } catch { /* memóriában marad */ }
-    notify(lessonId, v);
-  };
+/** Kulcsonkénti sorszámozás: `next` új jegyet ad, `isLatest` csak a legutolsóra igaz. */
+export function createLatest() {
+  const seq = new Map<string, number>();
   return {
-    get,
-    set: (lessonId: string, v: AwaitingPart) => write(lessonId, v),
-    clear: (lessonId: string) => { if (get(lessonId) !== null || memory.has(lessonId)) write(lessonId, null); },
-    subscribe(lessonId: string, fn: (v: AwaitingPart | null) => void) {
-      const set = listeners.get(lessonId) ?? new Set(); set.add(fn); listeners.set(lessonId, set);
-      return () => { set.delete(fn); };
-    },
+    next(key: string) { const n = (seq.get(key) ?? 0) + 1; seq.set(key, n); return n; },
+    isLatest(key: string, ticket: number) { return seq.get(key) === ticket; },
   };
 }
 
