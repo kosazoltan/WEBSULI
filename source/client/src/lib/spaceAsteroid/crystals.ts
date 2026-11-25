@@ -70,7 +70,11 @@ export function labelFitsChip(label: string, measure: (word: string, px: number)
   if (!label.split(/[\s-]+/u).every((w) => measure(w, px) <= inner)) return false;
   // Review #486 (#679ypC): a SOR-szám is számít — mohó tördelés a mért szóközzel; a kötőjel törési hely (a kötőjel az előző sorban
   // marad). A lap legfeljebb CRYSTAL_LABEL_MAX_LINES sort mutat (`-webkit-line-clamp`), több sornál a jelmagyarázat jön.
-  const tokens = label.trim().split(/\s+/u).flatMap((word) => word.split(/(?<=-)/u).map((part, i) => ({ part, glued: i > 0 })));
+  // (lookbehind nélkül: a régi Safari nem ismeri — no-lookbehind-client.test.ts)
+  const tokens = label.trim().split(/\s+/u).flatMap((word) => {
+    const parts = word.split("-");
+    return parts.map((p, i) => ({ part: i < parts.length - 1 ? `${p}-` : p, glued: i > 0 })).filter((t) => t.part.length > 0);
+  });
   const space = measure(" ", px);
   let lines = 1;
   let width = 0;
