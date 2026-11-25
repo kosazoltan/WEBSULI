@@ -457,3 +457,76 @@ test("S6c-1 L5: BE futás végén a mentett telemetria (visualKinds) és a fajta
   assert.equal("visualKinds" in (offOut.telemetry?.gates ?? {}), false, "KI: nincs új telemetria-mező");
   assert.equal((offOut.qualityNotes ?? []).some((n) => n.reason === "visual_kind_share"), false);
 });
+
+test("V1 sorozatszabály a teljes kódúton: az előző lecke azonos kiosztása → következő forma / téma / összefoglaló; a szerző és a jelölő ezt kapja; hibás előzmény-lekérés nem állít meg", async () => {
+  const { pickVarietyAxes } = await import("../shared/lesson-variety-axes");
+  const seed = seedFrom("m1");
+  const base = { form: openerVarietyPick(fixture.classroom, seed).form.id, ...pickVarietyAxes(seed, 1) };
+  const requests: string[] = [];
+  const mem = memory();
+  (mem.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async (subject: string, classroom: number, exclude: string) => {
+    assert.equal(subject, fixture.subject); assert.equal(classroom, fixture.classroom); assert.equal(exclude, "m1");
+    return { openingForm: base.form, exampleTheme: base.exampleTheme.id, recapForm: base.recapForm.id };
+  };
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ onAuthor: (r) => requests.push(r) }), mem, { lessonVariety: true }));
+  const out = lastOutput(mem);
+  assert.notEqual(out.openingForm, base.form);
+  assert.notEqual(out.exampleTheme, base.exampleTheme.id);
+  assert.notEqual(out.recapForm, base.recapForm.id);
+  assert.ok(Array.isArray(out.lengthBands));
+  assert.ok(requests.some((r) => r.includes("PÉLDÁK TÉMAKÖRE") && r.includes("ÖSSZEFOGLALÓ FORMÁJA")), "a szerző megkapja a tengelyeket");
+  assert.equal((mem.lessons.at(-1) as { variety?: { openingForm?: string } }).variety?.openingForm, out.openingForm, "a jelölő a ténylegesen kiosztott formát hordozza");
+  const failing = memory();
+  (failing.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async () => { throw new Error("adatbázis nem elérhető"); };
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client(), failing, { lessonVariety: true }));
+  assert.equal(lastOutput(failing).openingForm, base.form, "hibás előzménynél a mag dönt");
+});
+
+// --- Review #611 ---
+
+test("review #611 (Codex, Vercel, Copilot): BE nyitásnál a szerző a sorozatszabállyal ELTOLT nyitásformát kapja (ugyanazt, mint a lektor és a jelölő)", async () => {
+  const { OPENING_FORM_LABEL } = await import("../shared/lesson-opener");
+  const seed = seedFrom("m1");
+  const baseForm = openerVarietyPick(fixture.classroom, seed).form.id;
+  const requests: string[] = [];
+  const mem = memory();
+  (mem.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async () => ({ openingForm: baseForm });
+  await withEnv("STUDIO_LESSON_OPENER", "on", () => runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ onAuthor: (r) => requests.push(r) }), mem, { lessonVariety: true })));
+  const out = lastOutput(mem);
+  assert.notEqual(out.openingForm, baseForm, "a sorozatszabály léptetett");
+  const label = (OPENING_FORM_LABEL as Record<string, string>)[String(out.openingForm)];
+  const baseLabel = (OPENING_FORM_LABEL as Record<string, string>)[baseForm];
+  const req = requests.find((r) => r.includes("Nyitásforma (a program osztotta ki, kötelező)")) ?? "";
+  assert.ok(req.includes(`Nyitásforma (a program osztotta ki, kötelező): ${label} `), `a szerzői kérés a kiosztott formát (${label}) írja elő`);
+  assert.equal(req.includes(`Nyitásforma (a program osztotta ki, kötelező): ${baseLabel} `), false, "az eredeti (magbeli) forma nem marad az előírásban");
+});
+
+test("review #611 (Codex, Copilot): a blokkváz-só korlátos, determinisztikus kereséssel ELTÉRŐ vázat választ; ha nincs eltérő, a 0. marad", async () => {
+  const { seriesShapeSalt } = await import("../server/studio/single-run/engine");
+  const sigs: Record<number, string> = { 0: "A", 1: "A", 2: "A", 3: "B" };
+  assert.equal(seriesShapeSalt((salt) => sigs[salt] ?? "A", "A"), 3, "az első eltérő vázú só");
+  assert.equal(seriesShapeSalt((salt) => sigs[salt] ?? "A", "B"), 0, "eltérő előzménynél nincs újramagozás");
+  assert.equal(seriesShapeSalt(() => "A", "A"), 0, "ha a korláton belül nincs eltérő, marad a 0. (naplózva)");
+  assert.equal(seriesShapeSalt(() => "A", undefined), 0);
+});
+
+test("review #611 (Codex, Vercel, Copilot): a szerzői állomáson megszakadt futás folytatása a MENTETT tengelyeket tölti vissza; nincs új előzmény-lekérés", async () => {
+  const first = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ failAuthor: true }), first, { lessonVariety: true })));
+  const saved = lastOutput(first);
+  assert.equal((saved as { lesson?: unknown }).lesson, undefined, "a megszakadás a szerző válasza ELŐTT történt");
+  assert.equal(typeof saved.openingForm, "string");
+  let calls = 0;
+  const second = memory();
+  (second.store as { loadPreviousSeriesVariety?: unknown }).loadPreviousSeriesVariety = async () => {
+    calls += 1;
+    return { openingForm: saved.openingForm, exampleTheme: saved.exampleTheme, recapForm: saved.recapForm };
+  };
+  await runSingleLesson({ files: [], mapId: "m1", ownerId: "u1", resume: { jobId: "job1", output: saved } }, runDeps(client(), second, {}, saved.singleRun.conversation));
+  const after = lastOutput(second);
+  assert.equal(calls, 0, "folytatásnál nincs új előzmény-lekérés");
+  assert.equal(after.openingForm, saved.openingForm);
+  assert.equal(after.exampleTheme, saved.exampleTheme);
+  assert.equal(after.recapForm, saved.recapForm);
+  assert.deepEqual(after.lengthBands, saved.lengthBands);
+});
