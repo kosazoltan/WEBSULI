@@ -8,6 +8,8 @@ import { evaluateOpenAnswer, evaluateOpenAnswerV2, isTypedTask, missingAnswerCon
  * a beküldés sémája, a SZERVEROLDALI újrapontozás (a kliens pontszámát nem fogadjuk), és a levél (minden szöveg escape-elve).
  */
 const roundId = z.string().regex(/^[a-z0-9-]{4,64}$/);
+// Review #613 (B8): a kör régi azonosítója az új (`r2-…`) mellett — a szerver a kettőt egy logikai körként kezeli.
+const legacyRoundId = z.string().regex(/^round-[a-z0-9]{1,58}$/).optional();
 const id = z.string().min(1).max(80);
 // Tanulói profil (docs/specs/2026-10-18-tanuloi-profil.md, S2): a párosított eszköz tokenje — a szerver ellenőrzi.
 const learner = z.string().max(120).optional();
@@ -16,8 +18,8 @@ const learner = z.string().max(120).optional();
 const startedAt = z.number().int().positive().optional();
 const lastAnsweredAt = z.number().int().positive().optional();
 export const resultRequestSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("tasks"), roundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt }).strict(),
-  z.object({ kind: z.literal("quiz"), roundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, partial: z.boolean().optional() }).strict(),
+  z.object({ kind: z.literal("tasks"), roundId, legacyRoundId, answers: z.record(id, z.string().max(4000)).refine(r => Object.keys(r).length <= 60, "Legfeljebb 60 válasz."), fingerprint: z.string().max(80).optional(), learner, startedAt }).strict(),
+  z.object({ kind: z.literal("quiz"), roundId, legacyRoundId, picks: z.record(id, z.number().int().min(-1).max(7)).refine(r => Object.keys(r).length <= 100, "Legfeljebb 100 kérdés."), fingerprint: z.string().max(80).optional(), learner, startedAt, lastAnsweredAt, partial: z.boolean().optional() }).strict(),
 ]);
 export type ResultRequest = z.infer<typeof resultRequestSchema>;
 

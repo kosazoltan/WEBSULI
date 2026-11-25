@@ -35,7 +35,8 @@ test("a feladatok és a helyi kvíz kiértékelése után egy-egy beküldés meg
   await page.getByRole("button", { name: "Lezárom a kihagyásokkal", exact: true }).click();
   await expect.poll(() => posts.filter(p => p.kind === "tasks").length).toBe(1);
   const tasks = posts.find(p => p.kind === "tasks")!;
-  expect(tasks.roundId).toMatch(/^round-[a-z0-9]+$/);
+  // B8 (dokumentált spec-változás, docs/specs/2026-11-25-eredmeny-email-b8.md 1. pont): az új kör azonosítója r2-<128 bit>.
+  expect(tasks.roundId).toMatch(/^r2-[0-9a-f]{32}$/);
   expect(Object.keys(tasks.answers as object)).toHaveLength(15);
   expect(tasks).not.toHaveProperty("score");
 

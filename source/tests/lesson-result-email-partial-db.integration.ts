@@ -232,3 +232,26 @@ test("#577 / 35501fd3: a felülírás-ellenőrzés tartós hibájánál a végle
     assert.ok(finalMails().every(m => /ha erről a körről korábban/.test(m.html)), "feltételes felülíró mondat");
   } finally { setRoundStateFault(null); }
 });
+
+// Review #613 (Codex, Copilot): a B8 két azonosítója (r2-<nonce> és a régi round-<lenyomat>) a szerveren UGYANAZ a logikai kör.
+test("review #613: az r2 pillanatkép után a régi azonosítóval érkező végleges beküldés elnyomja a „félbehagyva” levelet", async () => {
+  sent.length = 0;
+  const delay = setPartialDelay(2000);
+  try {
+    await post("r2-0123456789abcdef0123456789abcdef", { picks: picksOf(3), partial: true, legacyRoundId: "round-legacy613a" });
+    assert.deepEqual((await post("round-legacy613a", { picks: picksOf(25) })).json, { queued: true });
+  } finally { setPartialDelay(delay); }
+  await sleep(2300);
+  assert.equal(partialMails().length, 0, "a régi azonosítójú véglegesítés után nem megy „félbehagyva” levél");
+  assert.equal(finalMails().length, 2);
+});
+
+test("review #613: az r2 végleges beküldés után ugyanannak a körnek a régi azonosítójú (régi kliens) véglegese duplikátum", async () => {
+  sent.length = 0;
+  assert.deepEqual((await post("r2-fedcba9876543210fedcba9876543210", { picks: picksOf(25), legacyRoundId: "round-legacy613b" })).json, { queued: true });
+  await waitFor(() => finalMails().length === 2);
+  const late = await post("round-legacy613b", { picks: picksOf(25) });
+  assert.equal(late.json.duplicate, true, "a régi azonosítójú második végleges beküldés duplikátum");
+  await sleep(300);
+  assert.equal(finalMails().length, 2, "egy kör — egy végleges levélpár");
+});
