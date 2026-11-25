@@ -454,3 +454,37 @@ test("M2: rögzüléskor mindhárom kapuhoz szabad út vezet — 400 útpozíci�
   assert.equal(blocked, 0, "elzárt kapu rögzült elágazásban");
   assert.ok(frozen >= 300, `kevés rögzülés: ${frozen}/400`);
 });
+
+test("review #610: a már megjelent turbópad elérése a tartás (horgonyzás / mérési sáv) alatt NEM indít turbó-kérdést; elengedve igen", () => {
+  const h = harness();
+  let x = 0;
+  let z = 0;
+  let turboDuringHold = false;
+  let turbo: number | null = null;
+  let holdSteps = 0;
+  for (let i = 0; i < 60 * 70 && turbo === null; i++) {
+    const pad = h.core.pad();
+    const j = h.core.junction();
+    let hold = false;
+    if (j) {
+      const loc = junctionLocal(j, x, z);
+      x += Math.max(-0.4, Math.min(0.4, gateOffset(j, 1) - loc.lateral));
+      z -= 0.3;
+    } else if (pad) {
+      // a pad már látszik: a jármű a mérési sávban TART, közben ráhajt a padra és rajta marad egy ideig
+      x += Math.max(-0.4, Math.min(0.4, pad.x - x));
+      z += Math.max(-0.4, Math.min(0.4, pad.z - z));
+      if (padReached(pad, x, z) && holdSteps < 120) { hold = true; holdSteps += 1; }
+    } else z -= 0.25;
+    h.core.step(1000 / 60, { x, z, heading: 0, speed: 15 }, { hold });
+    const act = h.ui.active();
+    if (act && h.core.kindOf(act.id) === "turbo") {
+      if (hold) turboDuringHold = true;
+      turbo = act.id;
+    }
+    h.core.drainEvents();
+  }
+  assert.ok(holdSteps > 0, "a forgatókönyv elérte a padot tartás alatt");
+  assert.equal(turboDuringHold, false, "tartás alatt nem nyílt turbó-kérdés");
+  assert.ok(turbo !== null, "a tartás elengedése után a pad kérdést nyit");
+});
