@@ -53,6 +53,18 @@ Közös szabályok minden szeletre:
   - WHEN szókincslecke THEN szókereső vagy keresztrejtvény készül, és a rácsgenerátor determinisztikus (mag);
   - a boss-kérdés a fejezet anyagából való (lektori ellenőrzés).
 
+## V-kompat — végrehajtás (2026-11-25)
+Cél: a régi (gyorsítótárazott) kliens az újabb programverzió blokkfajtáit tűrje — a lecke megjelenik, csak az ismeretlen blokk marad ki.
+1. RED: `source/tests/lesson-unknown-blocks.test.ts` — `dropUnknownBlocks`: ismeretlen `kind`, ismeretlen `tryKind` és ismeretlen
+   `animate.animKind` kimarad, az ismert blokkok sorrendje változatlan; ha egy fejezet MINDEN blokkja ismeretlen, a fejezet nem tűnik el
+   (a fejezetindexek — pl. a gyakorlócsomagok `sectionIndex`-e — nem csúszhatnak el), hanem egy rövid „frissítsd az oldalt” magyarázat
+   áll a helyén a kiesett blokkok fogalmával; nem lecke-alakú bemenet változatlan. `source/tests/lesson-unknown-blocks.spec.ts` (e2e):
+   új `kind` és új `tryKind` a leckében → a lecke megjelenik, az ismert blokk látszik, az ismeretlen nem.
+2. GREEN: `shared/lesson-schema.ts` (`dropUnknownBlocks`; a `dropUnknownAnimateBlocks` ennek része marad, visszafelé kompatibilis
+   névvel), `client/src/lesson-runtime/LessonView.tsx` (olvasás).
+3. Próbahiba, kapulánc, PR; beolvadás és DEPLOY után indulhat a V2 / V3 (új fajták gyártása).
+Hatókörön kívül (a V4 terve dönt): a gyakorlókvíz új kérdéstípusai — a V4 visszafelé kompatibilis alakkal (választós alap) vezeti be.
+
 ## V1 — végrehajtás (2026-11-25)
 Tengelyek: 2 (nyitásformák bővítése), 6 (témakontextus a példákban), 8 (szöveges összefoglaló formák), 10 (fejezethossz-sáv), és a közös
 sorozatszabály (két egymás utáni lecke ugyanabban a tantárgy–évfolyam sorozatban nem kap azonos vázat). Csak BE változatossági
