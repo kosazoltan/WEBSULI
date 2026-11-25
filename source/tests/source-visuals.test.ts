@@ -19,6 +19,7 @@ const VALID: Record<SourceVisualKind, unknown> = {
   colorCode: { entries: [{ color: "zöld", tone: "a", meaning: "megszámlálható" }, { color: "narancs", tone: "b", meaning: "megszámlálhatatlan" }] },
   exercise: { instruction: "Egészítsd ki a kérdést!", items: ["___ apples are there?"], answerKey: ["How many"], pictures: ["három alma egy tálban"] },
   diagram: { description: "Tölcsér, amelybe a főnevek esnek.", parts: [{ label: "felső rész", meaning: "minden főnév" }] },
+  photo: { depicts: "Egy kosár alma a piacon" },
 };
 const INVALID: Record<SourceVisualKind, unknown> = {
   table: { headers: [], rows: [["a"]] },
@@ -29,6 +30,7 @@ const INVALID: Record<SourceVisualKind, unknown> = {
   colorCode: { entries: [{ color: "zöld", tone: "a", meaning: "megszámlálható" }] },
   exercise: { items: ["utasítás nélkül"] },
   diagram: { description: "", parts: [] },
+  photo: { depicts: "" },
 };
 
 test("fajtánként az érvényes tétel megmarad, az érvénytelen okkal kimarad", () => {

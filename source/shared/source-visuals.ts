@@ -5,7 +5,8 @@ import { z } from "zod";
  * szabálydobozai, képes kártyái, színkódjai, feladatai és egyéb ábrái strukturált adatként. A tétel oldalszámmal igazolt tanítható
  * tartalom, nem szó szerinti idézet. Tiszta modul: a modell kimenetét séma és szabály ítéli meg; a hibás tétel kimarad (nincs javítókör).
  */
-export const SOURCE_VISUAL_KINDS = ["table", "process", "decisionTree", "ruleBox", "pictureCard", "colorCode", "exercise", "diagram"] as const;
+// D1H-2: a `photo` (fénykép) — a program a forrásból kivágja és `sourceImage`-ként illeszti be (docs/specs/2026-11-25-d1h-kivagott-kep.md).
+export const SOURCE_VISUAL_KINDS = ["table", "process", "decisionTree", "ruleBox", "pictureCard", "colorCode", "exercise", "diagram", "photo"] as const;
 export type SourceVisualKind = (typeof SOURCE_VISUAL_KINDS)[number];
 export const SOURCE_VISUAL_LIMITS = { maxItems: 60, maxChars: 40000 } as const;
 /**
@@ -52,6 +53,9 @@ const common = {
   conceptIds: z.array(z.string()).max(12).default([]),
   /** A program tölti (`sanitizeSourceVisuals`); a modell értéke nem számít. */
   verified: z.enum(["text", "visual-only"]).optional(),
+  /** D1H-2: a tétel helye az oldalon / képen (0–1 arányok, bal felső sarok + méret). Hibás alak → a keret elmarad, a tétel marad. */
+  crop: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().min(0.02).max(1), h: z.number().min(0.02).max(1) }).strict()
+    .refine((c) => c.x + c.w <= 1.001 && c.y + c.h <= 1.001, "A keret kilóg.").optional().catch(undefined),
 };
 const item = <K extends SourceVisualKind, D extends z.ZodTypeAny>(kind: K, data: D) => z.object({ ...common, kind: z.literal(kind), data });
 
@@ -66,6 +70,7 @@ export const sourceVisualSchema = z.discriminatedUnion("kind", [
   item("colorCode", z.object({ entries: z.array(z.object({ color: filled(30), tone, meaning: filled(160) })).min(2).max(6) })),
   item("exercise", z.object({ instruction: filled(300), items: z.array(filled(240)).max(20), answerKey: z.array(filled(240)).max(20).optional(), pictures: z.array(filled(160)).max(8).optional() })),
   item("diagram", z.object({ description: filled(400), parts: z.array(z.object({ label: filled(60), meaning: filled(200) })).max(12) })),
+  item("photo", z.object({ depicts: filled(300) })),
 ]);
 export type SourceVisual = z.infer<typeof sourceVisualSchema>;
 
@@ -73,9 +78,11 @@ export type SourceVisual = z.infer<typeof sourceVisualSchema>;
 export const SOURCE_VISUALS_CONTRACT = [
   'A FORRÁS VIZUÁLIS LELTÁRA — a válasz JSON-jába "visuals": [...] kulcs is kerüljön. A forrás MINDEN táblázatáról, folyamatáról (lépéssoráról),',
   "döntési ábrájáról, kiemelt szabálydobozáról, képes kártyájáról, színkódjáról, feladatáról és egyéb ábrájáról adj egy tételt:",
-  '{"id": "v1", "v2", … (egyedi), "kind": "table" | "process" | "decisionTree" | "ruleBox" | "pictureCard" | "colorCode" | "exercise" | "diagram",',
+  '{"id": "v1", "v2", … (egyedi), "kind": "table" | "process" | "decisionTree" | "ruleBox" | "pictureCard" | "colorCode" | "exercise" | "diagram" | "photo",',
   ' "sourceFile": a forrásfájl neve, "page": oldalszám (1-től; képnél 1), "role": mit tanít a tétel (legfeljebb 200 karakter), "title"?: a tétel címe a forrásban,',
-  ' "conceptIds": a hozzá tartozó fogalmak "id"-i a concepts listából, "data": a fajta szerinti adat}',
+  ' "conceptIds": a hozzá tartozó fogalmak "id"-i a concepts listából, "data": a fajta szerinti adat,',
+  ' "crop"?: {"x", "y", "w", "h"} — a tétel helye az oldalon / képen 0–1 arányokban (bal felső sarok, szélesség, magasság); a fényképnél',
+  ' (photo) és a rajzzal vissza nem adható ábránál (diagram) KÖTELEZŐ, a többinél elhagyható}',
   "A data alakja fajtánként:",
   `- table: {"headers": string[1–8], "rows": string[][] (1–40 sor, soronként a fejléc sorrendjében; egy cella legfeljebb ${SOURCE_VISUAL_TABLE.cellChars} karakter), "headerTones"?: ("a" | "b" | "c" | "neutral")[]}`,
   '- process: {"steps": string[2–12]}',
@@ -85,6 +92,8 @@ export const SOURCE_VISUALS_CONTRACT = [
   '- colorCode: {"entries": [{"color": a szín neve, "tone": "a" | "b" | "c" | "neutral", "meaning": mit jelöl a szín}] (2–6)}',
   '- exercise: {"instruction": string, "items": string[] (legfeljebb 20), "answerKey"?: string[], "pictures"?: string[] (mit ábrázol egy-egy kép; legfeljebb 8)}',
   '- diagram: {"description": mit mutat az ábra, "parts": [{"label": string, "meaning": string}] (legfeljebb 12)}',
+  '- photo: {"depicts": mit ábrázol a fénykép (a TARTALMA, nem az, hogy „fénykép”)} — tanító fényképre (a díszítő képet ne vedd fel); a program vágja ki',
+  "  és illeszti be forrásmegjelöléssel, ábrát róla ne kérj.",
   "A kép TARTALMÁT írd le (depicts, pictures) — ne azt, hogy „kép”; a táblázatot ADATKÉNT add (fejléc és sorok), ne mondatokban; a színt JELENTÉSKÉNT",
   "(ugyanaz a jelentés ugyanaz a tónus az egész forrásban). A szövegek a forrás saját szavai legyenek. Ha a forrásban nincs ilyen elem: \"visuals\": [].",
   `Legfeljebb ${SOURCE_VISUAL_LIMITS.maxItems} tétel. A hibás alakú tételt a program kihagyja.`,
@@ -101,6 +110,7 @@ export function sourceVisualTexts(v: SourceVisual): string[] {
     : v.kind === "pictureCard" ? v.data.cards.flatMap((c) => [c.label, c.caption, c.example])
     : v.kind === "colorCode" ? v.data.entries.map((e) => e.meaning)
     : v.kind === "exercise" ? [v.data.instruction, ...v.data.items, ...(v.data.answerKey ?? [])]
+    : v.kind === "photo" ? []
     : v.data.parts.flatMap((p) => [p.label, p.meaning]);
   return [v.title, ...own].filter((t): t is string => typeof t === "string" && t.trim().length > 0);
 }

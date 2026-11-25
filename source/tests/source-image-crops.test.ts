@@ -11,7 +11,8 @@ import { sourceCoverageGate } from "../server/studio/gates/source-coverage-gate"
 /** D1H-2 (docs/specs/2026-11-25-d1h-kivagott-kep-vegrehajtas.md): fénykép / nehezen rajzolható ábra kivágása képforrásból. */
 
 const lesson = () => structuredClone(fusionFixture()) as Lesson;
-const conceptOf = (l: Lesson, section: number) => l.sections[section].blocks.find((b) => b.coversConceptIds?.length)!.coversConceptIds![0];
+const covers = (b: unknown): string[] => (b as { coversConceptIds?: string[] }).coversConceptIds ?? [];
+const conceptOf = (l: Lesson, section: number) => covers(l.sections[section].blocks.find((b) => covers(b).length))[0];
 async function twoColor(): Promise<string> {
   // 200×100: bal fele piros, jobb fele kék — a kivágás helye a színből ellenőrizhető.
   const left = await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 220, g: 20, b: 20 } } }).png().toBuffer();
@@ -65,7 +66,7 @@ test("placeSourceImages: kivágás a keret szerint, tárolás, sourceImage a fog
   assert.match(String(stored[1].meta.credit), /Feltöltött forrás: feltoltott\.png/);
   const blocks = out.sections.flatMap((s, i) => s.blocks.map((b) => ({ ...b, section: i }))).filter((b) => b.kind === "animate" && b.animKind === "sourceImage");
   assert.equal(blocks.length, 2);
-  assert.ok(blocks.every((b) => b.section === l.sections.length - 1 && b.coversConceptIds.includes(concept)));
+  assert.ok(blocks.every((b) => b.section === l.sections.length - 1 && covers(b).includes(concept)));
   assert.deepEqual(blocks.map((b) => (b as { sourceVisualId?: string }).sourceVisualId), ["v1", "v2"]);
   assert.equal((blocks[0] as { params: { sourceUrl?: string } }).params.sourceUrl, "https://www.nkp.hu/foldrajz?id=42");
   assert.equal(lessonSchema.safeParse(out).success, true);

@@ -25,6 +25,7 @@ import { stripUngroundedAnimateLabels } from "../grounding";
 import { dropUndrawableSourceVisuals, type DroppedSourceVisual } from "../../../shared/lesson-visual-params";
 import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
+import { placeSourceImages, sourceImagesEnabled } from "../source-image-crops";
 import { scoringRulesOf } from "../../../shared/scoring-rules";
 import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled, type AnswerKeyContext } from "../answer-key-writer";
@@ -903,6 +904,16 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
   } catch (error) { log(`[EGYFUTÁS] Az ábra-forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
   if (!pastAnimator) lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
+  // D1H-2 (docs/specs/2026-11-25-d1h-kivagott-kep.md): a fénykép / rajzzal vissza nem adott ábra kivágott képként, forrásmegjelöléssel —
+  // csak forrásvizuál BE + `STUDIO_SOURCE_IMAGES=on` mellett; hibája nem állítja meg a gyártást.
+  if (!pastAnimator && visualsOn && sourceImagesEnabled() && visuals.some((v) => v.crop)) {
+    try {
+      const { storeSourceImage } = await import("../../source-images");
+      const placedImages = await placeSourceImages(lesson, visuals, input.files, { store: storeSourceImage, log });
+      lesson = placedImages.lesson;
+      if (placedImages.placed.length || placedImages.skipped.length) log(`[EGYFUTÁS] Kivágott forrásképek: ${placedImages.placed.length} beillesztve, ${placedImages.skipped.length} kimaradt.`);
+    } catch (error) { log(`[EGYFUTÁS] A forrásképek kivágása elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
+  }
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.
   let checkpoint: ExperienceCheckpoint | undefined = resumed?.checkpoint;
