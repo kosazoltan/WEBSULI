@@ -12,7 +12,13 @@ export const LESSON_PROGRESS_VERSION = 1 as const;
 export type TrySnapshot =
   | { kind: "fillBlank"; values: string[]; checked: boolean }
   | { kind: "dragSort"; order: string[]; checked: boolean }
-  | { kind: "match"; matched: number[] };
+  | { kind: "match"; matched: number[] }
+  // V2a: az öt új feladatfajta
+  | { kind: "trueFalseSeries"; answers: Array<boolean | null>; checked: boolean }
+  | { kind: "highlight"; selected: number[]; checked: boolean }
+  | { kind: "categorize"; picks: Array<string | null>; checked: boolean }
+  | { kind: "numberLine"; value: number; checked: boolean }
+  | { kind: "estimate"; value: number; checked: boolean };
 
 export type LessonProgressSnapshot = {
   v: typeof LESSON_PROGRESS_VERSION;
