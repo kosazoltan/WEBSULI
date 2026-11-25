@@ -31,14 +31,18 @@ function creditFor(fileName: string, files: CropFile[], page: number, pdf: boole
     .filter((f) => f.kind === "text" && (f.name === parent || f.name === `${parent}-forras.txt`))
     .map((f) => /^Forrás: (https:\/\/\S+)\r?\nCím: ([^\r\n]*)/.exec(f.content))
     .find((m): m is RegExpExecArray => !!m);
-  if (header) return { sourceUrl: header[1].slice(0, 2000), credit: (header[2].trim() || new URL(header[1]).hostname).slice(0, 200) };
+  if (header) return { sourceUrl: header[1].slice(0, 2000), credit: (header[2].trim() || new URL(header[1]).hostname).slice(0, 200), ...(pdf ? { page } : {}) };
   return { credit: `Feltöltött forrás: ${fileName}`.slice(0, 200), ...(pdf ? { page } : {}) };
 }
 
-async function cropToWebp(dataUrl: string, crop: NonNullable<SourceVisual["crop"]>): Promise<Buffer> {
-  const comma = dataUrl.indexOf(",");
-  if (!dataUrl.startsWith("data:image/") || comma < 0) throw new Error("nem kép adat-URL");
-  const input = Buffer.from(dataUrl.slice(comma + 1), "base64");
+async function cropToWebp(source: string | Buffer, crop: NonNullable<SourceVisual["crop"]>): Promise<Buffer> {
+  let input: Buffer;
+  if (Buffer.isBuffer(source)) input = source;
+  else {
+    const comma = source.indexOf(",");
+    if (!source.startsWith("data:image/") || comma < 0) throw new Error("nem kép adat-URL");
+    input = Buffer.from(source.slice(comma + 1), "base64");
+  }
   // EXIF-forgatás először, hogy a keret a LÁTOTT képre vonatkozzon.
   const upright = await sharp(input, { failOn: "error", limitInputPixels: 60_000_000 }).rotate().toBuffer();
   const { width = 0, height = 0 } = await sharp(upright).metadata();
@@ -67,7 +71,15 @@ function targetSection(lesson: Lesson, conceptIds: string[]): { index: number; c
   return { index: best.index, concepts: own.length ? own.slice(0, 6) : fallback };
 }
 
-export async function placeSourceImages(lesson: Lesson, visuals: ReadonlyArray<SourceVisual>, files: ReadonlyArray<CropFile>, deps: { store: SourceImageStore; log?: (line: string) => void }): Promise<PlaceResult> {
+export async function placeSourceImages(lesson: Lesson, visuals: ReadonlyArray<SourceVisual>, files: ReadonlyArray<CropFile>, deps: { store: SourceImageStore; log?: (line: string) => void; renderPage?: (dataUrl: string, page: number) => Promise<Buffer> }): Promise<PlaceResult> {
+  // D1H-3: a PDF-oldal egy futásban egyszer raszterizálódik (több kivágás ugyanarról az oldalról).
+  const renderPage = deps.renderPage ?? (async (url: string, page: number) => (await import("./pdf-page-render")).renderPdfPage(url, page));
+  const pages = new Map<string, Promise<Buffer>>();
+  const pageImage = (file: CropFile, page: number) => {
+    const key = `${file.name}#${page}`;
+    if (!pages.has(key)) pages.set(key, renderPage(file.content, page));
+    return pages.get(key)!;
+  };
   const placed: string[] = [];
   const skipped: PlaceResult["skipped"] = [];
   // Review #596: csak az ÁBRA-blokk (animate) hivatkozása jelent rajzot — a szöveges (example / try / check) hivatkozás nem.
@@ -82,17 +94,18 @@ export async function placeSourceImages(lesson: Lesson, visuals: ReadonlyArray<S
     if (placed.length >= SOURCE_IMAGES_PER_LESSON) { skip(`leckénként legfeljebb ${SOURCE_IMAGES_PER_LESSON} kivágott kép`); continue; }
     const file = files.find((f) => f.name === v.sourceFile);
     if (!file) { skip("a forrásfájl nem érhető el"); continue; }
-    if (file.kind !== "image") { skip(file.kind === "pdf" ? "PDF-oldal kivágása: D1H-3" : `nem kép forrás (${file.kind})`); continue; }
+    if (file.kind !== "image" && file.kind !== "pdf") { skip(`nem kép / PDF forrás (${file.kind})`); continue; }
     try {
-      const bytes = await cropToWebp(file.content, v.crop);
-      const meta = creditFor(file.name, [...files], v.page, false);
+      const pdf = file.kind === "pdf";
+      const bytes = await cropToWebp(pdf ? await pageImage(file, v.page) : file.content, v.crop);
+      const meta = creditFor(file.name, [...files], v.page, pdf);
       const imageId = await deps.store(bytes, { ...meta, sourceFile: file.name.slice(0, 255) });
       if (!SOURCE_IMAGE_ID.test(imageId)) throw new Error("érvénytelen képazonosító a tárból");
       const { index, concepts } = targetSection(current, v.conceptIds);
       if (!concepts.length) { skip("nincs fogalom, amelyhez köthető"); continue; }
       const alt = (v.kind === "photo" ? v.data.depicts : v.data.description).slice(0, 200);
       const block = { kind: "animate" as const, animKind: "sourceImage" as const, caption: (v.title ?? v.role).slice(0, 500), coversConceptIds: concepts, sourceVisualId: v.id,
-        params: { imageId, alt, credit: meta.credit, ...(meta.sourceUrl ? { sourceUrl: meta.sourceUrl } : {}) } };
+        params: { imageId, alt, credit: meta.credit, ...(meta.sourceUrl ? { sourceUrl: meta.sourceUrl } : {}), ...(meta.page ? { page: meta.page } : {}) } };
       const section = current.sections[index];
       const after = section.blocks.findIndex((b) => b.kind === "explain" && conceptsOf(b).some((c) => concepts.includes(c)));
       let at = after >= 0 ? after + 1 : section.blocks.length;
