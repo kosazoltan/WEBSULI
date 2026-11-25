@@ -11,6 +11,8 @@ import { LessonLoading } from "@/lesson-runtime/LessonLoading";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import LearnerProfileSync from "@/components/LearnerProfileSync";
 import { ADVENT_BUILD_FLAG } from "@/advent/season-flag";
+import { resultOutboxEnabled } from "@/lib/resultOutboxFlag";
+import { hasPendingOutbox } from "@shared/result-outbox";
 
 // LS-2: lazy, hogy a mérőoldal kódja ne kerüljön a fő bundle-be.
 const LessonRuntimeProbe = lazy(() => import("@/lesson-runtime/LessonRuntimeProbe"));
@@ -127,7 +129,24 @@ function Router() {
   );
 }
 
+/**
+ * B7 (docs/specs/2026-11-25-eredmeny-email-b7.md, R24 / R32): a tartós kimenő sor ürítése az alkalmazás indulásakor (ha van függő bejegyzés)
+ * és a hálózat visszatérésekor — más nézetből és későbbi megnyitáskor is. A beküldő modul csak függő bejegyzésnél töltődik be.
+ */
+function useResultOutboxDrain() {
+  useEffect(() => {
+    if (!resultOutboxEnabled()) return;
+    let pending: boolean;
+    try { pending = hasPendingOutbox(localStorage); } catch { pending = false; }
+    const drain = () => { void import("@/lesson-runtime/resultReport").then(m => m.drainResultOutbox()).catch(() => undefined); };
+    if (pending) drain();
+    window.addEventListener("online", drain);
+    return () => window.removeEventListener("online", drain);
+  }, []);
+}
+
 function App() {
+  useResultOutboxDrain();
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
