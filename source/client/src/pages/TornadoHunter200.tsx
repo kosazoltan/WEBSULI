@@ -1419,6 +1419,8 @@ function PlayScreen(props: {
   const expandedRef = useRef(false);
   /** Review #610: a menet vége a futó megoldás-kijelzés lefutásáig halasztva (a győzelem / vereség jelzője). */
   const deferredFinishRef = useRef<boolean | null>(null);
+  /** Review #610 (Vercel P1): az elhalasztott menetvég kezdete — a mag áll, a megoldás-kijelzés órája innen a valós idővel halad. */
+  const deferredRevealRef = useRef<{ clockMs: number; frameMs: number } | null>(null);
   const expandedIdRef = useRef<number | null>(null);
   const [anchorMsg, setAnchorMsg] = useState<string | null>(null);
   /** J7b: az elágazás / turbó következménye („Rövidítés — turbó!”, „Kerülő: −9 mp”), a sáv alatt. */
@@ -2210,6 +2212,7 @@ function PlayScreen(props: {
       if (qRef.current.view().reveal && !qRef.current.settled()) {
         qRef.current.finish();
         deferredFinishRef.current = won;
+        deferredRevealRef.current = { clockMs: driverRef.current?.core.clockMs() ?? 0, frameMs: frameClockRef.current };
         return;
       }
       const p = playerRef.current;
@@ -2411,6 +2414,7 @@ function PlayScreen(props: {
     // Az előző futás minden függő időzítője és félbehagyott kvíze érvénytelen (review-lelet #426).
     runIdRef.current += 1;
     deferredFinishRef.current = null;
+    deferredRevealRef.current = null;
     clearPendingTimers();
     pendingAnchorRef.current = null;
     setFeedback(null);
@@ -2810,9 +2814,16 @@ function PlayScreen(props: {
     frameClockRef.current += dt * 1000;
     drv.frame(frameClockRef.current);
     // Review #610: a menet végén elhalasztott eredmény a megoldás-kijelzés lefutása után.
+    // Review #610 (Vercel P1): a mag a menet végén áll (0-s időskála), ezért a kijelzés óráját itt a valós idő lépteti — különben
+    // a `settled()` sosem teljesülne, és a futás végleg megakadna. Új kérdés nem indul (`tick: false`, `hold`).
+    const deferredReveal = deferredRevealRef.current;
+    if (deferredFinishRef.current !== null && deferredReveal) {
+      qRef.current.frame(deferredReveal.clockMs + Math.max(0, frameClockRef.current - deferredReveal.frameMs), { tick: false, hold: true });
+    }
     if (deferredFinishRef.current !== null && qRef.current.settled()) {
       const won = deferredFinishRef.current;
       deferredFinishRef.current = null;
+      deferredRevealRef.current = null;
       finishedRef.current = false;
       finishRunRef.current(won);
     }

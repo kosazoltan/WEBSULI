@@ -3150,3 +3150,7 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 - A tábla-koppintás a kibontott („Mutasd”) kérdés alatt tiltott, mint a közös kérdéskomponensben (különben a kibontás beragad és a mag 0-s időskálán áll).
 - A menet vége kifuttatja a futó megoldás-kijelzést: a mag áll, a kérdés-sáv lezárul, az eredmény a `settled()` után jelenik meg; az újrakezdés törli a halasztást.
 - A „Miért?” / „Mutasd” olvasása alatt a játékóra is áll (a horgonyzás utáni győzelmi időzítő nem zárja be olvasás közben a magyarázatot).
+
+### J7b — review #610, Vercel P1 (2026-11-25)
+- A megoldás-kijelzés alatti menetvég elhalasztott eredménye megakadt: a mag a menet végén áll (0-s időskála), így a kijelzés órája sem haladt, a `settled()` sosem teljesült. Javítás: az elhalasztás alatt a kijelzés óráját a képkocka a valós idővel lépteti (`frame(…, { tick: false, hold: true })`), új kérdés nem indul.
+- Teszt: `tornado-play.spec.ts` „review #610 (Vercel P1) …” (RED `8f436291`, három nézetben bukott); tornado e2e 40 passed + 1 terhelés-érzékeny K3 (külön 6/6 zöld), egységtesztek 259/0.
