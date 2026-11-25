@@ -91,7 +91,7 @@ const recorded = (page: Page) => page.evaluate(() => (window as unknown as { __s
  * ablakán túl érkezett (terhelt futtató: „Lejárt az idő” — a játék helyes viselkedése, nem a koppintás hibája), a következő feladaton
  * újra próbálja, legfeljebb háromszor; a kimenetelt adja vissza (a hívó állít rá).
  */
-async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promise<void>): Promise<Recorded & { wave: ElementHandle<Element>[] }> {
+async function answerRound(page: Page, correct: boolean, beforeTap?: () => Promise<void>): Promise<Recorded & { wave: ElementHandle<Node>[] }> {
   const selector = `[data-testid="sq-answers"] [data-correct="${correct}"]`;
   for (let attempt = 1; ; attempt++) {
     await expect(drones(page)).toHaveCount(4, { timeout: 15_000 });
