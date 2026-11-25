@@ -1291,7 +1291,23 @@ Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szinte
 
 Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72, C-75.
 
-## C-99 — Sim-teszt csak a küszöb ELŐTTI eseményt mérte: a „véletlen válasz 0” a választott mintákra volt szabva (2026-11-19)
+## C-99 — Párhuzamos kapuláncok terhelés-bukásai, futó láncszkript szerkesztése, halmozott szelet-ág (2026-11-25)
+
+- **Tünet 1:** több kapulánc egyszerre futott; az időzítés-érzékeny egységtesztek (`claude-stream-thinking-liveness`, `attempt-deadline`), a
+  `test:learning-db` 480 s-os korlátja és a `npm run build` hibaüzenet nélkül buktak — külön futtatva 3/3 zöldek. **Szabály 1:** nehéz lépés
+  (gate:stage/push/pr, teljes teszt, build, e2e, DB-teszt) csak a gépszintű zárral, egyszerre egy: Hermes-agent
+  `scripts/websuli-lanc/nehez.sh`; a láncot a `lanc-futtat.sh` indítja, amely ezt automatikusan beköti.
+- **Tünet 2:** a futó `D:/tmp/*-chain*.sh` helyben javítása után a bash eltolva olvasott tovább („ile: command not found”, már beolvadt PR-ra
+  újra merge-one). **Szabály 2:** lánc csak futásonkénti másolatból fut (`lanc-futtat.sh`); a forrás így bármikor javítható.
+- **Tünet 3:** a B5b/B7-re épült B8-ág a squash-beolvadások után a push-kapu háromfázisú ellenőrzésén bukott (az első kódcommit a B5b-é volt).
+  **Szabály 3:** a `halmozott-ag.sh` indulás előtt ellenőriz; beolvadt alsó szelet esetén `-v2` ág origin/main-ről, a kész fa három commitban
+  (docs → bukó tesztek → kód), force-push nélkül.
+- **Tünet 4:** a kliens feliratbeférés-ellenőrzésébe lookbehind (`(?<=-)`) került → `no-lookbehind-client.test.ts` piros. **Szabály 4:** kliens
+  kódban nincs lookbehind.
+
+Forrás: #486, #607, #608, B8 (`feat/eredmeny-email-b8-v2`). Skill: `websuli-kapulanc`. Rokon: C-61, C-75.
+
+## C-100 — Sim-teszt csak a küszöb ELŐTTI eseményt mérte: a „véletlen válasz 0” a választott mintákra volt szabva (2026-11-19)
 
 Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado-sim.test.ts`, `source/client/src/lib/tornado/junctions.ts`).
 
