@@ -51,11 +51,14 @@ def grep(repo: str, pattern: str, paths: list[str], files: bool = False) -> tupl
     return None, safe((r.stderr or r.stdout).strip()[:200])
 
 
-def connect(path: str) -> sqlite3.Connection:
+def connect(path: str, migrate: bool = True) -> sqlite3.Connection:
+    """`migrate=False`: sémamódosítás nélkül (review #601 — a `lelet-zar` sikertelen futása sem írhat)."""
     if not Path(path).exists():
         sys.exit("Nincs adatbázis — előbb: python scripts/kovetelmeny/gyujt.py")
     c = sqlite3.connect(path)
     c.row_factory = sqlite3.Row
+    if not migrate:
+        return c
     for table, col in (("findings", "kulcs"), ("requirements", "manual_evidence"), ("flags", "state"), ("flags", "stale")):
         if col not in {r[1] for r in c.execute(f"PRAGMA table_info({table})")}:  # fix tábla-/oszlopnevek
             c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {'INTEGER NOT NULL DEFAULT 0' if col == 'stale' else 'TEXT'}")
@@ -323,7 +326,10 @@ def cmd_lelet_add(c, a):
 
 
 def cmd_lelet_zar(c, a):
-    """Nyitott lelet lezárása; a bizonyíték maszkolva a meglévő mögé fűződik. Zárt / nem létező lelet → kilépési kód 1."""
+    """Nyitott lelet lezárása; a bizonyíték maszkolva a meglévő mögé fűződik. Zárt / nem létező lelet → kilépési kód 1.
+    Review #601: üres / csak szóközös bizonyíték írás nélkül elutasítva."""
+    if not a.evidence.strip():
+        sys.exit("a --evidence nem lehet üres (commit, PR, fájl:sor vagy mérés)")
     n = c.execute("UPDATE findings SET status=?, evidence=coalesce(evidence,'') || ?, last_seen=? WHERE id=? AND status='nyitott'",
                   (a.status, f" | lezárva: {mask(a.evidence)}", NOW, a.id)).rowcount
     c.commit()
@@ -394,7 +400,7 @@ def main():
     p.add_argument("status")
     p.add_argument("--evidence", required=True)
     a = ap.parse_args()
-    c = connect(a.db)
+    c = connect(a.db, migrate=a.cmd != "lelet-zar")
     {"allapot": cmd_allapot, "lista": cmd_lista, "tetel": cmd_tetel, "kereses": cmd_kereses, "felulirasok": cmd_felulirasok,
      "ellenoriz": cmd_ellenoriz, "lelet-add": cmd_lelet_add, "lelet-lista": cmd_lelet_lista, "lelet-zar": cmd_lelet_zar,
      "allit": cmd_allit}[a.cmd](c, a)
