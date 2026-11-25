@@ -3144,3 +3144,9 @@ beállítása (közvetlen WebSocket, kisebb késés) — a terv nélküle is mű
 3. A K.3 etikai lista, a K.4 30 pontos kapu és a K.5 kódszabályok a PR-leírásban.
 4. A követhetőségi táblázat (terv 12.) minden cél-mondatához legalább egy lezárt szelet a J9 végén; a G8–G10 a JM
    véglegesítésével.
+
+### J6a — review #486, 2. kör (2026-11-25)
+- A rögzült menet eredménye végleges: a megoldás-kijelzés alatt tovább futó harc (bomba, lövedék, főellenfél eleste) nem fordítja győzelemre (`runEndedRef`).
+- A kristály-felirat beférése a SOR-számot is méri (mohó tördelés a mért szóközzel, kötőjeles törés); háromnál több sor → jelmagyarázat.
+- A fekvő jelmagyarázat magassága a közös rácssorok maximumából, a 18 px-es sorszámjel minimumával (`landscapeLegendHeightPx`).
+- Álló nézetben helyhiánynál tömör mód: a kártya alatt nincs lista és nincs helyfoglalás, a „Válaszok” gomb a vezérlők fölötti alsó sávban; a teljes lista a gombbal nyílik. SPEC-VÁLTOZÁS a fedés-mérőben: tömör módban nincs mért szövegsor.

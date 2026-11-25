@@ -497,7 +497,8 @@ async function measureLayout(page: Page) {
       const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
       return { idx: Number(c.dataset.optionIndex), r: rect(r), hitIdx: hit?.closest<HTMLElement>(".sa-crystal")?.dataset.optionIndex ?? null };
     });
-    return { lines, btn: rect(btn), card: cardEl ? rect(cardEl.getBoundingClientRect()) : null, chips, vw: innerWidth, vh: innerHeight, overflowX: document.documentElement.scrollWidth > innerWidth };
+    const compact = document.querySelector<HTMLElement>('[data-testid="sa-legend"]')?.dataset.compact === "true";
+    return { lines, btn: rect(btn), card: cardEl ? rect(cardEl.getBoundingClientRect()) : null, chips, vw: innerWidth, vh: innerHeight, overflowX: document.documentElement.scrollWidth > innerWidth, compact };
   });
 }
 const boxesHit = (a: Box, b: Box) => a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t < b.b - 0.5 && a.b > b.t + 0.5;
@@ -505,7 +506,9 @@ const boxesHit = (a: Box, b: Box) => a.l < b.r - 0.5 && a.r > b.l + 0.5 && a.t <
 function layoutProblems(m: Awaited<ReturnType<typeof measureLayout>>, label: string): string[] {
   const out: string[] = [];
   if (!m.card) return [`${label}: nincs .play-question-card`];
-  if (m.lines.length <= 3) out.push(`${label}: nincs mért szövegsor`);
+  // SPEC-VÁLTOZÁS 2026-11-25 (review #486, #679yp8): helyhiánynál tömör mód — a kártya alatt nincs lista (a válaszok a gombbal nyíló
+  // panelen), ezért szövegsor sincs; a gomb ↔ kristály / kártya fedés továbbra is mért.
+  if (!m.compact && m.lines.length <= 3) out.push(`${label}: nincs mért szövegsor`);
   if (m.chips.length !== 4) out.push(`${label}: ${m.chips.length} kristály`);
   for (const ln of m.lines) {
     for (const ch of m.chips) if (boxesHit(ln.r, ch.r)) out.push(`${label}: jelmagyarázat-sor (${ln.what}) ↔ kristály ${ch.idx + 1}`);
@@ -530,7 +533,7 @@ async function openLongQuestion(page: Page, item: { id: string; prompt: string; 
   await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: unknown }).__websuliGame !== "undefined");
   await force(page, { noEnemies: true });
   await force(page, { questionItem: item, question: true });
-  await expect(page.getByTestId("sa-legend")).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId("sa-legend")).toHaveCount(1, { timeout: 5_000 });
   await expect(page.getByTestId("sa-answers-open")).toBeVisible();
   await expect(page.getByTestId("sa-crystals")).toHaveAttribute("data-armed", "true", { timeout: 5_000 });
   // a kristályok a helyükön (két mintavétel között nem mozdulnak)
@@ -573,6 +576,15 @@ for (const vp of [
       await page.evaluate(() => {
         const chip = document.querySelector<HTMLElement>('[data-testid="sa-crystals"] .sa-crystal')!.getBoundingClientRect();
         const lg = document.querySelector<HTMLElement>('[data-testid="sa-legend"]')!;
+        if (lg.dataset.compact === "true") {
+          // tömör mód: a gombot toljuk a kristályra (a régi fedés megfelelője)
+          const b = lg.querySelector<HTMLElement>('[data-testid="sa-answers-open"]')!;
+          b.style.top = `${chip.top}px`;
+          b.style.bottom = "auto";
+          b.style.left = `${chip.left}px`;
+          b.style.transform = "none";
+          return;
+        }
         lg.style.position = "fixed";
         lg.style.top = `${chip.top - 4}px`;
         lg.style.left = `${Math.max(0, chip.left - 10)}px`;
@@ -1024,6 +1036,7 @@ test.describe("review #486 (#679yp8) — 360×640, hosszú kérdés és jelmagya
     for (const c of rects.controls) expect(hit(rects.button!, c!), `a gomb ${JSON.stringify(rects.button)} nem fedi a vezérlőt ${JSON.stringify(c)}`).toBe(false);
     expect(rects.button![3] <= 640 && rects.button![0] >= 0 && rects.button![2] <= 360, "a gomb a nézeten belül").toBe(true);
     await page.getByTestId("sa-answers-open").tap();
-    await expect(page.getByText("W".repeat(22)).first()).toBeVisible();
+    await expect(page.getByTestId("sa-answers")).toBeVisible();
+    await expect(page.getByTestId("sa-answers")).toContainText("W".repeat(22));
   });
 });

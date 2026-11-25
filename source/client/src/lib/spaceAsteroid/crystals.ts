@@ -67,8 +67,22 @@ export function labelFitsChip(label: string, measure: (word: string, px: number)
   const maxWidth = tier === "normal" ? 98 : tier === "long" ? Math.min(116, 0.32 * viewportWidthPx) : Math.min(150, 0.4 * viewportWidthPx);
   const inner = maxWidth - (tier === "wide" || tier === "xwide" ? 18 : 26);
   const px = CRYSTAL_TIER_FONT_PX[tier];
-  return label.split(/[\s-]+/u).every((w) => measure(w, px) <= inner);
+  if (!label.split(/[\s-]+/u).every((w) => measure(w, px) <= inner)) return false;
+  // Review #486 (#679ypC): a SOR-szám is számít — mohó tördelés a mért szóközzel; a kötőjel törési hely (a kötőjel az előző sorban
+  // marad). A lap legfeljebb CRYSTAL_LABEL_MAX_LINES sort mutat (`-webkit-line-clamp`), több sornál a jelmagyarázat jön.
+  const tokens = label.trim().split(/\s+/u).flatMap((word) => word.split(/(?<=-)/u).map((part, i) => ({ part, glued: i > 0 })));
+  const space = measure(" ", px);
+  let lines = 1;
+  let width = 0;
+  for (const { part, glued } of tokens) {
+    const w = measure(part, px);
+    const add = width === 0 ? w : width + (glued ? 0 : space) + w;
+    if (width > 0 && add > inner) { lines += 1; width = w; } else width = add;
+  }
+  return lines <= CRYSTAL_LABEL_MAX_LINES;
 }
+/** A kristály-felirat legfeljebb ennyi sor (a lap `-webkit-line-clamp: 3`-a). */
+export const CRYSTAL_LABEL_MAX_LINES = 3;
 
 /**
  * Beférnek-e az opciók a kristály-feliratba (a forrás-választás szűrője; tiszta, olcsó): karakterszám ÉS — ha a hívó ad — a mért
@@ -432,6 +446,8 @@ export type LegendLayout = {
   scroll: boolean;
   /** A kártya alatt foglalt hely (px, álló nézet) — a kristály-zóna bemenete; fekvőn 0. */
   reservePx: number;
+  /** Review #486 (#679yp8): tömör mód (álló nézet, helyhiány) — nincs lista a kártya alatt, a gomb az alsó sávban. */
+  compact: boolean;
 };
 
 function legendLines(label: string, textWidthPx: number, fontPx: number): number {
@@ -452,17 +468,11 @@ export function legendLayoutFor(args: {
   const cardTop = playQuestionTopPx(vp, args.safeTopPx);
   const cardBottom = cardBottomPxFor(vp, args.safeTopPx, args.prompt);
   if (landscape) {
-    const colW = vp.width * LEGEND_LANDSCAPE_COL_FRAC;
-    const textW = colW - 12 - 24; // belső térköz + sorszám
-    const colHeight = (idx: readonly number[]): number =>
-      idx.reduce((n, i) => n + legendLines(args.labels[i] ?? "", textW, LEGEND_LANDSCAPE_FONT_PX) * LEGEND_LANDSCAPE_LINE_PX + 8, 0) + LEGEND_ITEM_GAP_PX * Math.max(0, idx.length - 1);
-    const left = args.labels.map((_, i) => i).filter((i) => i < 2);
-    const right = args.labels.map((_, i) => i).filter((i) => i >= 2);
-    const est = Math.max(colHeight(left), colHeight(right));
+    const est = landscapeLegendHeightPx(args.labels, vp.width);
     const topPx = cardTop + 2;
     const avail = Math.max(LEGEND_MIN_LIST_PX, cardBottom - topPx);
     const listPx = Math.min(est, avail);
-    return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: 0 };
+    return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: 0, compact: false };
   }
   const textW = vp.width - 12 - 18 - 24;
   const est = args.labels.reduce((n, l) => n + legendLines(l, textW, LEGEND_FONT_PX) * LEGEND_LINE_PX, 0) + LEGEND_ITEM_GAP_PX * Math.max(0, args.labels.length - 1) + LEGEND_PAD_PX;
@@ -470,7 +480,27 @@ export function legendLayoutFor(args: {
   const topPx = cardBottom + LEGEND_GAP_PX;
   // a legalsó megengedett perem: itt kezdődik a legfelső kristály-gomb teteje (zóna teteje − fél gomb) mínusz a 10 px ráhagyás
   const lowest = args.boxTopPx + LEGEND_ZONE_TOP_MAX_FRAC * Math.max(1, args.boxHeightPx) - CRYSTAL_CHIP_HALF_PX - 10;
+  // Review #486 (#679yp8): ha a kártya és a kristályok közt a gomb + a legkisebb lista sem fér el, a 44 px-es minimum fedést okozna —
+  // helyette TÖMÖR mód: a kártya alatt nincs lista és nincs helyfoglalás, a „Válaszok” gomb a vezérlők közti alsó sávba kerül, a
+  // teljes válaszlista a gombbal nyílik (a kristályok akkor rejtettek).
+  if (lowest - topPx - header < LEGEND_MIN_LIST_PX) return { landscape, topPx, boxTopPx: args.boxTopPx, listPx: 0, scroll: false, reservePx: 0, compact: true };
   const avail = Math.max(LEGEND_MIN_LIST_PX, lowest - topPx - header);
   const listPx = Math.min(est, Math.max(LEGEND_MIN_LIST_PX, Math.min(avail, vp.height * LEGEND_MAX_LIST_FRAC)));
-  return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: LEGEND_GAP_PX + header + listPx };
+  return { landscape, topPx, boxTopPx: args.boxTopPx, listPx, scroll: est > listPx + 0.5, reservePx: LEGEND_GAP_PX + header + listPx, compact: false };
 }
+
+/**
+ * Review #486 (#679ype): a fekvő jelmagyarázat becsült magassága. A lista közös sorokból álló CSS-rács (1–2. a bal, 3–4. a jobb
+ * oszlopban; az 1. és a 3., illetve a 2. és a 4. elem egy sorban), ezért soronként a két elem MAXIMUMA számít; egy elem legalább a
+ * 18 px-es sorszámjel magas (+ 8 px belső térköz).
+ */
+export function landscapeLegendHeightPx(labels: readonly string[], viewportWidthPx: number): number {
+  const textW = viewportWidthPx * LEGEND_LANDSCAPE_COL_FRAC - 12 - 24; // belső térköz + sorszám
+  const item = (i: number): number => (i < labels.length ? Math.max(LEGEND_KEY_PX, legendLines(labels[i] ?? "", textW, LEGEND_LANDSCAPE_FONT_PX) * LEGEND_LANDSCAPE_LINE_PX) + 8 : 0);
+  const rows = Math.ceil(Math.min(labels.length, 4) / 2);
+  let total = 0;
+  for (let r = 0; r < rows; r++) total += Math.max(item(r), item(r + 2));
+  return total + LEGEND_ITEM_GAP_PX * Math.max(0, rows - 1);
+}
+/** A jelmagyarázat sorszámjelének mérete (a lap CSS-e: 18 × 18 px). */
+export const LEGEND_KEY_PX = 18;

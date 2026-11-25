@@ -1038,6 +1038,8 @@ export default function SpaceAsteroidQuiz() {
   const bannerLeftRef = useRef(0);
   /** A menet vége (győzelem / vereség): új kérdés nem indul, az eredményképernyő a robbanás után jön. */
   const runOverRef = useRef(false);
+  /** Review #486 (#679pgR): az eredmény rögzült (`endRun` lefutott) — a kijelzés alatti további harc nem írhatja át (győzelemre sem). */
+  const runEndedRef = useRef(false);
   /** A menet valós kérdés-számai és ideje az eredményhez / jelvényhez / pontszám-szinkronhoz (a menet végén rögzül). */
   const runTotalsRef = useRef({ correct: 0, wrong: 0, timeouts: 0, total: 0, seconds: 0 });
   /** A válaszsorozat (egymás utáni helyes válaszok): a tanulási jelvény (`maxStreak`) ebből jön, nem a harci kombóból (L4). */
@@ -1553,6 +1555,7 @@ export default function SpaceAsteroidQuiz() {
     driverRef.current = makeDriver(seed);
     crystalsRef.current = [];
     runOverRef.current = false;
+    runEndedRef.current = false;
     runTotalsRef.current = { correct: 0, wrong: 0, timeouts: 0, total: 0, seconds: 0 };
     answerStreakRef.current = { current: 0, best: 0 };
     enemiesRef.current = [];
@@ -1597,7 +1600,9 @@ export default function SpaceAsteroidQuiz() {
    */
   const endRun = useCallback((wonIn: boolean, forcedCorrect?: number, afterReveal = false) => {
     // A főellenfél legyőzése VÉGLEGES (review #486 M1): az 1,5 mp-es robbanás-ablakban semmi nem írhatja át „Kör vége”-re.
+    if (runEndedRef.current) return;
     const won = wonIn || bossDefeatedRef.current;
+    runEndedRef.current = true;
     runOverRef.current = true;
     // A kör végén nyomva tartott tűzgomb (a közös `HoldButton` lecsatoláskor nem hív `onHoldEnd`-et, kanban #98) ne tüzeljen a
     // következő körben: a vezérlők a kör végén ÉS indulásakor is nullázódnak (`startNewRun`).
@@ -2780,6 +2785,8 @@ export default function SpaceAsteroidQuiz() {
       // Boss legyőzve: a flag megakadályozza, hogy a tick hullám-vége ága
       // PÁRHUZAMOSAN (azonnal) over-re váltson — így a 1.5s robbanás-pause
       // ténylegesen lejátszódik a phase-átmenet előtt.
+      // Review #486 (#679pgR): a már rögzült (elvesztett) menetben a főellenfél eleste nem győzelem.
+      if (runEndedRef.current) return;
       bossDefeatedRef.current = true;
       // A menet vége: új kérdés nem indul; a nyitott kérdés „aborted” (nem hiba, nem ismétlés).
       runOverRef.current = true;
@@ -3773,6 +3780,7 @@ export default function SpaceAsteroidQuiz() {
                           className="sa-legend"
                           data-testid="sa-legend"
                           data-scroll={legend?.scroll ? "true" : "false"}
+                          data-compact={legend?.compact ? "true" : "false"}
                           role="note"
                           aria-label="A válaszok teljes szövege"
                           style={legend ? ({ "--sa-legend-top": `${legend.topPx - legend.boxTopPx}px`, "--sa-legend-top-abs": `${legend.topPx}px`, "--sa-legend-list": `${legend.listPx}px` } as CSSProperties) : undefined}
@@ -4120,6 +4128,10 @@ export default function SpaceAsteroidQuiz() {
           display: flex; flex-direction: column; gap: 4px; border-radius: 12px; background: #0b1033d9; border: 1px solid #a5b4fc66;
         }
         .sa-legend[data-scroll="true"] .sa-legend-list { pointer-events: auto; touch-action: pan-y; }
+        /* Review #486 (#679yp8): tömör mód (álló, helyhiány) — a kártya alatt nincs lista; a „Válaszok” gomb a vezérlők közti alsó
+           sávban, a teljes lista a gombbal nyílik (ott a kristályok rejtettek): semmi nem fedi a kristályokat. */
+        .sa-legend[data-compact="true"] .sa-legend-list { display: none; }
+        .sa-legend[data-compact="true"] .sa-answers-open { position: fixed; left: 50%; bottom: calc(clamp(64px, 21vmin, 104px) + 30px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 3; min-width: 112px; }
         .sa-legend-item { display: flex; align-items: flex-start; gap: 6px; margin: 0; min-width: 0; }
         .sa-legend-key { flex: 0 0 auto; min-width: 18px; height: 18px; border-radius: 9999px; background: #ffd86b; color: #1b1203; font-weight: 900; text-align: center; line-height: 18px; font-size: 11px; }
         .sa-legend-text { min-width: 0; overflow-wrap: break-word; hyphens: manual; white-space: normal; }
