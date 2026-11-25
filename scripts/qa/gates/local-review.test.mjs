@@ -1,7 +1,7 @@
 // docs/specs/2026-11-23-vak-kor-kivezetes.md: a helyi (GPU) ellenőr tiszta függvényei.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildPrompt, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
+import { buildPrompt, classifyModelResponse, decideVerdict, DEFAULT_MODEL, findingId, isLocalUrl, ollamaUrl, parseFindings, riskyFiles, splitDiff, splitHunk } from './local-review.mjs';
 
 const DIFF = [
   'diff --git a/src/a.ts b/src/a.ts', '--- a/src/a.ts', '+++ b/src/a.ts', '@@ -1 +1 @@', '-x', '+y',
@@ -145,4 +145,12 @@ test('töredék (review #588): a középső töredék újradarabolása megtartja
   assert.match(again[0], /töredék 1\/\d+; eleje: vágott; vége: vágott/, 'az örökölt vágott eleje megmarad');
   assert.match(again.at(-1), /eleje: vágott; vége: vágott/, 'az örökölt vágott vége megmarad');
   assert.ok(again.every((x) => (x.split('\n')[0].match(/töredék/g) || []).length === 1), 'egy jelölés fejlécenként');
+});
+
+test('classifyModelResponse: a token repeat limit 500 értelmezhetetlen válasz (felezés), a többi hiba változatlan', () => {
+  assert.deepEqual(classifyModelResponse(500, '{"error":"prediction aborted, token repeat limit reached"}'), { kind: 'loop' });
+  assert.deepEqual(classifyModelResponse(404, '{"error":"model not found"}'), { kind: 'unavailable' });
+  assert.deepEqual(classifyModelResponse(500, '{"error":"CUDA error: out of memory"}'), { kind: 'error' });
+  assert.deepEqual(classifyModelResponse(200, '{"message":{"content":"{}"}}'), { kind: 'ok', content: '{}' });
+  assert.deepEqual(classifyModelResponse(200, 'nem json'), { kind: 'ok', content: '' });
 });
