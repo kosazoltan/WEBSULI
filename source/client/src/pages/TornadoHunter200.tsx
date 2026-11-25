@@ -2818,9 +2818,13 @@ function PlayScreen(props: {
     // a `settled()` sosem teljesülne, és a futás végleg megakadna. Új kérdés nem indul (`tick: false`, `hold`).
     const deferredReveal = deferredRevealRef.current;
     if (deferredFinishRef.current !== null && deferredReveal) {
-      qRef.current.frame(deferredReveal.clockMs + Math.max(0, frameClockRef.current - deferredReveal.frameMs), { tick: false, hold: true });
+      if (reading) {
+        deferredRevealRef.current = { clockMs: deferredReveal.clockMs, frameMs: deferredReveal.frameMs + dt * 1000 };
+      } else {
+        qRef.current.frame(deferredReveal.clockMs + Math.max(0, frameClockRef.current - deferredReveal.frameMs), { tick: false, hold: true });
+      }
     }
-    if (deferredFinishRef.current !== null && qRef.current.settled()) {
+    if (deferredFinishRef.current !== null && !reading && qRef.current.settled()) {
       const won = deferredFinishRef.current;
       deferredFinishRef.current = null;
       deferredRevealRef.current = null;
