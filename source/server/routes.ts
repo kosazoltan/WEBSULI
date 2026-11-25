@@ -1027,7 +1027,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     // Review #586: az összevont levél (U4b) is kikényszeríti a kötést — azt is hirdetni kell.
     // B5b (docs/specs/2026-11-25-eredmeny-email-b5b.md, 1. pont): a „félbehagyva” pillanatkép képessége CSAK a kapcsolóval — a kliens
     // nélküle nem küld pillanatképet (régi szerver / KI kapcsoló: nem fogy a keret). A teljes V2 eredmény-API-t ez nem hirdeti.
-    res.json({ csrfToken, ...(resultPartialEmailEnabled() || resultCombinedEmailEnabled() ? { resultOwnerBinding: true } : {}), ...(resultPartialEmailEnabled() ? { resultPartial: true } : {}) });
+    res.json({ csrfToken, ...(resultPartialEmailEnabled() || resultCombinedEmailEnabled() ? { resultOwnerBinding: true } : {}), ...(resultPartialEmailEnabled() ? { resultPartial: true } : {}), resultRoundAlias: true });
   });
 
   // HEALTH CHECK endpoint - Fast response for Autoscale deployment health checks

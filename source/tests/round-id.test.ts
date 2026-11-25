@@ -22,6 +22,15 @@ test("B8: a jelzők — új azonosítónál az új és a régi is; régi körné
   assert.deepEqual(sentFlagsOf("k", "tasks", round), [`k:tasks:sent:${legacyRoundIdOf(round)}`]);
 });
 
+test("review #613: resultBodyForServer jelzés nélkül kiveszi a legacyRoundId mezőt (régi .strict() szerver 400)", async () => {
+  const m = await import("../shared/round-id.ts");
+  assert.equal(typeof m.resultBodyForServer, "function");
+  const body = { kind: "quiz", roundId: "r2-0123456789abcdef0123456789abcdef", legacyRoundId: "round-abc", picks: { a: 1 } };
+  assert.deepEqual(m.resultBodyForServer(body, false), { kind: "quiz", roundId: body.roundId, picks: body.picks });
+  assert.equal(m.resultBodyForServer(body, true).legacyRoundId, "round-abc");
+  assert.equal(m.resultBodyForServer({ kind: "quiz" }, false).kind, "quiz");
+});
+
 test("B8: newRoundNonce — 32 hexa jegy, ismétlés nélkül", () => {
   const seen = new Set<string>();
   for (let i = 0; i < 2000; i++) { const n = newRoundNonce(); assert.match(n, /^[0-9a-f]{32}$/); seen.add(n); }

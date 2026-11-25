@@ -1,5 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { supportsResultApi } from "@shared/result-compat";
+import { resultBodyForServer } from "@shared/round-id";
 import { logger } from "./logger";
 import { LESSON_SCORING_VERSION } from "@shared/answer-value";
 import { isRetryableRequestError } from "@shared/request-retry";
@@ -33,7 +34,7 @@ const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
 /** B4b: `ownerBinding` — a szerver hirdeti a kör-kilét kötését (a B4 kapcsolója, `resultOwnerBinding: true`). */
 /** B5b: `partial` — a szerver fogadja és ütemezi a „félbehagyva” pillanatképet (`resultPartial: true`, a RESULT_PARTIAL_EMAIL kapcsoló). */
-type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean; partial: boolean };
+type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean; partial: boolean; roundAlias: boolean };
 
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
@@ -79,7 +80,7 @@ class CSRFTokenManager {
       }
 
       const data = await res.json();
-      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true, partial: data.resultPartial === true };
+      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true, partial: data.resultPartial === true, roundAlias: data.resultRoundAlias === true };
     } finally {
       clearTimeout(timer);
     }
@@ -99,6 +100,10 @@ const csrfTokenManager = new CSRFTokenManager();
  */
 export async function resultPartialReady(): Promise<boolean> {
   try { return (await csrfTokenManager.getToken()).partial; } catch { return false; }
+}
+/** B8 (PR #613 review): a szerver hirdeti-e a régi kör-azonosító alias mezőjét. Hiba → nem: a mező nem megy ki. */
+export async function resultRoundAliasReady(): Promise<boolean> {
+  try { return (await csrfTokenManager.getToken()).roundAlias; } catch { return false; }
 }
 export function warmResultToken(): void {
   void csrfTokenManager.getToken().catch(() => undefined);
@@ -178,7 +183,8 @@ export async function apiRequest<T = unknown>(
         // SECURITY: Fetch CSRF token for mutating requests (POST/PUT/PATCH/DELETE)
         // Spec 2026-09-30 (U1, §C-V/1): a kliens közli a támogatott pontozó-verziót; a kiszolgáló az újabb leckét 409-cel utasítja el.
         const addsFields = Boolean(options?.resultTimes && Object.keys(options.resultTimes).length && data && (typeof data === "object" || typeof data === "function"));
-        const serialize = (capable: boolean) => { const d = body(); return d ? JSON.stringify(capable && addsFields ? { ...(d as object), ...options!.resultTimes } : d) : undefined; };
+        let roundAlias = false;
+        const serialize = (capable: boolean) => { const d = body(); const shaped = d && typeof d === "object" ? resultBodyForServer(d as Record<string, unknown>, roundAlias) : d; return shaped ? JSON.stringify(capable && addsFields ? { ...shaped, ...options!.resultTimes } : shaped) : undefined; };
         // #510 R10 / R12 (PR #564 review): ha a V2-t hirdető token után a kérés egy régi, szigorú sémájú példányhoz ér, az új mezőkre
         // 400 jön — ilyenkor EGY ismétlés a régi alakkal (ugyanazzal a tokennel). Jelzés vagy új mező nélkül változatlanul egy kérés.
         const sendOnce = async (capable: boolean, signal: AbortSignal) => {
@@ -196,6 +202,7 @@ export async function apiRequest<T = unknown>(
             headers['X-CSRF-Token'] = csrfToken.token;
             capable = csrfToken.resultApi;
             ownerBinding = csrfToken.ownerBinding;
+            roundAlias = csrfToken.roundAlias;
           } catch (error) {
             logger.warn('[CSRF] Failed to fetch CSRF token, continuing without it:', error);
             // Continue anyway - backend will reject if CSRF required
@@ -223,6 +230,7 @@ export async function apiRequest<T = unknown>(
             const newCsrfToken = await csrfTokenManager.getToken();
             headers['X-CSRF-Token'] = newCsrfToken.token;
             ownerBinding = newCsrfToken.ownerBinding;
+            roundAlias = newCsrfToken.roundAlias;
             
             const retryController = new AbortController();
             const retryTimeoutId = setTimeout(() => retryController.abort(), timeout);

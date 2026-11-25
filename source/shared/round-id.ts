@@ -50,6 +50,18 @@ export function legacyRoundIdField(round: RoundLike): { legacyRoundId?: string }
   return roundIdOf(round) !== legacy ? { legacyRoundId: legacy } : {};
 }
 /** 128 bites véletlen nonce (32 kisbetűs hexa jegy). */
+
+/**
+ * A vezetékre kerülő törzs. A `legacyRoundId` mezőt csak az a szerver ismeri,
+ * amely a CSRF-válaszban `resultRoundAlias: true`-t hirdet (B8); a régebbi
+ * `.strict()` séma a mezőre 400-at ad (PR #613 review). A `roundId` marad.
+ */
+export function resultBodyForServer<T extends Record<string, unknown>>(body: T, roundAlias: boolean): T {
+  if (roundAlias || !("legacyRoundId" in body)) return body;
+  const { legacyRoundId: _alias, ...rest } = body;
+  return rest as T;
+}
+
 export function newRoundNonce(): string {
   const bytes = new Uint8Array(16);
   globalThis.crypto.getRandomValues(bytes);
