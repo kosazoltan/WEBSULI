@@ -319,3 +319,35 @@ test("T2: két egyidejű pótlásból a második nem jelölheti kézbesítettnek
   const rows = await rowsOf("guest:fp-t2b");
   assert.deepEqual(rows.map(r => [r.d, r.scrubbed]), [[false, false]], "kézbesítetlen marad, a tartalma megvan (pótolható)");
 });
+
+// U4d (E9b): a bejelentkezett tanuló gyakorlókörének lezáró válasza a nézetben hozza a várakozó részt.
+test("E9b: a gyakorlókör lezáró válaszának nézete resultAwaiting: tasks (a feladatok még hiányoznak)", async () => {
+  const { beginPractice, answerPractice } = await import("../server/rewards/lesson-attempts");
+  await db.insert(users).values({ id: "comb-user3", email: "comb-user3@example.test", firstName: "Teszt", lastName: "Hármas" }).onConflictDoNothing();
+  const view = await beginPractice("comb-user3", "comb-two");
+  let last: Record<string, unknown> = view as never;
+  for (const q of view.questions) last = await answerPractice("comb-user3", view.id, q.id, 0, false) as never;
+  assert.equal(last.resultAwaiting, "tasks");
+});
+
+// U4d (review #591): a várakozó rész a szerver állapotából, a beküldéssel azonos kilétre; régi / más kilét / KI kapcsoló → null.
+const status = async (lessonId: string, body: Record<string, unknown>, user?: string) => {
+  const r = await fetch(`${base}/api/lessons/${lessonId}/results/status`, { method: "POST", headers: { "content-type": "application/json", ...(user ? { "x-test-user": user } : {}) }, body: JSON.stringify(body) });
+  return { status: r.status, body: await r.json() as Record<string, unknown> };
+};
+
+test("S7: /results/status — a kvíz után tasks, a feladatok után null; más ujjlenyomat és KI kapcsoló null; 7 napnál régebbi rész null", async () => {
+  await post("comb-two", quizBody("fp-st", "st-q1"));
+  assert.deepEqual((await status("comb-two", { fingerprint: "fp-st" })).body, { awaiting: "tasks" });
+  assert.deepEqual((await status("comb-two", { fingerprint: "fp-mas" })).body, { awaiting: null }, "más kilét nem látja");
+  assert.deepEqual((await status("comb-two", {})).body, { awaiting: null }, "kilét nélkül null");
+  process.env.RESULT_COMBINED_EMAIL = "off";
+  assert.deepEqual((await status("comb-two", { fingerprint: "fp-st" })).body, { awaiting: null }, "KI kapcsoló");
+  process.env.RESULT_COMBINED_EMAIL = "on";
+  await post("comb-two", tasksBody("fp-st", "st-t1"));
+  assert.deepEqual((await status("comb-two", { fingerprint: "fp-st" })).body, { awaiting: null }, "a pár elkészült");
+  await post("comb-two", tasksBody("fp-old", "old-t1"));
+  await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '8 days' WHERE owner_key = 'guest:fp-old'`);
+  assert.deepEqual((await status("comb-two", { fingerprint: "fp-old" })).body, { awaiting: null }, "lejárt rész");
+  assert.equal((await status("comb-two", { fingerprint: "x", extra: 1 })).status, 400);
+});
