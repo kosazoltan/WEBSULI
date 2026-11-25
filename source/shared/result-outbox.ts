@@ -20,6 +20,8 @@ export type OutboxEntry = {
   /** B1b: a kör kezdete / utolsó válasza (a szerver opcionális mezői). */
   times?: { startedAt?: number; lastAnsweredAt?: number };
   flag: string;
+  /** B8: a kör további „már elküldve” jelzői (a régi azonosítóé) — bármelyik megléte → küldés nélkül kikerül; sikerkor mind íródik. */
+  alsoFlags?: string[];
   partialKey: string;
   ownerKey: string;
   owner: { learnerTag: string | null };
@@ -41,6 +43,7 @@ export function isOutboxEntry(value: unknown): value is OutboxEntry {
   const e = value as Partial<OutboxEntry> | null;
   return !!e && typeof e === "object" && typeof e.id === "string" && typeof e.lessonId === "string" && (e.kind === "tasks" || e.kind === "quiz")
     && typeof e.flag === "string" && typeof e.partialKey === "string" && typeof e.ownerKey === "string"
+    && (e.alsoFlags === undefined || (Array.isArray(e.alsoFlags) && e.alsoFlags.every(f => typeof f === "string")))
     && !!e.body && typeof e.body === "object" && !Array.isArray(e.body)
     && !!e.owner && typeof e.owner === "object" && (e.owner.learnerTag === null || typeof e.owner.learnerTag === "string")
     && typeof e.activityAt === "number" && Number.isFinite(e.activityAt) && e.activityAt > 0
