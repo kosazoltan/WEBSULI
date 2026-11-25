@@ -21,6 +21,8 @@ test("mentett kvíz: típuscímke és kitöltött hiány", async ({ page }) => {
       ...(answered[`a${i}`] !== undefined ? { answer: { pickedIndex: answered[`a${i}`], usedHint: false, correct: true, answeredAt: new Date().toISOString(), feedback: "Jó." } } : {}) })),
   });
   await page.route("**/api/auth/user", r => r.fulfill({ json: { id: "u1" } }));
+  // A mentett ismétlés 401-e a kilétet kiürítené (AuthStatus) — a mentett állapot üres.
+  await page.route("**/api/lessons/review/practice-probe", r => r.fulfill({ json: { states: {} } }));
   await page.route("**/api/lessons/practice/practice-probe/start", r => r.fulfill({ json: view() }));
   await page.route("**/api/lessons/practice/round1/answer", r => r.fulfill({ json: view({ a0: 0 }) }));
   await page.evaluate(() => localStorage.clear());

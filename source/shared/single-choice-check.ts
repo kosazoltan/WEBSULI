@@ -34,6 +34,16 @@ function integerOf(option: string): number | null {
   return Number.isSafeInteger(n) ? (m[1] ? -n : n) : null;
 }
 
+/**
+ * V4, review #603: számolós kvízopció — egész (tagolt is: „1 000”), tizedes, tört, vegyes tört, előjellel; a végén opcionális
+ * mértékegységgel („1/2 kg”, „−3,5 °C”, „5 km/h”). A számrészt a meglévő értelmező (`integerOf` / `numberOf`) dönti el.
+ */
+const UNIT_TAIL = /\s*[\p{L}%°²³/·][\p{L}%°²³/·\s]*$/u;
+export function isNumericOption(option: string): boolean {
+  const number = option.normalize("NFC").trim().replace(UNIT_TAIL, "").trim();
+  return number.length > 0 && (integerOf(number) !== null || numberOf(number) !== null);
+}
+
 /** Számopció értéke: egész, tizedes (vesszővel is), tört, vegyes tört; `null`, ha nem biztosan szám. */
 function numberOf(option: string): number | null {
   const t = option.normalize("NFC").trim();

@@ -12,6 +12,7 @@ import { ResultAwaitingNotice, useResultAwaiting } from "./resultAwaiting";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
+import { GapQuestion, QUIZ_FORMAT_LABEL, type QuizFormatLookup } from "./quizFormat";
 import { FinishPracticeButton } from "./FinishPracticeButton";
 import { bestVerdict, useArbiterVerdicts, type ArbiterSource } from "./arbiter";
 import { lessonFlashcards } from "@shared/lesson-flashcards";
@@ -42,16 +43,13 @@ function Result({ title, points, total, seconds, answers }: { title: string; poi
 
 
 /** V4: a kvíztípusok címkéje (a sima egyválasztósnak nincs). */
-const QUIZ_FORMAT_LABEL: Record<string, string> = { fillGap: "Egészítsd ki!", oddOneOut: "Kakukktojás: melyik nem illik a sorba?", number: "Számolós kérdés" };
 /** V4: kiegészítő kérdés — a hiányba a választott opció kerül. */
-function GapQuestion({ text, fill }: { text: string; fill?: string }) {
-  const [before, after = ""] = text.split(/_{3,}/);
-  return <>{before}<span data-testid="quiz-gap" className="fusion-gap" style={{ borderBottom: "2px solid currentColor", padding: "0 .25em", fontWeight: 700 }}>{fill ?? "___"}</span>{after}</>;
-}
 
 export function LessonExperienceView({ experience: e, storageKey, reviewKey, headings, lessonId, arbiterSource, children }: { experience: LessonExperience; storageKey: string; reviewKey?: string; headings: string[]; lessonId?: string; arbiterSource?: ArbiterSource; children: (section: number | null) => ReactNode }) {
   const prefix = useId();
   const cards = useMemo(() => lessonFlashcards({ experience: e }), [e]);
+  // V4, review #603: a mentett (bejelentkezett) kvíz típusa a lecke azonos kérdéséből.
+  const quizFormats = useMemo<QuizFormatLookup>(() => Object.fromEntries(e.quiz.filter(q => q.format && q.format !== "choice").map(q => [q.id, { format: q.format!, question: q.question }])), [e]);
   const tabs = TABS.filter(t => (t.id !== "review" || cards.length > 0) && (t.id !== "pronounce" || !!e.language));
   // Spec 2026-10-21-nyelvlecke-kiejtes: nyelvleckén a feladatok diktálása alapból a lecke nyelvén (az angol válasz magyar felismerővel értelmetlen).
   const [dictationLanguage, setDictationLanguage] = useState(e.language ?? "hu-HU");
@@ -170,7 +168,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
       {awaiting === "quiz" && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     </div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={true} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
-      <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
+      <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} formats={quizFormats} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
       <div className="fusion-round-head"><div><span className="fusion-eyebrow">Helyi önellenőrzés</span><h2>Kvíz</h2><p>{quizRound} kérdés a {e.quiz.length}-ből · {Object.keys(quizState.round.picks).length} megválaszolva · {quizPoints} pont</p></div><div className="learning-round-actions"><button className="lesson-outline-btn" onClick={() => setResetTarget("quiz")}><RotateCcw size={17} /> Új kvíz</button></div></div>
       {quiz.map((q, index) => {
         const pick = quizState.round.picks[q.id];

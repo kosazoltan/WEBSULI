@@ -1,5 +1,6 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { foldCaseUnlessSpelling, isSpellingPrompt } from "./option-key";
+import { isNumericOption } from "./single-choice-check";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
 import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
@@ -93,7 +94,6 @@ export const openTaskSchema = z.object({
 export const QUIZ_FORMATS = ["choice", "fillGap", "oddOneOut", "number"] as const;
 export type QuizFormat = (typeof QUIZ_FORMATS)[number];
 const GAP = /_{3,}/g;
-const numericOption = (s: string) => /^[-−+]?\d+(?:[.,]\d+)?(?:\s*[\p{L}%°²³/·]+[\p{L}%°²³/·\s]*)?$/u.test(s.trim());
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),
   correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
@@ -103,7 +103,7 @@ export const experienceQuizSchema = z.object({
   // V4: típusonkénti alakszabály.
   if (q.format === "fillGap" && (q.question.match(GAP) ?? []).length !== 1) ctx.addIssue({ code: "custom", message: "A kiegészítő kérdésben pontosan egy ___ hiány legyen." });
   if (q.format === "oddOneOut" && q.options.length !== 4) ctx.addIssue({ code: "custom", message: "A kakukktojás-kérdés pontosan 4 opciót kér." });
-  if (q.format === "number" && !q.options.every(numericOption)) ctx.addIssue({ code: "custom", message: "A számolós kérdés minden opciója szám (mértékegységgel is lehet)." });
+  if (q.format === "number" && !q.options.every(isNumericOption)) ctx.addIssue({ code: "custom", message: "A számolós kérdés minden opciója szám (mértékegységgel is lehet)." });
   // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a csak betűméretben eltérő opciók különbözők (közös kulcs: option-key).
   const spelling = isSpellingPrompt(q.question);
   if (new Set(q.options.map(s => foldCaseUnlessSpelling(s.normalize("NFC"), spelling))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
@@ -278,9 +278,11 @@ export function questionKey(text: string): string {
  */
 // A `questionKey` kimenetére illik (kisbetűs, szóköz és írásjel nélkül): „melyik [az] állítás [a] hamis” vagy „melyik [az] igaz állítás”.
 const SELECTOR_STEM = /^melyik(?:az?)?(?:(?:állítás|mondat|kijelentés|megállapítás)a?(?:hamis|igaz|helyes|helytelen|téves)|(?:hamis|igaz|helyes|helytelen|téves)(?:állítás|mondat|kijelentés|megállapítás))$/u;
-export function quizDuplicateKey(q: { question: string; options?: readonly string[] }): string {
+// V4, review #603: a kakukktojás-kérdés („Melyik nem illik a sorba?”) is kiválasztó törzs — a tartalom az opciókészletben van.
+const ODD_ONE_OUT_STEM = /^melyiknemillik(?:a)?sorba$/u;
+export function quizDuplicateKey(q: { question: string; options?: readonly string[]; format?: string }): string {
   const stem = questionKey(q.question);
-  if (!q.options?.length || !SELECTOR_STEM.test(stem)) return stem;
+  if (!q.options?.length || !(SELECTOR_STEM.test(stem) || ODD_ONE_OUT_STEM.test(stem) || q.format === "oddOneOut")) return stem;
   // Review #414: az opció kulcsa NEM a `questionKey` — az eldobná az összehasonlító jeleket („x < 0” és „x > 0” egyformának látszana).
   // Itt csak a kis-/nagybetű és a szóköz nem számít; minden más jel a tartalom része.
   const optionKey = (o: string) => o.normalize("NFC").toLocaleLowerCase("hu").replace(/\s+/g, "");

@@ -85,3 +85,8 @@ Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, leg
 ### V4 — kapulánc-javítás (2026-11-25)
 - A szolgáltatói szigorú séma (`bankResponseFormat`) a `format` mezőt CSAK változatosság BE mellett kéri (`quizFormats`); KI-ben a `response_format` bájtra a régi — a KI kérés nem változik (TRAP: új szerzői/szolgáltatói tartalom csak BE mögé).
 - Dokumentált tesztváltozás: a `lesson-variety-paths` hamis modellje BE kérésben (KVÍZTÍPUSOK szabály) típusolt kvízt ad (`bankAnswer`), mert a V4 bankszabálya (≥ 6 kérdésnél ≥ 2 típus) BE-ben kötelező; a `quiz-formats` séma-tesztje a BE és a KI sémát külön méri.
+
+### V4 — review #603 (2026-11-25)
+- Számolós opció: a meglévő számértelmezővel (`isNumericOption`, `shared/single-choice-check.ts`) — tört, vegyes tört, tagolt egész, előjel, opcionális mértékegység.
+- Ismétlődés-kulcs: a kakukktojás-törzs („Melyik nem illik a sorba?”) és minden `oddOneOut` tétel az opciókészlettel kulcsolt.
+- Bejelentkezett tanuló mentett kvíze: a típus a lecke azonos kérdéséből (questionId + azonos szöveg) — címke és kitöltött hiány; eltérő szövegnél (frissült lecke) választós.
