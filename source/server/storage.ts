@@ -413,6 +413,7 @@ export class DatabaseStorage implements IStorage {
         content: sql<string>`''`.as('content'), // Empty content for list view optimization
         description: htmlFiles.description,
         classroom: htmlFiles.classroom,
+        tracks: htmlFiles.tracks, // #1986: csoporttagság a főoldali „Gimi felv.” szűrőhöz
         contentType: htmlFiles.contentType,
         displayOrder: htmlFiles.displayOrder,
         createdAt: htmlFiles.createdAt
@@ -904,7 +905,10 @@ export class DatabaseStorage implements IStorage {
             // állt vissza, a kézi sorrend elveszett.
             contentType: file.contentType ?? 'html',
             displayOrder: file.displayOrder ?? 0,
-            createdAt: file.createdAt,
+            // #1986 (review #582): a csoporttagság is visszaáll (régi mentésben nincs → üres).
+            tracks: Array.isArray(file.tracks) ? file.tracks : [],
+            // A mentés JSON-ból jön: a dátum szövegként érkezik (drizzle Date-et vár) — enélkül a visszaállítás TypeError-ral bukott.
+            createdAt: file.createdAt ? new Date(file.createdAt) : new Date(),
           }))
         );
       }

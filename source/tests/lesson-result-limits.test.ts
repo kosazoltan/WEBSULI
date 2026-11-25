@@ -109,3 +109,31 @@ test("R46: a szerver a közös kaput használja (nem saját, a kivételt nem ism
   const index = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
   assert.match(index, /app\.use\("\/api\/lessons", lessonsWriteGate\(publicWriteLimiter\)\);/);
 });
+
+test("U4d (review #591): a /results/status saját kerete — 600 lekérdezés sem fogyasztja a végleges beküldés és a közös írás keretét", async () => {
+  const { lessonsWriteGate, statusLimiter, resetStatusLimiter, RESULT_STATUS_RATE_LIMIT } = await import("../server/lesson-result-limits");
+  const rateLimit = (await import("express-rate-limit")).default;
+  const { clientIpKeyGenerator } = await import("../server/lib/client-ip");
+  const shared = rateLimit({ keyGenerator: clientIpKeyGenerator, windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+  const app = express();
+  app.use(express.json());
+  app.use("/api/lessons", lessonsWriteGate(shared));
+  app.post("/api/lessons/:lessonId/results/status", statusLimiter, (_req, res) => { res.status(200).json({ awaiting: null }); });
+  app.post("/api/lessons/:lessonId/results", resultLimiter, partialLimiter, (_req, res) => { res.status(202).json({ queued: false }); });
+  app.post("/api/lessons/:lessonId/other", (_req, res) => { res.status(200).json({}); });
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise(resolve => server.once("listening", resolve));
+  const gated = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    resetStatusLimiter();
+    const ip = "10.88.9.77";
+    const send = (path: string, body: object) => fetch(`${gated}${path}`, { method: "POST",
+      headers: { "content-type": "application/json", [PROXY_SECRET_HEADER]: SECRET, "x-forwarded-for": ip }, body: JSON.stringify(body) }).then(res => res.status);
+    const st: number[] = [];
+    for (let i = 0; i < RESULT_STATUS_RATE_LIMIT; i++) st.push(await send("/api/lessons/lecke/results/status", {}));
+    assert.deepEqual(st, Array(RESULT_STATUS_RATE_LIMIT).fill(200));
+    assert.equal(await send("/api/lessons/lecke/results/status", {}), 429, "a saját keret végén 429");
+    assert.equal(await send("/api/lessons/lecke/results", { kind: "quiz", roundId: "r", picks: {} }), 202, "a végleges beküldés kerete érintetlen");
+    assert.equal(await send("/api/lessons/lecke/other", {}), 200, "a közös írási keret érintetlen");
+  } finally { server.close(); }
+});

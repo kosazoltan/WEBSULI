@@ -8,6 +8,7 @@ import { DictationButton, PronounceButton, SpeakButton, prepareLessonSpeech, rel
 import { ClipPlayAllButton } from "./clips/ClipContext";
 import { useExperienceRound } from "./useExperienceRound";
 import { useResultReport } from "./resultReport";
+import { ResultAwaitingNotice, useResultAwaiting } from "./resultAwaiting";
 import { LearningMode, LearningPager, useLearningPreference } from "./LearningControls";
 import "./lesson-experience.css";
 import { PracticeAccess } from "./SavedLessonQuiz";
@@ -87,6 +88,8 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
   const arbiterSettled = !arbiterSource || taskChecks.every(c => c.det.state === "ok" || !c.answer.trim() || !!arbiter.verdicts[c.id]);
   useResultReport(lessonId, "tasks", taskState.round, storageKey, arbiterSettled);
   useResultReport(lessonId, "quiz", quizState.round, storageKey);
+  // U4d: az összevont eredménylevél a másik részre vár — figyelmeztetés a lecke tetején és a kész rész alatt.
+  const awaiting = useResultAwaiting(lessonId);
   const quizPoints = quiz.filter(q => quizState.round.picks[q.id] === q.correctIndex).length;
   // Fülváltáskor és a lecke elhagyásakor minden hang leáll — a tartalék MP3 és az indulási őr is (spec 2026-11-10-hibavadaszat A1).
   useEffect(() => () => { stopSpeech(); }, [tab]);
@@ -107,6 +110,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
       }
     }}><Icon size={19} /><span>{label}</span></button>)}</nav>
     <div className="learning-toolbar"><span className="fusion-eyebrow">Egy lépés, egy új felismerés</span><button type="button" className="lesson-ghost-btn learning-quiet" data-on={quiet} onClick={() => setQuiet(!quiet)} title={quiet ? "Most a tompított, egyszínű nézet látszik — vissza az évfolyam színeihez" : "Tompított, egyszínű nézet kevesebb ingerrel"} data-testid="learning-quiet">{quiet ? <><Palette size={16} /> Színes nézet</> : <><Leaf size={16} /> Csendes nézet</>}</button></div>
+    {awaiting && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     <div role="tabpanel" id={`${prefix}-fusion-panel-teaching`} aria-labelledby={`${prefix}-fusion-tab-teaching`} hidden={tab !== "teaching"} className="fusion-panel">
       {/* Spec 2026-10-22-lecke-szeles-elrendezes: ≥ 1200 px-en bal oldalon sticky fejezetlista, jobbra a fejezet; alatta a legördülő marad. */}
       <div className="fusion-teaching-layout">
@@ -154,6 +158,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         const element = task && taskElements.current.get(task.id);
         element?.scrollIntoView({ block: "center" }); element?.querySelector("textarea")?.focus({ preventScroll: true });
       }} onFinish={() => taskState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Feladatok kiértékelése</FinishPracticeButton> : <Result title="Feladatok" points={taskPoints} total={tasks.length} seconds={seconds(taskState.round)} answers={tasks.map(t => ({ question: t.q, answer: taskState.round.answers[t.id] ?? "", ...finalVerdict(t.id), sampleViewed: taskState.round.sampleViewed.includes(t.id) }))} />}
+      {awaiting === "quiz" && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     </div>
     <div role="tabpanel" id={`${prefix}-fusion-panel-quiz`} aria-labelledby={`${prefix}-fusion-tab-quiz`} hidden={tab !== "quiz"} className="fusion-panel fusion-panel-quiz" data-overview={true} data-finished={savedFinished ?? !!quizState.round.finishedAt}>
       <PracticeAccess lessonId={lessonId} enabled={tab === "quiz"} onFinished={setSavedFinished} onReview={id => jumpToTeaching(e.quiz.find(q => q.id === id)?.sectionIndex ?? 0)}>
@@ -171,6 +176,7 @@ export function LessonExperienceView({ experience: e, storageKey, reviewKey, hea
         element?.scrollIntoView({ block: "center" }); element?.focus({ preventScroll: true });
       }} onFinish={() => quizState.setRound(old => ({ ...old, finishedAt: Date.now() }))}>Kvíz kiértékelése</FinishPracticeButton> : <Result title="Kvíz" points={quizPoints} total={quiz.length} seconds={seconds(quizState.round)} answers={quiz.map(q => ({ question: q.question, pickedIndex: quizState.round.picks[q.id] ?? null, correctIndex: q.correctIndex }))} />}
       </PracticeAccess>
+      {awaiting === "tasks" && <ResultAwaitingNotice awaiting={awaiting} onGo={changeTab} />}
     </div>
     {cards.length > 0 && <div role="tabpanel" id={`${prefix}-fusion-panel-review`} aria-labelledby={`${prefix}-fusion-tab-review`} hidden={tab !== "review"} className="fusion-panel">
       {/* Review #269: a vendégállapot a stabil leckekulcs alatt él (nem a teljes experience-lenyomat alatt), így a lecke javítása után

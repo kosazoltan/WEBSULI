@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
 import { CLASSROOMS, isValidClassroom, DEFAULT_CLASSROOM } from "@shared/classrooms";
+import { TRACKS } from "@shared/tracks";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface FileEditDialogProps {
   file: {
@@ -14,8 +16,10 @@ interface FileEditDialogProps {
     title: string;
     description?: string | null;
     classroom: number;
+    /** #1986: külön tananyagcsoport-tagság. */
+    tracks?: string[];
   };
-  onSave: (id: string, updates: { title?: string; description?: string; classroom?: number }) => void;
+  onSave: (id: string, updates: { title?: string; description?: string; classroom?: number; tracks?: string[] }) => void;
   onCancel: () => void;
 }
 
@@ -27,7 +31,12 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
     return isValidClassroom(file.classroom) ? file.classroom : DEFAULT_CLASSROOM;
   });
 
+  const initialTracks = [...(file.tracks ?? [])].sort();
+  const [tracks, setTracks] = useState<string[]>(initialTracks);
+  const tracksChanged = JSON.stringify([...tracks].sort()) !== JSON.stringify(initialTracks);
+
   useEffect(() => {
+    setTracks([...(file.tracks ?? [])].sort());
     setTitle(file.title);
     setDescription(file.description || "");
     // Biztosítjuk hogy classroom mindig valid érték (0-12), default 1
@@ -36,7 +45,7 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
 
   const handleSubmit = () => {
     if (title.trim()) {
-      const updates: { title?: string; description?: string; classroom?: number } = {};
+      const updates: { title?: string; description?: string; classroom?: number; tracks?: string[] } = {};
       
       // Only include changed fields
       if (title.trim() !== file.title) {
@@ -51,6 +60,7 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
       if (classroom !== file.classroom) {
         updates.classroom = classroom;
       }
+      if (tracksChanged) updates.tracks = [...tracks].sort();
       
       // Only save if there are actual changes
       if (Object.keys(updates).length > 0) {
@@ -63,7 +73,8 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
   const hasChanges = 
     title.trim() !== file.title ||
     description.trim() !== (file.description || '') ||
-    classroom !== file.classroom;
+    classroom !== file.classroom ||
+    tracksChanged;
 
   return (
     // docs/specs/2026-10-19-admin-reszponzivitas.md (5): nem portál — az alsó admin menü (z-50, később a DOM-ban) rárajzolt az
@@ -101,7 +112,12 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
             <Label htmlFor="edit-classroom">Osztály *</Label>
             <Select 
               value={classroom.toString()} 
-              onValueChange={(value) => setClassroom(parseInt(value, 10))}
+              onValueChange={(value) => {
+                const next = parseInt(value, 10);
+                setClassroom(next);
+                // Review #582: a csoport anyaga a csoport évfolyamán van — más évfolyamra váltva a csoporttagság kikerül.
+                setTracks((cur) => cur.filter((id) => TRACKS.find((t) => t.id === id)?.contentGrade === next));
+              }}
             >
               <SelectTrigger data-testid="select-edit-classroom">
                 <SelectValue placeholder="Válassz osztályt" />
@@ -118,6 +134,28 @@ export default function FileEditDialog({ file, onSave, onCancel }: FileEditDialo
               Az osztály manuálisan is módosítható, ha a cím alapján nem jó
             </p>
           </div>
+
+          {/* #1986 (docs/specs/2026-11-24-gimi-felveteli-csoport.md): külön tananyagcsoport — a tartalmi évfolyam mellett. */}
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Külön tananyagcsoport</legend>
+            {TRACKS.map((t) => (
+              <label key={t.id} className="flex items-start gap-2 text-sm cursor-pointer">
+                <Checkbox
+                  checked={tracks.includes(t.id)}
+                  onCheckedChange={(v) => {
+                    setTracks((cur) => (v === true ? [...new Set([...cur, t.id])] : cur.filter((x) => x !== t.id)));
+                    // Review #582: a csoportba tett anyag a csoport tartalmi évfolyamára kerül (gimi6 → 6.).
+                    if (v === true) setClassroom(t.contentGrade);
+                  }}
+                  data-testid={`checkbox-edit-track-${t.id}`}
+                />
+                <span>
+                  {t.label}
+                  <span className="block text-xs text-muted-foreground">Tartalmi évfolyam: {t.contentGrade}. osztály · tantárgyak: {t.subjects.join(", ")}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
           <div>
             <Label htmlFor="edit-description">Leírás (opcionális)</Label>

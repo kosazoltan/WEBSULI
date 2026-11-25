@@ -17,7 +17,8 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { argValue, isMain, makeContext, verdictLine, writeEvidence } from './lib.mjs';
 
-export const DEFAULT_MODEL = process.env.WEBSULI_LOCAL_REVIEW_MODEL || 'hf.co/ornith-ai/Ornith-1.5-9B-GGUF:Q8_0';
+// 2026-11-24 tulajdonosi döntés (docs/specs/2026-11-24-helyi-ellenor-gemma.md): Gemma 4 26B A4B — 27/27 vs 25/27, 195 vs 74 tok/s.
+export const DEFAULT_MODEL = process.env.WEBSULI_LOCAL_REVIEW_MODEL || 'gemma4:26b';
 /** OLLAMA_HOST → URL: a megadott séma megmarad (https marad https), séma nélkül http (PR #541 Copilot / Sourcery). */
 export function ollamaUrl(host = process.env.OLLAMA_HOST) {
   if (!host) return 'http://localhost:11434';
@@ -41,8 +42,51 @@ export const LOCKFILE = /(^|\/)package-lock\.json$|\.lock$/;
 /** Kockázatos utak: itt egyszeri felhős (Claude / Gemini) második vélemény AJÁNLOTT — nem kapu. */
 export const RISK = [/migrations?\//i, /schema\.ts$/, /auth|session|csrf|password|token|secret/i, /payment|stripe|billing/i, /email|mailer/i, /\.github\/workflows\//];
 
+/**
+ * A darabméretnél nagyobb hunk SORHATÁRON bomlik (docs/specs/2026-11-25-helyi-ellenor-toredek.md) — a karakterpozíciós vágás
+ * „csonka fájl” hamis leleteket szült (#587). Minden töredék saját, számolt `@@ -régi,db +új,db @@` fejlécet kap (a nulla hosszú
+ * oldal a megelőző sorhoz horgonyoz, az eredetileg üres oldal megtartja a 0-t), és a fejléc élenként jelzi, hol VÁGOTT:
+ * `töredék i/n; eleje: vágott|hunk eleje; vége: vágott|hunk vége`. A keretnél hosszabb sor sem törik szét: egyedül alkot töredéket
+ * (a darab ilyenkor a keretnél nagyobb lehet, de minden sor pontosan egyszer, típusjelével együtt szerepel).
+ */
+export function splitHunk(hunk, max) {
+  const nlAt = hunk.indexOf('\n');
+  const head = nlAt < 0 ? hunk : hunk.slice(0, nlAt);
+  const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/.exec(head);
+  if (!m) return [hunk];
+  // Review #588: egy már töredékként vágott darab újradarabolásakor (értelmezhetetlen modellválasz után) az örökölt vágott él
+  // vágott marad — a régi jelölés lekerül, az új töredékek külső élei az örökölt állapotot viszik tovább.
+  const prev = /^ töredék \d+\/\d+; eleje: (vágott|hunk eleje); vége: (vágott|hunk vége)(.*)$/.exec(m[3]);
+  const startCut = prev?.[1] === 'vágott'; const endCut = prev?.[2] === 'vágott';
+  const tail = prev ? prev[3] : m[3];
+  const oldEmpty = Number(m[1]) === 0; const newEmpty = Number(m[2]) === 0;
+  let oldLn = oldEmpty ? 1 : Number(m[1]); let newLn = newEmpty ? 1 : Number(m[2]);
+  const lines = hunk.slice(nlAt + 1).split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  const budget = Math.max(max - 120, 40);
+  const pieces = [];
+  let cur = null;
+  for (const line of lines) {
+    if (!cur || (cur.body.length && cur.size + line.length + 1 > budget)) {
+      if (cur) pieces.push(cur);
+      cur = { oStart: oldLn, oCount: 0, nStart: newLn, nCount: 0, body: [], size: 0 };
+    }
+    cur.body.push(line); cur.size += line.length + 1;
+    const t = line[0];
+    if (t === '+') { cur.nCount++; newLn++; } else if (t === '-') { cur.oCount++; oldLn++; } else if (t !== '\\') { cur.oCount++; cur.nCount++; oldLn++; newLn++; }
+  }
+  if (cur && cur.body.length) pieces.push(cur);
+  const n = pieces.length;
+  const side = (empty, start, count) => (count === 0 ? (empty ? '0,0' : `${start - 1},0`) : `${start},${count}`);
+  return pieces.map((p, i) => {
+    const edges = `eleje: ${i === 0 && !startCut ? 'hunk eleje' : 'vágott'}; vége: ${i === n - 1 && !endCut ? 'hunk vége' : 'vágott'}`;
+    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ töredék ${i + 1}/${n}; ${edges}${tail}\n${p.body.join('\n')}\n`;
+  });
+}
+
 /** Egységes diff → fájlonkénti darabok ({ file, text }). A túl nagy fájl-diff hunk-határokon bomlik, minden darab a fájl-fejléccel
- * kezdődik, így a modell a `@@ … +új,sor @@` fejlécből valós sorszámot ad (PR #541 Sourcery). Egyetlen óriás hunk karakterre vágva. */
+ * kezdődik, így a modell a `@@ … +új,sor @@` fejlécből valós sorszámot ad (PR #541 Sourcery). A keretnél nagyobb hunk sorhatáron, élenként
+ * megjelölt töredékekre bomlik (`splitHunk`); a keretnél hosszabb sor nem törik szét. */
 export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
   const parts = String(diff).split(/^(?=diff --git )/m).filter((p) => p.startsWith('diff --git '));
   const out = [];
@@ -55,8 +99,8 @@ export function splitDiff(diff, max = CHUNK_CHARS, skipped = []) {
     for (const h of hunks) {
       if (cur.length + h.length > max && cur !== header) { out.push({ file, text: cur }); cur = header; }
       if (header.length + h.length > max) {
-        const step = Math.max(max - header.length, Math.ceil(max / 2)); // túl hosszú fejlécnél is pozitív lépés
-        for (let i = 0; i < h.length; i += step) out.push({ file, text: header + h.slice(i, i + step) });
+        if (cur !== header) { out.push({ file, text: cur }); cur = header; }
+        for (const piece of splitHunk(h, Math.max(max - header.length, Math.ceil(max / 2)))) out.push({ file, text: header + piece });
         continue;
       }
       cur += h;
@@ -79,6 +123,9 @@ export function buildPrompt(chunk) {
     'security issues (secrets, injection, auth bypass, personal data in logs/URLs), broken data contracts, timezone/date bugs,',
     'tests that were weakened or became tautological. Ignore style, naming, formatting, comments and Hungarian text content.',
     'Do NOT invent code that is not shown. If unsure, use severity "low". Use "high" only for a concrete, likely bug.',
+    'If the hunk header says "töredék i/n", this is a line-aligned slice of a larger hunk; the header states for each edge whether it is "vágott" (cut) or the real hunk start/end.',
+    'At an edge marked "vágott" the code continues in the neighbouring slice: never report truncation, unterminated expressions or syntax errors caused by that cut edge.',
+    'At an edge marked "hunk eleje" / "hunk vége", and anywhere inside the slice, genuine syntax errors and unterminated constructs MUST be reported.',
     'Reply with JSON only: {"verdict":"PASS|CONCERNS|BLOCK","findings":[{"line":<new-file line or 0>,"severity":"high|medium|low","issue":"<one sentence: scenario and effect>"}]}',
     '',
     `FILE: ${chunk.file}`,
@@ -95,7 +142,9 @@ export function parseFindings(content, file) {
   if (!j || !Array.isArray(j.findings)) {
     // Csonka (num_predict-tel levágott) válasz: a teljes, önálló lelet-objektumok kimentése.
     const salvaged = [...String(content).matchAll(/\{[^{}]*"issue"\s*:\s*"(?:[^"\\]|\\.)*"[^{}]*\}/g)].map((m) => { try { return JSON.parse(m[0]); } catch { return null; } }).filter(Boolean);
-    if (!salvaged.length) return null;
+    // Gemma 4: a lelet nélküli PASS `findings` kulcs nélkül is jöhet → üres lista — de csak ha a mentés sem talált leletet
+    // (review #581: hibás sémájú, leletet hordozó PASS nem adhat IGEN-t); CONCERNS / BLOCK lelet nélkül csonka → null.
+    if (!salvaged.length) return j && j.verdict === 'PASS' && j.findings === undefined ? [] : null;
     j = { findings: salvaged };
   }
   return j.findings
@@ -151,19 +200,33 @@ async function callModelOnce(url, model, prompt) {
     method: 'POST',
     signal: AbortSignal.timeout(CALL_TIMEOUT_MS), // elakadt Ollama / GPU nem tarthatja fel végtelenül a kaput (PR #541 Sourcery)
     headers: { 'content-type': 'application/json' },
-    // num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
+    // 2026-11-24: a repeat_penalty kikerült — a Gemma a JSON-kulcsot („findings”) is kiírta tőle. num_predict: a 9B modell egy-egy darabon ismétlő hurokba eshet (2026-11-23: AdventHomeCard.tsx → 300 s fölött a Node fetch
     // fejléc-időkorlátja „fetch failed”); 1500 token bőven elég ~10 lelethez, és a hívás korlátos idejű marad. A repeat_penalty a
     // lelet-szövegen belüli ismétlő hurkot töri meg (2026-11-23, PR-C AdventCalendar.tsx: 1500 tokenes, lezáratlan „issue”).
-    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, repeat_penalty: 1.15, repeat_last_n: 256, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
+    body: JSON.stringify({ model, stream: false, think: false, format: 'json', options: { num_ctx: 32768, temperature: 0, num_predict: 1500, seed: 42 }, messages: [{ role: 'user', content: prompt }] }),
   });
-  if (r.status === 404) throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
-  if (!r.ok) throw new Error(`ollama HTTP ${r.status}`);
-  return (await r.json()).message?.content ?? '';
+  const out = classifyModelResponse(r.status, await r.text());
+  if (out.kind === 'unavailable') throw new ModelUnavailable(`a modell nem érhető el: ${model} (ollama HTTP 404)`);
+  if (out.kind === 'error') throw new Error(`ollama HTTP ${r.status}`);
+  if (out.kind === 'loop') process.stderr.write('[local-review] a modell ismétlő hurokba esett (token repeat limit) — a darab felezve\n');
+  return out.kind === 'ok' ? out.content : '';
+}
+
+/**
+ * Az Ollama-válasz besorolása (docs/specs/2026-11-25-helyi-ellenor-ismetlo-hurok.md). A „token repeat limit” 500 a modell ismétlő
+ * hurka — determinisztikus (seed 42), az újrapróba ugyanide jut —, ezért értelmezhetetlen válasznak számít: üres tartalom → a
+ * `reviewChunk` felezi a darabot. A 404 elérhetetlen modell, minden más nem-OK válasz átmeneti hiba.
+ */
+export function classifyModelResponse(status, body) {
+  if (status === 404) return { kind: 'unavailable' };
+  if (status === 500 && /token repeat limit/i.test(String(body))) return { kind: 'loop' };
+  if (status < 200 || status >= 300) return { kind: 'error' };
+  try { return { kind: 'ok', content: JSON.parse(body).message?.content ?? '' }; } catch { return { kind: 'ok', content: '' }; }
 }
 
 /** Egy darab ellenőrzése: 2 próbálkozás; ha a válasz így is értelmezhetetlen (a 9B modell nagy darabon ismétlő hurokba esik és a
  * korlát levágja), a darab hunk-határon felezve, legfeljebb 2 szintig (2026-11-23, PR-C: AdventCalendar.tsx). */
-async function reviewChunk(url, model, chunk, depth) {
+export async function reviewChunk(url, model, chunk, depth) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     const parsed = parseFindings(await callModel(url, model, buildPrompt(chunk)), chunk.file);
     if (parsed !== null) return parsed;

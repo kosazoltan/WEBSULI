@@ -89,6 +89,23 @@
 
 - Átvétel: a végleges jelzősor (`claimFinalRound`, `finalRoundKeyOf`, `finalOwnerKeyOf`), a kör-tulajdonos rögzítése (`claimRoundOwner`).
 - A kapcsoló bevezetése itt. DB-integrációs teszt: `lesson-result-email-db.integration.ts` megfelelő esetei.
+- **Bontás (2026-11-24, a 400 soros keret miatt, kód előtt):**
+  - **B4a — szerver** (ez a szelet): kapcsoló `RESULT_PARTIAL_EMAIL` (`on` = BE; minden más / hiány = KI, a főági viselkedés változatlan;
+    a B5a–B6 ugyanezt használja). BE állásban: (R27) a végleges beküldés tanulófüggetlen jelzősort (`finalRoundKeyOf`) és EGY
+    tranzakcióban a beküldő tulajdonos-sorát (`finalOwnerKeyOf`, R42) írja; létező jelzőnél csak a saját kézbesítési sor vagy a saját
+    tulajdonos-sor birtokosa folytathatja, más kilét `202 { queued: false, duplicate: true }` (második levél nem megy); (R49 c) a jelzősor
+    írásának és a tulajdonos-lekérdezésnek az átmeneti hibája 503 a 202 előtt; a meglévő jelző élettartam-frissítése best effort;
+    (R47 szerver) a párosítás feloldásának átmeneti (adatbázis-) hibája 503, nem vendég. KI állásban egyik sem fut (a jelzősor sem íródik).
+    A szerveres kilét-rögzítés (`claimRoundOwner`, `round-claim`, R51 / R52) a B5a-val jön (a pillanatkép első rögzítőjéhez kötött).
+    Tesztek: `lesson-result-email-db.integration.ts` „B4a” esetei (kapcsoló KI: két kilét két levél — változatlan; BE: más kilét duplikátum,
+    azonos kilét pótol, R42 megszakadt első kérés folytatása, 503-utak hibainjektálással).
+  - **B4b — kliens** (a B4a után): a körönkénti kilét-rekord (`bindRoundOwner`, R47 kliens, R50), a párosító token lenyomat-szűrése minden
+    kísérlet előtt (R49 b) és a régi alak feltétele (R49 a).
+    Megvalósítás (2026-11-24): `shared/round-owner.ts` (tiszta, befecskendezett tároló / token-forrás), a beküldő a rekordon át adja a
+    tokent minden kísérlet előtt; a végleges siker után a rekord törlődik; a már elküldött körhöz nem keletkezik rekord (L5). A fiók
+    címkéje (`resultSubject`) és vele az R49 a (régi alak csak igazolt azonos munkamenettel) a szerveroldali R31-támogatással (B7) jön —
+    a főág szervere címkét nem fogad, így ma nincs mihez kötni. Tesztek: `round-owner.test.ts` (6), `lesson-result-email-quiz.spec.ts`
+    „B4b (R47)” (3 böngészős eset; RED: a régi beküldővel 2 bukik).
 
 ## 5. B5a / B5b — „félbehagyva” pillanatkép (szerver / kliens)
 
@@ -96,6 +113,18 @@
   `lesson-result-email-partial-db.integration.ts` megfelelő esetei.
 - B5b: kliensoldal (R3, R20, R44, R13 részleges szöveg); e2e: `lesson-result-email-quiz.spec.ts` pillanatkép-esetei.
 - Ha a B5a 400 sor fölé menne: B5a-1 (ütemezés + egyetlen indító út) és B5a-2 (elnyomás, első rögzítő, attribúció).
+- **B5a-0 (2026-11-24, kód előtt kiválasztva — kapcsolótól független, biztonságos előfeltétel):** a kvízséma opcionális `partial`
+  jelzője; `gradePartialQuiz` (R5: csak a megválaszolt kérdések, az „összes” a szerveroldali körméret, nem kisebb a megválaszoltnál); a
+  „félbehagyva” levél tárgya / állapotsora / „Utolsó válasz” dátumsora és a végleges levél felülíró mondata (R13, R1 a) a `meta`
+  jelzései szerint. A szerver a pillanatképet a B5a-1-ig NEM pontozza véglegesként: `202 { queued: false, partial: true }`, kör-kulcs
+  és levél nélkül (a kliens a B5b-ig nem is küld ilyet). Tesztek: `lesson-result-email-partial.test.ts`, DB-teszt „B5a-0”.
+- **B5a-1 (2026-11-24; a B4a + B5a-0 után):** `RESULT_PARTIAL_EMAIL=on` mellett a pillanatkép ütemeződik: (R5) 7 napnál régebbi
+  tevékenység `stale`, az „összes” a szerveroldali körméret; (P4 / R18) véglegesített kör (memória 24 óra + a B4a tartós jelzősora)
+  `finalized`; (R6) kiment részleges levél után `alreadySent`; (R7) a legtöbb választ tartalmazó marad, az időzítő újraindul; tanulónként
+  3 / összesen 5000 várakozó. Küldés a kör kizárása alatt (R1), változat-ellenőrzéssel (R21), egyetlen kapuzott újrapróbával (E17). A kvíz
+  végleges beküldése szinkron véglegesít + törli a várakozót (R15), a felülíró mondat a kizárás alatt dől el. Vállalt korlát: újraindításkor
+  a várakozó elvész; a kizárás példányon belüli. A B5a-2-be marad: R16 / R22 / R34 (első rögzítő, attribúció), R19, R25, R29, R36, R38, R45, R48.
+  Tesztek: `lesson-result-email-partial-db.integration.ts` (7 eset, 20 körös versenyhelyzettel).
 
 ## 6. B6 — leállításkori ürítés (R14, R33, R41)
 

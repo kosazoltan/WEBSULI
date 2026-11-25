@@ -17,14 +17,14 @@ test("B3: a jelenlegi szerver nem hirdeti a teljes V2 eredmény-API-t", async ({
   expect(token).not.toHaveProperty("resultApi");
 });
 
-async function mock(page: Page, capable = false) {
+async function mock(page: Page, capable = false, ownerBinding = false) {
   const posts: Array<Record<string, unknown>> = [];
   await page.route("**/api/**", async route => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
     if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") { posts.push(req.postDataJSON()); return route.fulfill({ status: 202, json: { queued: true } }); }
     if (path === "/api/auth/user") return route.fulfill({ json: null });
-    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", ...(capable ? { resultApi: 2 } : {}) } });
+    if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test", ...(capable ? { resultApi: 2 } : {}), ...(ownerBinding ? { resultOwnerBinding: true } : {}) } });
     if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
     if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
     if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
@@ -453,4 +453,82 @@ test("B3 / R10: jelzés nélkül a 400 nem ismétlődik (egy kérés)", async ({
   await expect.poll(() => finals).toBe(1);
   await page.waitForTimeout(2000);
   expect(finals).toBe(1);
+});
+
+// --- Eredmény-e-mail B4b (#510 R47, R49 b; PR #574 review): a kör párosítási kiléte az első tevékenységkor rögzül ---
+const TOKEN_A = "learner-a.1.AAAAAAAAAAAAAAAAAAAAAA";
+const TOKEN_B = "learner-b.1.BBBBBBBBBBBBBBBBBBBBBB";
+async function playRepairing(page: Page, start: string | null, later: string) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/preview/quiz-fixture");
+  await page.evaluate(token => { if (token) localStorage.setItem("websuli.learnerToken", token); else localStorage.removeItem("websuli.learnerToken"); }, start);
+  await page.getByRole("tab", { name: "Kvíz", exact: true }).click();
+  const quiz = page.locator("[data-quiz-id]");
+  await expect(quiz).toHaveCount(25);
+  await quiz.nth(0).locator("button.lesson-option").first().click();
+  await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), later);
+  for (let i = 1; i < 25; i++) await quiz.nth(i).locator("button.lesson-option").first().click();
+}
+for (const sample of [
+  { name: "azonos párosítás végig → a token megy", start: TOKEN_A, later: TOKEN_A, expected: TOKEN_A },
+  { name: "újrapárosítás a kör közben → párosítás nélkül", start: TOKEN_A, later: TOKEN_B, expected: undefined },
+  { name: "párosítás nélkül kezdett kör, közben párosítva → párosítás nélkül", start: null, later: TOKEN_B, expected: undefined },
+]) {
+  test(`B4b (R47, kilét-kötés BE): ${sample.name}`, async ({ page }) => {
+    const posts = await mock(page, false, true);
+    await playRepairing(page, sample.start, sample.later);
+    await expect.poll(() => quizPosts(posts).length).toBe(1);
+    expect(quizPosts(posts)[0].learner).toBe(sample.expected);
+    // A végleges siker után a kilét-rekord törlődik (nem halmozódik a tárolóban).
+    await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter(k => k.includes(":quiz:owner:")).length)).toBe(0);
+  });
+}
+
+test("B4b (PR #574 review): kilét-kötés KI (a szerver nem hirdeti) — a főági viselkedés: a mostani token megy", async ({ page }) => {
+  const posts = await mock(page);
+  await playRepairing(page, TOKEN_A, TOKEN_B);
+  await expect.poll(() => quizPosts(posts).length).toBe(1);
+  expect(quizPosts(posts)[0].learner).toBe(TOKEN_B);
+});
+
+test("B4b (PR #574 review, R49 b): a CSRF-token várakozása alatti újrapárosítás után a kérés már párosítás nélkül megy", async ({ page }) => {
+  const posts: Array<Record<string, unknown>> = [];
+  let releaseToken: () => void = () => {};
+  const tokenGate = new Promise<void>(resolve => { releaseToken = resolve; });
+  await page.route("**/api/**", async route => {
+    const req = route.request();
+    const path = new URL(req.url()).pathname;
+    if (path === "/api/lessons/lesson-q/results" && req.method() === "POST") { posts.push(req.postDataJSON()); return route.fulfill({ status: 202, json: { queued: true } }); }
+    if (path === "/api/auth/user") return route.fulfill({ json: null });
+    if (path === "/api/csrf-token") { await tokenGate; return route.fulfill({ json: { csrfToken: "test", resultOwnerBinding: true } }); }
+    if (path === "/api/html-files/quiz-fixture") return route.fulfill({ json: { id: "quiz-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
+    if (path === "/api/lessons/by-file/quiz-fixture") return route.fulfill({ json: { lessonId: "lesson-q", version: 1, lesson: fusionFixture() } });
+    if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
+    return route.fulfill({ json: [] });
+  });
+  await playRepairing(page, TOKEN_A, TOKEN_A);
+  await page.waitForTimeout(500); // a beküldés a CSRF-tokenre vár
+  expect(quizPosts(posts)).toHaveLength(0);
+  await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), TOKEN_B);
+  releaseToken();
+  await expect.poll(() => quizPosts(posts).length).toBe(1);
+  expect(quizPosts(posts)[0].learner, "a törzs a várakozás UTÁN épül").toBeUndefined();
+});
+
+test("B4b (PR #574 review): ha az „elküldve” jelző nem írható, a kör a lapon belül nem kötődik újra és nem megy el másodszor", async ({ page }) => {
+  const posts = await mock(page, false, true);
+  await page.addInitScript(() => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key: string, value: string) {
+      if (key.includes(":sent:")) throw new DOMException("tele", "QuotaExceededError");
+      return original.call(this, key, value);
+    };
+  });
+  await playRepairing(page, TOKEN_A, TOKEN_A);
+  await expect.poll(() => quizPosts(posts).length).toBe(1);
+  await page.evaluate(token => localStorage.setItem("websuli.learnerToken", token), TOKEN_B);
+  await page.getByRole("button", { name: "Kvíz kiértékelése" }).click();
+  await expect(page.locator(".fusion-panel-quiz")).toHaveAttribute("data-finished", "true");
+  await page.waitForTimeout(1500);
+  expect(quizPosts(posts), "nincs második beküldés (más kilétnek sem)").toHaveLength(1);
 });

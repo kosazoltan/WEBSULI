@@ -116,11 +116,30 @@ try {
   const emailKeyMigration = await readFile(new URL("../migrations/0045_player_email_key.sql", import.meta.url), "utf8");
   await pool.query(emailKeyMigration);
   await pool.query(emailKeyMigration);
+  // #1986: a tananyagcsoportok (0046) a migrációs fájlból (a tulajdonosi hozzárendeléssel együtt), kétszer — idempotens.
+  await pool.query("DROP TABLE track_assignments; ALTER TABLE html_files DROP COLUMN tracks");
+  const tracksMigration = await readFile(new URL("../migrations/0046_material_tracks.sql", import.meta.url), "utf8");
+  await pool.query(tracksMigration);
+  await pool.query(tracksMigration);
+  // U4a: az összevont eredménylevél félretételi táblája (0047) a migrációs fájlból, kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_result_pending");
+  const pendingMigration = await readFile(new URL("../migrations/0047_lesson_result_pending.sql", import.meta.url), "utf8");
+  await pool.query(pendingMigration);
+  await pool.query(pendingMigration);
+  // U4b review #586: a kézbesítés tartós nyoma (0048), kétszer — idempotens.
+  const deliveryMigration = await readFile(new URL("../migrations/0048_lesson_result_pending_delivery.sql", import.meta.url), "utf8");
+  await pool.query(deliveryMigration);
+  await pool.query(deliveryMigration);
+  // D1H-1: a forrás kivágott képei (0049) a migrációs fájlból, kétszer — idempotens.
+  await pool.query("DROP TABLE lesson_source_images");
+  const sourceImagesMigration = await readFile(new URL("../migrations/0049_lesson_source_images.sql", import.meta.url), "utf8");
+  await pool.query(sourceImagesMigration);
+  await pool.query(sourceImagesMigration);
   await pool.end(); pool = undefined;
   console.log("Disposable PostgreSQL 17 ready; real application schema loaded.");
   const code = await new Promise<number>((resolve, reject) => {
     // The reconciler intentionally scans all workflow rows; isolate suite-owned lifecycle tests.
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/advent-db.integration.ts", "tests/advent-routes-db.integration.ts", "tests/tts-audio-db.integration.ts", "tests/lesson-clips-db.integration.ts"], {
+    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-concurrency=1", "tests/learning-db.integration.ts", "tests/workflow-db.integration.ts", "tests/lesson-skill-db.integration.ts", "tests/lesson-draft-db.integration.ts", "tests/review-db.integration.ts", "tests/design-assets-db.integration.ts", "tests/lesson-result-email-db.integration.ts", "tests/lesson-result-email-partial-db.integration.ts", "tests/daily-reminder-db.integration.ts", "tests/newsletter-db.integration.ts", "tests/admin-authz-matrix-db.integration.ts", "tests/player-auth-db.integration.ts", "tests/player-account-db.integration.ts", "tests/material-classroom-db.integration.ts", "tests/admin-allowlist-db.integration.ts", "tests/set-admin-script-db.integration.ts", "tests/quiz-bank-scale-db.integration.ts", "tests/advent-db.integration.ts", "tests/advent-routes-db.integration.ts", "tests/tts-audio-db.integration.ts", "tests/lesson-clips-db.integration.ts", "tests/tracks-db.integration.ts", "tests/lesson-result-pending-db.integration.ts", "tests/lesson-result-combined-db.integration.ts", "tests/source-images-db.integration.ts"], {
       cwd, env: { ...env, DATABASE_URL: databaseUrl, NODE_ENV: "test", WEBSULI_DISPOSABLE_DB: name },
       windowsHide: true, stdio: "inherit",
     });
