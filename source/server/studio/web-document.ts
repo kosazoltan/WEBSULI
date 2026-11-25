@@ -135,7 +135,8 @@ function readLegacyPpt(bytes: Buffer): string {
     if ((verInst & 0x0f) !== 0 || (type !== 0x0fa0 && type !== 0x0fa8) || len === 0 || len > 65_536 || off + 8 + len > bytes.length) continue;
     if (type === 0x0fa0 && len % 2) continue;
     const text = (type === 0x0fa0 ? bytes.toString("utf16le", off + 8, off + 8 + len) : bytes.toString("latin1", off + 8, off + 8 + len)).replace(/\r/g, "\n").trim();
-    if (text && /\p{L}/u.test(text) && !/[\u0000-\u0008\u000e-\u001f]/.test(text)) { out.push(text); off += 7 + len; }
+    const hasControl = Array.from(text).some(ch => { const c = ch.charCodeAt(0); return c <= 8 || (c >= 14 && c <= 31); });
+    if (text && /\p{L}/u.test(text) && !hasControl) { out.push(text); off += 7 + len; }
   }
   return out.join("\n");
 }
