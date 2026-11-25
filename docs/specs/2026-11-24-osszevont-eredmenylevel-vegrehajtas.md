@@ -25,6 +25,16 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
 3. **U4c — söprő.**
    - Óránként és induláskor fut; a 7 napnál régebbi nyitott sorokból jelölt részleges levél megy.
    - Teszt: DB-teszt E4, az óra paraméterként.
+   - Részletek (U4c, a #586 review-ja után):
+     - `sweepPendingResults({ now })` (új, `server/lesson-result-sweeper.ts`), soronként a közös `(lecke, tulajdonos)` tanácsadó zár alatt:
+       1. **Lejárt rész:** a `now − 7 nap`-nál régebbi nyitott sor → `sent (timeout)`, majd jelölt részleges levél (`buildCombinedResultEmail`
+          egy hiányzó résszel; körkulcs: tulajdonos + rész + kör). A `delivered_at` csak a sikeres kézbesítés után.
+       2. **Kézbesítetlen pár / rész:** a `sent_at IS NOT NULL AND delivered_at IS NULL` és 10 percnél régebbi sorok újrakézbesítése
+          (pár: összevont levél a pár kulcsával; `timeout`: a részleges levél). Az idempotencia-kulcs és a levélnapló miatt nincs dupla levél.
+       3. **Tartalom-törlés:** a kézbesített sorok `graded` / `learner` mezője NULL (adatkímélés; a nyitott sor CHECK-je érintetlen).
+     - A söprő a kapcsolótól FÜGGETLENÜL fut (KI állásban is kiüríti a maradékot), E2E-ben nem indul.
+     - Tesztek (DB): S1 = E4 (8 napos rész → egy jelölt levél, `timeout`, kézbesítve, tartalom törölve); S2 újrafuttatás nem küld újra;
+       S3 6 napos rész marad; S4 kézbesítetlen pár pótlása; S5 kézbesítetlen `timeout` pótlása; S6 két egyidejű söprés → egy levél.
 4. **U4d — kliens.** (A bejelentkezett tanuló gyakorlókör-válaszában is érkezik `awaiting`.)
    - Az `awaiting` válasz és a lecke állapota alapján figyelmeztetés a lecke végén és tetején.
    - Teszt: e2e E7.
