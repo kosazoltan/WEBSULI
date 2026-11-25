@@ -64,3 +64,51 @@ Cél: a régi (gyorsítótárazott) kliens az újabb programverzió blokkfajtái
    névvel), `client/src/lesson-runtime/LessonView.tsx` (olvasás).
 3. Próbahiba, kapulánc, PR; beolvadás és DEPLOY után indulhat a V2 / V3 (új fajták gyártása).
 Hatókörön kívül (a V4 terve dönt): a gyakorlókvíz új kérdéstípusai — a V4 visszafelé kompatibilis alakkal (választós alap) vezeti be.
+
+## V4 — végrehajtás (2026-11-25): kvízkérdés-típusok keverése
+**Döntés (a terv „beírós szám” típusától eltérve):** minden kvíztípus a meglévő, opcióindex-alapú adatmodellben marad (`options`,
+`correctIndex`, `feedbackPerOption`) — a szabad beírás megtörné az index-alapú eredménymodellt (eredménylevél, részleges kiértékelés,
+játékexport: `shared/lesson-result-email.ts` `gradeQuiz` a `picks` indexeiből dolgozik). A típus az opcionális `format` mező:
+- `choice` (alapértelmezés, hiányzó mező = ez) — egyválasztós;
+- `fillGap` — kiegészítés: a kérdés pontosan egy `___` hiányt tartalmaz, az opciók a hiány kitöltései; a megjelenítő a választott opciót a
+  hiányba írja;
+- `oddOneOut` — kakukktojás: pontosan 4 opció, a helyes a „nem illik a sorba”;
+- `number` — számolós: minden opció szám (mértékegységgel is), a helyes a számítás eredménye.
+A régi kliens a `format` mezőt figyelmen kívül hagyja (a zod objektum levágja) — egyválasztósként jeleníti meg, helyesen pontoz.
+Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, legalább 2 különböző típus (`quizFormatProblems`, javító kört kap).
+1. RED: `source/tests/quiz-formats.test.ts` (séma fajtánként; keverési szabály; szerződés-sor; a pontozás index-alapú, típustól független;
+   a szigorú csomagséma a mezőt kéri), `source/tests/lesson-quiz-formats.spec.ts` (e2e: kiegészítésnél a hiányba kerül a válasz,
+   kakukktojás- és számolós címke).
+2. GREEN: `shared/lesson-experience.ts`, `server/studio/bank-schema.ts`, `server/studio/experience-builder.ts`,
+   `client/src/lesson-runtime/LessonExperienceView.tsx`, `LessonRuntimeProbe.tsx` (`?quizFormats=1`).
+
+### V4 — kapulánc-javítás (2026-11-25)
+- A szolgáltatói szigorú séma (`bankResponseFormat`) a `format` mezőt CSAK változatosság BE mellett kéri (`quizFormats`); KI-ben a `response_format` bájtra a régi — a KI kérés nem változik (TRAP: új szerzői/szolgáltatói tartalom csak BE mögé).
+- Dokumentált tesztváltozás: a `lesson-variety-paths` hamis modellje BE kérésben (KVÍZTÍPUSOK szabály) típusolt kvízt ad (`bankAnswer`), mert a V4 bankszabálya (≥ 6 kérdésnél ≥ 2 típus) BE-ben kötelező; a `quiz-formats` séma-tesztje a BE és a KI sémát külön méri.
+
+### V4 — review #603 (2026-11-25)
+- Számolós opció: a meglévő számértelmezővel (`isNumericOption`, `shared/single-choice-check.ts`) — tört, vegyes tört, tagolt egész, előjel, opcionális mértékegység.
+- Ismétlődés-kulcs: a kakukktojás-törzs („Melyik nem illik a sorba?”) és minden `oddOneOut` tétel az opciókészlettel kulcsolt.
+- Bejelentkezett tanuló mentett kvíze: a típus a lecke azonos kérdéséből (questionId + azonos szöveg) — címke és kitöltött hiány; eltérő szövegnél (frissült lecke) választós.
+
+## V1 — végrehajtás (2026-11-25)
+Tengelyek: 2 (nyitásformák bővítése), 6 (témakontextus a példákban), 8 (szöveges összefoglaló formák), 10 (fejezethossz-sáv), és a közös
+sorozatszabály (két egymás utáni lecke ugyanabban a tantárgy–évfolyam sorozatban nem kap azonos vázat). Csak BE változatossági
+kapcsolónál; KI állapotban a prompt bájtra változatlan.
+1. RED: `source/tests/lesson-variety-axes.test.ts`:
+   - 200 leckeazonosítón minden nyitásforma (korcsoportonként) és minden témakontextus előfordul, egyik sem > 25%;
+   - a kiosztás determinisztikus; a fejezethossz-sáv ≥ 2 fejezetnél nem egyforma;
+   - sorozatszabály: ha az előző lecke nyitásformája / témája / összefoglaló formája / blokkváza azonos lenne, a kiosztás determinisztikusan
+     a következőre lép (blokkváznál újramagozás), előzmény nélkül a mag dönt;
+   - szerzői szerződés: BE + kiosztásnál tartalmazza a témakört, az összefoglaló formát és a fejezetenkénti hosszsávot; a lektori lista
+     az összefoglaló formát méri.
+2. GREEN: `shared/lesson-variety-axes.ts` (új), `shared/lesson-opener.ts` (3 új nyitásforma: kihívás, képtalálós, híres történet),
+   `server/studio/lesson-variety-flag.ts` (a futás kiosztott tengelyei), `server/studio/step-io.ts` (szerző + lektor),
+   `server/studio/single-run/engine.ts` (kiosztás, mentés a job állapotába, folytatásnál a mentett), `server/studio/pipeline-store.ts`
+   (`loadPreviousSeriesVariety`: a sorozat legutóbbi, ugyanabban a tantárgy–évfolyamban kiosztott futása).
+3. Próbahiba, kapulánc, PR. A lektori „az összefoglaló a kiosztott formát követi” ellenőrzés a lektor listájában.
+
+### V1 — review #611 (2026-11-25)
+- A szerzői szerződés a futás KIOSZTOTT nyitásformáját írja elő (a sorozatszabállyal eltoltat is); a hős a magból marad — a szerző, a lektor és a jelölő ugyanazt a formát kapja.
+- Eltérő blokkváz: korlátos (1–12), determinisztikus só-keresés a végleges aláírás ellenőrzésével (`seriesShapeSalt`); ha nincs eltérő, a váz marad (naplózva). A só a job állapotába kerül.
+- A szerzői állomáson (lecke nélkül) megszakadt futás folytatása a mentett tengelyeket tölti vissza; új előzmény-lekérés és újraosztás nincs.

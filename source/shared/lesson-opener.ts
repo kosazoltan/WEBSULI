@@ -106,25 +106,32 @@ export const OPENING_FORMS: Record<OpeningFormGroup, readonly OpeningForm[]> = {
     { id: "rejtely", description: "Kis rejtély: valami eltűnt, furcsán viselkedik vagy nem stimmel. A hős nyomokat gyűjt, és a lecke tudása kell a megfejtéshez." },
     { id: "joslas", description: "„Mit gondolsz?” jóslás: a hős két lehetőség közül választana. A nyitás a tanulót is tippelésre hívja, a választ a lecke adja meg." },
     { id: "helyzet", description: "Hétköznapi helyzet otthon, az iskolában vagy játék közben. A hős valódi gondba kerül, amelyet a lecke tudása old meg." },
+    { id: "kihivas", description: "Kihívás: a hős (és a tanuló) egy játékos feladatot kap, amit elsőre nem tud megoldani. A nyitás a kihívást mondja ki, a megoldáshoz a lecke tudása kell." },
+    { id: "kepes", description: "Képtalálós: a nyitás egy élénken leírt jelenetet fest le, amelyben valami a lecke témájához kapcsolódik. A hős (és a tanuló) azt keresi, mi a furcsa vagy fontos a képen." },
   ],
   middle: [
     { id: "helyzet", description: "Életszerű kortárs helyzet (iskola, sport, család, internet). A hős hibázik vagy elakad, a lecke adja a kulcsot." },
     { id: "rejtely", description: "Nyomozós rejtély vagy meglepő megfigyelés. A szereplő ellentmondást vesz észre, és a magyarázat a lecke tartalmában rejlik." },
     { id: "joslas", description: "Becslés vagy jóslás: a szereplő (és a tanuló) előre tippel. A nyitás nyitva hagyja, kinek lesz igaza." },
     { id: "dilemma", description: "Döntés két út között egy csoportban vagy egyedül. A jó döntéshez a lecke tudása kell, a nyitás nem árulja el a választ." },
+    { id: "kihivas", description: "Kihívás vagy verseny: a szereplő egy feladvány elé kerül, amelynek a megoldása elsőre nem nyilvánvaló. A nyitás a feladványt állítja fel, a megoldás a lecke végére derül ki." },
+    { id: "kepes", description: "Képtalálós: a nyitás egy részletesen leírt jelenetet vagy ábrát mutat be. A szereplő (és a tanuló) egy apró, a lecke szempontjából fontos részletet vesz észre benne." },
+    { id: "hires-tortenet", description: "Híres történet: egy valódi felfedezés, találmány vagy esemény pillanata, ahol a szereplők a lecke kérdésével néztek szembe. A nyitás a döntő pillanat előtt áll meg." },
   ],
   older: [
     { id: "eset", description: "Valósághű esetleírás ütköző nézőpontokkal. A szereplők érvelnek, és a lecke tartalma dönti el, kinek van igaza." },
     { id: "gondolatkiserlet", description: "Gondolatkísérlet: „Mi történne, ha…?”. A nyitás egy feltevést állít fel, amelynek a következményeit a lecke bontja ki." },
     { id: "dilemma", description: "Szakmai vagy erkölcsi dilemma, érettségi- vagy életpálya-vonatkozással. A nyitás a döntés tétjét mutatja meg, nem a megoldást." },
     { id: "megfigyeles", description: "Meglepő megfigyelés vagy adat a hétköznapokból. A nyitás a meglepetést fogalmazza meg, a magyarázatot a lecke adja." },
+    { id: "kihivas", description: "Kihívás: egy nehéz, valós feladvány vagy versenyfeladat, amelynek a tétje világos. A nyitás a feladványt és a tétet mutatja meg, a megoldás módját a lecke adja." },
+    { id: "hires-tortenet", description: "Híres történet: egy tudománytörténeti, történelmi vagy irodalmi pillanat, amelyben a lecke kérdése eldőlt. A nyitás a feszültséget építi fel, a magyarázatot a lecke adja." },
   ],
 };
 
 /** A nyitóblokk fejléce a kiosztott formából (kódszótár; a lejátszó a jelölő `openingForm` mezőjéből olvassa). */
 export const OPENING_FORM_LABEL: Record<string, string> = {
   mese: "Mese", rejtely: "Rejtély", joslas: "Mit gondolsz?", helyzet: "Helyzet", dilemma: "Dilemma", eset: "Eset",
-  gondolatkiserlet: "Gondolatkísérlet", megfigyeles: "Megfigyelés",
+  gondolatkiserlet: "Gondolatkísérlet", megfigyeles: "Megfigyelés", kihivas: "Kihívás", kepes: "Képtalálós", "hires-tortenet": "Híres történet",
 };
 
 /** Vegyes nemű magyar keresztnevek — a mért három leggyakoribb (Bence, Dóra, Dóri) nélkül. */
@@ -157,14 +164,16 @@ export function openerVarietyPick(classroom: number, seed: number): { form: Open
 const VARIETY_OPENING_ARC = "A nyitás 3–6 mondat: hős és helyzet; a lecke tantárgyi problémája és az elakadás; felismerés vagy segítő; a Célkártya stratégiája működés közben; a végén NYITOTT kérdés, amelyre a lecke adja meg a választ. A szerkezetet a kiosztott forma alakítja — nem kell minden elemnek külön mondat.";
 
 /** A Stúdió szerzői promptjának szerződése: Célkártya + 5 mondatos mini mese + visszatérés (évfolyamfüggő). */
-export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean; variety?: { seed: number } } = {}): string {
+export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean; variety?: { seed: number; form?: OpeningForm } } = {}): string {
   const version = opts.variety ? LESSON_OPENER_VERSION_VARIETY : LESSON_OPENER_VERSION;
   if (opts.section0InScope === false) {
     return `CÉLKÁRTYA ÉS MINI MESE (${version}): ebben a célzott javításban az 1. fejezet nem része a kimenetnek — most nincs Célkártya és mini mese, a meglévőt nem érinted.`;
   }
   const stage = openerStageForClassroom(classroom);
   const s = OPENER_STAGES[stage];
-  const pick = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
+  // Review #611: a futás KIOSZTOTT formája (pl. a sorozatszabállyal eltolt) az előírás; a hős a magból marad.
+  const seeded = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
+  const pick = seeded && opts.variety?.form ? { ...seeded, form: opts.variety.form } : seeded;
   return [
     `CÉLKÁRTYA ÉS MINI MESE (${version}; az 1. fejezet első két blokkja, utána a tanítás):`,
     `- ${stageLine(stage, Boolean(pick))}`,

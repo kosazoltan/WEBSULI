@@ -1217,6 +1217,45 @@ Forrás: #504, CI `E2E rész (5)` (a 2. vak kör L1 tesztje: helyben zöld, Linu
   fennálljon. Medián / p95 két mintából a kisebbiket adja — a „nincs benne a régi köz” állításhoz az összes minta összegét mérd.
   A mérce erejét mutánssal igazold (a javítás nélkül bukjon). Helyi CI-szerű futás: `BC_SOFTWARE_GL=1` (SwiftShader).
 
+## C-97 — Külső modell bekapcsolás előtt: a szolgáltatónál él-e még; unref időkorlát a tesztben (2026-11-22)
+
+Forrás: `docs/specs/2026-11-22-kisfilm-videomodell.md`.
+
+- **Tünet 1:** a kisfilmgyártás bekapcsolása után az első fejezet mind a négy jelenete állóképes lett. Ok: az OpenRouter a 12 nappal
+  korábban mért és jóváhagyott `bytedance/seedance-1-5-pro` modellt megszüntette (404, „No endpoints found”). A bekapcsolás előtt ezt
+  senki nem ellenőrizte; a mozgókép hibája a kisfilmet nem buktatja (szándékosan), ezért a kár csendben, tárolt kisfilmként jelent meg.
+- **Szabály 1:** külső modellre épülő funkció bekapcsolása ELŐTT olcsó elérhetőségi próba (a modellista vagy egy próbahívás). A
+  modellnév legyen környezeti változóval cserélhető (`LESSON_CLIP_VIDEO_MODEL`), hogy a következő megszűnés ne kódváltozás legyen.
+  Bekapcsolás után az első kör naplóját a „N mozgókép (0 nélkül)” sorra is nézd, ne csak a memóriára.
+- **Tünet 2:** a felhős munkamenetben a `lesson-clip-worker.test.ts` a változatlan mainen is bukott (3 teszt „cancelledByParent”). Ok: a
+  tesztek csak `AbortSignal.timeout`-ra vártak, ennek időzítője unref, így függő munka nélkül a futás az időkorlát előtt véget ért. A
+  CI-ban más függő munka elfedte.
+- **Szabály 2:** olyan tesztben, amely csak időkorlátos `AbortSignal`-ra vár, tarts egy életben tartó időzítőt (`setInterval` +
+  `clearInterval` a `finally`-ben). „Promise resolution is still pending but the event loop has already resolved” = ez a minta.
+- **Tünet 3:** a felhős gyártósor-próba videólépése `getaddrinfo ENOTFOUND openrouter.ai`-jal bukott, mert a védett letöltő saját maga
+  old fel és az ellenőrzött IP-hez köt (a proxyt megkerüli). Megfigyelés 3: felhős munkamenetben a teljes gyártósor-próba ezért nem
+  mér semmit; fizetős modellpróba csak tulajdonosi jóváhagyással, a fejlesztői gépen vagy élesben (lásd a kisfilm-videomodell terv
+  „Élesítés” szakaszának egyklipes próbáját).
+- **Tünet 5 (vak kör 1 L1):** a videóletöltés hibaága a teljes URL-t (aláírt lekérdezéssel) és a nyers szolgáltatói hibaszöveget a
+  szervernaplóba írta. Szabály 5: szolgáltatói út naplóhatárán csak saját lépésnév, HTTP-státusz és rövid gépi hibakód (`clipLogDetail`,
+  `providerErrorCode`); URL-ből legfeljebb a host.
+- **Tünet 4:** a csapda-bejegyzést heredockal írtam be; a szövegben lévő kibocsátási szó miatt a kapu-hook megtagadta. Szabály 4:
+  dokumentumot az Edit / Write eszközzel írj, ne heredockal (vö. C-29).
+
+## C-98 — Felhős munkamenet a kibocsátási körben: koordináció, kapuk, függőségek (2026-11-18)
+
+Forrás: a „minden legyen lint, push, merge, deploy” kör, felhős munkamenetből; #513.
+
+- **Tünet 1:** a felhős session a PR-listát a rossz gépes sessionnek küldte összevonásra, és feltöltött egy ágat, miközben 51 perce
+  várt rá egy koordinációs üzenet („a kört KIZÁRÓLAG X végzi; csak olvass és jelents”). Szabály 1: több párhuzamos session esetén
+  kibocsátás előtt előbb a beérkezett értesítéseket kell elolvasni; ha nincs kijelölt koordinátor, a tulajdonost kell megkérdezni.
+- **Tünet 2:** felhőből a `gate:merge` a GraphQL- és a `branches/main/protection`-hívásnál 403-at kapott, a futásőr `source/.env`
+  DATABASE_URL-t kért. Szabály 2: a merge előtti kapu REST-en gyűjt (#513); a futásőr felhőből elvből nem fut, ezért a merge a
+  fejlesztői gépen történik — ezt a munka elején kell eldönteni.
+- **Tünet 3:** napok után a régi `node_modules` hamis tsc- és rt-teszthibát adott; munkafába symlinkelt `node_modules` mellett a
+  `gitignore-guard` bukott. Szabály 3: hosszú szünet után és minden új munkafában `npm ci`; symlinket ne használj.
+- **Tünet 4:** a kibocsátó parancs láncolt parancsban futott, a kapu-hook megtagadta. Szabály 4: külön, egyszerű parancs a gyökérből.
+
 ## C-SZL-1 — Eloszlás-küszöb a mért táblából; scratch-mérőszkript tsx-szel Windows-on (2026-11-22, ideiglenes sorszám)
 
 - **Tünet:** a Szólétra-szintezés tervének két EARS-küszöbe (A4: „az 1–2. alfokon ≥ 1 kifejezés”, A5: „10. pálya ≤ (alapszint+1)×3”)
@@ -1251,3 +1290,19 @@ Forrás: `feat/szoletra-szintezes` (terv: `docs/specs/2026-11-22-szoletra-szinte
   beérkezése és javítása után; futó kapu alatt a munkafát nem szerkesztjük.
 
 Forrás: `feat/tgm-s5b-v2` (#534), `feat/tgm-s2b1-v2` (#533). Rokon: C-61, C-72, C-75.
+
+## C-99 — Párhuzamos kapuláncok terhelés-bukásai, futó láncszkript szerkesztése, halmozott szelet-ág (2026-11-25)
+
+- **Tünet 1:** több kapulánc egyszerre futott; az időzítés-érzékeny egységtesztek (`claude-stream-thinking-liveness`, `attempt-deadline`), a
+  `test:learning-db` 480 s-os korlátja és a `npm run build` hibaüzenet nélkül buktak — külön futtatva 3/3 zöldek. **Szabály 1:** nehéz lépés
+  (gate:stage/push/pr, teljes teszt, build, e2e, DB-teszt) csak a gépszintű zárral, egyszerre egy: Hermes-agent
+  `scripts/websuli-lanc/nehez.sh`; a láncot a `lanc-futtat.sh` indítja, amely ezt automatikusan beköti.
+- **Tünet 2:** a futó `D:/tmp/*-chain*.sh` helyben javítása után a bash eltolva olvasott tovább („ile: command not found”, már beolvadt PR-ra
+  újra merge-one). **Szabály 2:** lánc csak futásonkénti másolatból fut (`lanc-futtat.sh`); a forrás így bármikor javítható.
+- **Tünet 3:** a B5b/B7-re épült B8-ág a squash-beolvadások után a push-kapu háromfázisú ellenőrzésén bukott (az első kódcommit a B5b-é volt).
+  **Szabály 3:** a `halmozott-ag.sh` indulás előtt ellenőriz; beolvadt alsó szelet esetén `-v2` ág origin/main-ről, a kész fa három commitban
+  (docs → bukó tesztek → kód), force-push nélkül.
+- **Tünet 4:** a kliens feliratbeférés-ellenőrzésébe lookbehind (`(?<=-)`) került → `no-lookbehind-client.test.ts` piros. **Szabály 4:** kliens
+  kódban nincs lookbehind.
+
+Forrás: #486, #607, #608, B8 (`feat/eredmeny-email-b8-v2`). Skill: `websuli-kapulanc`. Rokon: C-61, C-75.
