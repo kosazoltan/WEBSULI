@@ -21,6 +21,8 @@ import { effectiveLessonVariety, runOpeningFormId } from "./lesson-variety-flag"
 import { LESSON_PLACEHOLDER_DESCRIPTION, lessonTeaser } from "../../shared/lesson-teaser";
 import type { CatalogRowLike } from "../catalog/retrieval";
 import type { MemoryCard } from "../memory/subject-memory";
+import { dropUnknownSourceImages } from "./source-image-crops";
+import { existingSourceImageIds } from "../source-images";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -311,7 +313,9 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
       const title = (input as { title?: unknown } | null)?.title;
       // Spec 2026-11-20-tgm-valtozatossag-abrak (S5a): a változatossági jelölőt kizárólag a szerver írja (KI kapcsolónál törli) — a futás
       // rögzített állapota szerint (S5a vak kör 1, L4), nem a környezet mentéskori értéke szerint.
-      const json = await withLessonArt(withVarietyMarker(input, effectiveLessonVariety(), runOpeningFormId()),lessonId ?? `${mapId}:${typeof title === "string" ? title : ""}`);
+      // D1H-2 mentési határ: a tárban nem létező azonosítójú kivágott forráskép (pl. a modell által kitalált) nem kerül a leckébe.
+      const verified = await dropUnknownSourceImages(input, existingSourceImageIds);
+      const json = await withLessonArt(withVarietyMarker(verified, effectiveLessonVariety(), runOpeningFormId()),lessonId ?? `${mapId}:${typeof title === "string" ? title : ""}`);
       if (lessonId) {
         await db.update(lessons).set({ json: json as never, updatedAt: new Date() }).where(eq(lessons.id, lessonId));
         return lessonId;

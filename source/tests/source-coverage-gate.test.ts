@@ -46,14 +46,17 @@ test("a küszöbök, a megfeleltetés és a kihagyási okok rögzített értéke
   assert.deepEqual(SOURCE_KIND_TARGETS.exercise, { animKinds: ["pictureCards"], blockKinds: ["example", "try", "check"] });
   const counted = SOURCE_VISUAL_KINDS.filter((k) => k !== "colorCode");
   assert.deepEqual(Object.keys(SOURCE_KIND_TARGETS).sort(), [...counted].sort());
-  assert.deepEqual([...SOURCE_COVERAGE_THRESHOLDS.must, ...SOURCE_COVERAGE_THRESHOLDS.should].sort(), [...counted].sort());
+  // D1H-2: a `photo` mért, de nem must / should fajta — a kivágás elmaradása (pl. PDF-forrás a D1H-3 előtt) nem bukás.
+  assert.deepEqual(SOURCE_KIND_TARGETS.photo, { animKinds: ["sourceImage"], blockKinds: [] });
+  assert.deepEqual([...SOURCE_COVERAGE_THRESHOLDS.must, ...SOURCE_COVERAGE_THRESHOLDS.should, "photo"].sort(), [...counted].sort());
   // F5: a megjelenítő-szerződés minden fajtája (a compareCards is) szerepel egy megfeleltetésben.
   assert.deepEqual(SOURCE_RENDER_KINDS, ["table", "ruleBox", "compareCards", "decisionTree", "pictureCards"]);
   assert.deepEqual(RENDER_KINDS_IN_TARGETS, [...SOURCE_RENDER_KINDS]);
   // F4: az ok fajtánként megengedett.
   assert.deepEqual(SOURCE_SKIP_REASONS_BY_KIND, {
     table: ["admin_meta", "duplicate"], process: ["admin_meta", "duplicate"], decisionTree: ["admin_meta", "duplicate"], ruleBox: ["admin_meta", "duplicate"],
-    exercise: ["admin_meta", "duplicate", "answer_key"], pictureCard: ["admin_meta", "duplicate", "decorative"], diagram: ["admin_meta", "duplicate", "decorative"] });
+    exercise: ["admin_meta", "duplicate", "answer_key"], pictureCard: ["admin_meta", "duplicate", "decorative"], diagram: ["admin_meta", "duplicate", "decorative"],
+    photo: ["admin_meta", "duplicate", "decorative"] });
 });
 
 test("a fixtúra szintetikus: 38 számolt tétel (+ színkód); az emberi megítélés (6 / 23 / 9) és a kapu mércéje (0) külön szám", () => {

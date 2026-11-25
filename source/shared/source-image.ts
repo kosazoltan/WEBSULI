@@ -14,3 +14,5 @@ export const sourceImageParamsSchema = z.object({
 }).strict();
 export type SourceImageParams = z.infer<typeof sourceImageParamsSchema>;
 export const sourceImageSrc = (id: string) => `/api/source-images/${id}`;
+/** D1H-2: a kivágott forrásképek gyártásbeli kapcsolója — csak a pontos `on` kapcsol BE (alapból KI). */
+export const sourceImagesEnabled = (env: NodeJS.ProcessEnv = process.env) => env.STUDIO_SOURCE_IMAGES === "on";

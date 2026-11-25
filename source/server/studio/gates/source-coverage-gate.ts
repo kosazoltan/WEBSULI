@@ -3,6 +3,7 @@ import { SOURCE_VISUAL_SKIP_REASONS, SOURCE_VISUAL_TABLE, type SkippedSourceVisu
 import { compareCardsAsTable, normalizeVisualText, readCompareCardsParams, readDecisionTreeParams, readPictureCardsParams, readRuleBoxParams, readTableParams,
   SOURCE_RENDER_KINDS, type DecisionTreeVisualNode, type TableVisualParams } from "../../../shared/source-visual-render";
 import { registerGate, type GateLesson, type GateResult } from "./types";
+import { sourceImageParamsSchema } from "../../../shared/source-image";
 
 /**
  * SK1 — forrás-fedettségi kapu (docs/specs/2026-11-18-tananyag-gyartas-minoseg.md): a forrás vizuális leltárának tételeire. Ami a
@@ -53,6 +54,8 @@ export const SOURCE_KIND_TARGETS: Record<CountedSourceKind, { animKinds: readonl
   pictureCard: { animKinds: ["pictureCards"], blockKinds: [] },
   diagram: { animKinds: "any", blockKinds: [] },
   exercise: { animKinds: ["pictureCards"], blockKinds: ["example", "try", "check"] },
+  // D1H-2: a fénykép a kivágott forrásképpel (`sourceImage`) jelenik meg; nem `must` / `should` fajta (a kivágás elmaradása nem bukás).
+  photo: { animKinds: ["sourceImage"], blockKinds: [] },
 };
 
 /**
@@ -68,6 +71,7 @@ export const SOURCE_SKIP_REASONS_BY_KIND: Record<CountedSourceKind, readonly Sou
   exercise: ["admin_meta", "duplicate", "answer_key"],
   pictureCard: ["admin_meta", "duplicate", "decorative"],
   diagram: ["admin_meta", "duplicate", "decorative"],
+  photo: ["admin_meta", "duplicate", "decorative"],
 };
 
 export type SourceCoverageItem = { id: string; kind: SourceVisualKind; state: "shown" | "missing" | "skipped"; reason?: string };
@@ -281,7 +285,14 @@ function kindFits(kind: SourceVisualKind, block: RawBlock): boolean {
   return typeof block.kind === "string" && target.blockKinds.includes(block.kind);
 }
 
+/** Review #596: mért, de nem kötelező fajták (a metrikában és a tételek között szerepelnek, hiányuk nem bukás). */
+export const MEASURED_ONLY_KINDS = ["photo"] as const;
+
+/** D1H-2: a kivágott forráskép magát a forrásrészt mutatja — a hivatkozó, érvényes `sourceImage` blokk a tétel egészét lefedi. */
+const sourceImageShown = (blocks: RawBlock[]) => blocks.some((b) => b.kind === "animate" && b.animKind === "sourceImage" && sourceImageParamsSchema.safeParse(b.params).success);
+
 function fitOf(visual: SourceVisual, blocks: RawBlock[]): Fit {
+  if ((visual.kind === "photo" || visual.kind === "diagram") && sourceImageShown(blocks)) return { total: 1, matched: 1 };
   switch (visual.kind) {
     case "table": return tableFit(visual.data, blocks);
     case "process": return processFit(visual.data.steps, blocks);
@@ -379,7 +390,8 @@ export function sourceCoverageGate(lesson: GateLesson, visuals: ReadonlyArray<So
   const must = group(T.must, T.mustShare);
   const should = group(T.should, T.shouldShare);
   // A számolt, de egyik csoportba sem sorolt (ismeretlen) fajta szigorúan számít: hiánya bukás.
-  const other = group([...new Set(counted.map((v) => v.kind).filter((k) => !(T.must as readonly string[]).includes(k) && !(T.should as readonly string[]).includes(k)))], 1);
+  // Review #596: a `photo` csak MÉRT fajta (a kivágás elmaradása — KI kapcsoló, PDF, korlát — nem bukás): kimarad a kötelező csoportból.
+  const other = group([...new Set(counted.map((v) => v.kind).filter((k) => !(T.must as readonly string[]).includes(k) && !(T.should as readonly string[]).includes(k) && !(MEASURED_ONLY_KINDS as readonly string[]).includes(k)))], 1);
   const line = (v: SourceVisual) => `${v.id} (${v.kind}): ${[skipProblems.get(v.id), whyMissing.get(v.id)].filter(Boolean).join("; ")}`;
   const ok = must.ok && should.ok && other.ok;
   const problems = [

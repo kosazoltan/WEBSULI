@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { Router } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { lessonSourceImages } from "../shared/schema";
 import { SOURCE_IMAGE_ID } from "../shared/source-image";
@@ -27,6 +27,14 @@ export async function storeSourceImage(bytes: Buffer, meta: SourceImageMeta): Pr
   await db.insert(lessonSourceImages).values({ id, mime, bytes, sourceUrl: meta.sourceUrl ?? null, sourceFile: meta.sourceFile ?? null, page: meta.page ?? null, credit: meta.credit.slice(0, 200) })
     .onConflictDoNothing({ target: lessonSourceImages.id });
   return id;
+}
+
+/** D1H-2 mentési határ: a megadott azonosítók közül a tárban létezők. */
+export async function existingSourceImageIds(ids: string[]): Promise<Set<string>> {
+  const valid = ids.filter((i) => SOURCE_IMAGE_ID.test(i));
+  if (!valid.length) return new Set();
+  const rows = await db.select({ id: lessonSourceImages.id }).from(lessonSourceImages).where(inArray(lessonSourceImages.id, valid));
+  return new Set(rows.map((r) => r.id));
 }
 
 /** GET /api/source-images/:id — nyilvános (a lecke része), változatlan tartalom → hosszú gyorsítótár; `nosniff`. */

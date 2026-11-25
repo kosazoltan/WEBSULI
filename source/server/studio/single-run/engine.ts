@@ -25,6 +25,9 @@ import { stripUngroundedAnimateLabels } from "../grounding";
 import { dropUndrawableSourceVisuals, type DroppedSourceVisual } from "../../../shared/lesson-visual-params";
 import type { SourceCoverageResult } from "../gates/source-coverage-gate";
 import { ensureSectionVisuals } from "../section-visuals";
+import { dropUnknownSourceImages, placeSourceImages, restoreSourceImages, sourceImageBlocks, sourceImagesEnabled } from "../source-image-crops";
+/** Review #596: a tár lusta betöltése (a kép nélküli lecke nem kérdez, így a DB nélküli tesztek sem). */
+const knownSourceImageIds = async (ids: string[]) => (await import("../../source-images")).existingSourceImageIds(ids);
 import { scoringRulesOf } from "../../../shared/scoring-rules";
 import { bankStaticPrefix, buildLessonExperience, PACKET_ATTEMPTS, PACKET_RESCUE_ATTEMPTS, resolveBankReview, RetryableBankCallError, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "../experience-builder";
 import { answerKeysFor, answerKeyTestsEnabled, type AnswerKeyContext } from "../answer-key-writer";
@@ -56,7 +59,7 @@ import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm } from "..
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
-import { cleanModelText, sanitizeSourceVisuals, SOURCE_VISUALS_CONTRACT, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
+import { cleanModelText, sanitizeSourceVisuals, sourceVisualsContract, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -406,7 +409,8 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
         '(minden fájlhoz egyet), és minden fogalomnál "sourceFile": a fájl neve, amelyből az idézet származik — a quote ennek a fájlnak az átiratából, szó szerint.',
       ].join("\n") : "",
-      visualsOn ? SOURCE_VISUALS_CONTRACT : "",
+      // D1H-2 (review #596): a photo + crop szerződés csak a képkapcsolóval; KI állapotban a korábbi kérés változatlan.
+      visualsOn ? sourceVisualsContract(sourceImagesEnabled()) : "",
     ].filter(Boolean).join("\n")),
   ];
   const names = files.map((f) => f.name);
@@ -903,6 +907,18 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     else log("[EGYFUTÁS] Az ábrafolt nem illeszthető — az eredeti tanítás megy tovább.");
   } catch (error) { log(`[EGYFUTÁS] Az ábra-forduló elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
   if (!pastAnimator) lesson = ensureSectionVisuals(stripUngroundedAnimateLabels(lesson, concepts).lesson, concepts).lesson;
+  // D1H-2 (docs/specs/2026-11-25-d1h-kivagott-kep.md): a fénykép / rajzzal vissza nem adott ábra kivágott képként, forrásmegjelöléssel —
+  // csak forrásvizuál BE + `STUDIO_SOURCE_IMAGES=on` mellett; hibája nem állítja meg a gyártást.
+  if (!pastAnimator && visualsOn && sourceImagesEnabled() && visuals.some((v) => v.crop)) {
+    try {
+      const { storeSourceImage } = await import("../../source-images");
+      const placedImages = await placeSourceImages(lesson, visuals, input.files, { store: storeSourceImage, log });
+      lesson = placedImages.lesson;
+      if (placedImages.placed.length || placedImages.skipped.length) log(`[EGYFUTÁS] Kivágott forrásképek: ${placedImages.placed.length} beillesztve, ${placedImages.skipped.length} kimaradt.`);
+    } catch (error) { log(`[EGYFUTÁS] A forrásképek kivágása elmaradt: ${error instanceof Error ? error.message.slice(0, 200) : String(error)}`); }
+  }
+  // Review #596: a kapuk ugyanazt a leckét mérjék, amely mentődik — a tárban nem létező képazonosító (pl. a modell kitalálta) már itt kiesik.
+  if (visualsOn) lesson = await dropUnknownSourceImages(lesson, knownSourceImageIds);
 
   // 5. Gyakorlóbank — a meglévő banképítő (kvóta, autofix, séma, javító kísérletek); J2: minden csomag FRISS beszélgetésben.
   let checkpoint: ExperienceCheckpoint | undefined = resumed?.checkpoint;
@@ -1066,7 +1082,10 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       // Review #260: a bankleletek a LEKTORÁLT leckén oldódnak fel, és a tanításjavítás utáni banképítés kapja meg őket
       // (a régi indexek nem alkalmazhatók az újraépített bankra).
       const bankFeedback = bankNotes.length ? resolveBankReview(lesson, bankNotes) : [];
-      const fixed = await runStation(station, "javított tananyag", authorRequest(teachingNotes), validateLesson);
+      const keptImages = sourceImageBlocks(lesson);
+      const rewritten = await runStation(station, "javított tananyag", authorRequest(teachingNotes), validateLesson);
+      // Review #596: a szerző új válasza a program által beillesztett forrásképeket nem hozza vissza — duplikálás nélkül visszakerülnek.
+      const fixed = keptImages.length ? await dropUnknownSourceImages(restoreSourceImages(rewritten, keptImages), knownSourceImageIds) : rewritten;
       lesson = await repairBank(fixed, { round, ...(lesson.experience ? { previous: lesson.experience } : {}), reviewFeedback: bankFeedback, blockers: blocking });
     } else if (bankNotes.length) {
       const split = splitLimitBlockers(lesson, bankNotes);
