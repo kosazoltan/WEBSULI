@@ -37,6 +37,7 @@ diagnosztikai / félkész változások commit nélkül elveszhetnek vagy rossz �
   `git branch --show-current`. A fő checkout (`D:/repo/WEBSULI`) mindig `main`, abba nem commitolunk.
 - Force-push tilos (a felülírandó ág helyett új ágnév, pl. `…-v2`).
 - Rendszeres `git fetch`: idegen commit a main-en → beolvasztás push / merge előtt.
+- Egymásra épülő szelet (B az A ágról): A squash-beolvadása után B-t `git rebase --onto origin/main <A fej a B nyitásakor>`-ral vidd át (B még nem pusholt) — a vak `git merge origin/main` ugyanazt a változást kétszer látja és ütközik.
 
 ## Modell és megállás
 
