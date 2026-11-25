@@ -23,6 +23,7 @@ import type { CatalogRowLike } from "../catalog/retrieval";
 import type { MemoryCard } from "../memory/subject-memory";
 import { dropUnknownSourceImages } from "./source-image-crops";
 import { existingSourceImageIds } from "../source-images";
+import { shapeSignature, type SeriesPrevious } from "../../shared/lesson-variety-axes";
 
 /** Spec 2026-09-19: csak a forrásból igazolt (megtartott / szerkesztett) fogalmak taníthatók. */
 export const TAUGHT_REVIEW_STATES = ["kept", "edited"] as const;
@@ -111,7 +112,21 @@ export type PipelineStore = {
   loadCatalogRows?(subject: string): Promise<CatalogRowLike[]>;
   /** Spec 2026-10-19-tudasbank-s5-s6-ujrabekotes (S5, kapcsolós): EGY tantárgy nyitott memória-kártyái. */
   loadSubjectMemory?(subject: string): Promise<MemoryCard[]>;
+  /** V1 sorozatszabály: a tantárgy–évfolyam sorozat legutóbbi (másik térképű) kiosztott futásának tengelyei. */
+  loadPreviousSeriesVariety?(subject: string, classroom: number, excludeMapId: string): Promise<SeriesPrevious | undefined>;
 };
+
+/** V1: a job-kimenetből a sorozatszabály előzménye (csak ismert alakú mezők). */
+export function seriesPreviousOf(output: unknown): SeriesPrevious | undefined {
+  if (!output || typeof output !== "object") return undefined;
+  const o = output as { openingForm?: unknown; exampleTheme?: unknown; recapForm?: unknown; outline?: { sections?: unknown } };
+  const str = (v: unknown) => (typeof v === "string" && /^[a-z0-9-]{1,40}$/.test(v) ? v : undefined);
+  const sections = Array.isArray(o.outline?.sections) ? (o.outline!.sections as Array<{ plannedBlocks?: unknown }>) : undefined;
+  const signature = sections?.every((s) => Array.isArray(s?.plannedBlocks) && s.plannedBlocks.every((b) => typeof b === "string"))
+    ? shapeSignature(sections as Array<{ plannedBlocks: string[] }>) : undefined;
+  const prev = { openingForm: str(o.openingForm), exampleTheme: str(o.exampleTheme), recapForm: str(o.recapForm), shapeSignature: signature };
+  return Object.values(prev).some(Boolean) ? prev : undefined;
+}
 
 export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
   const { db } = await import("../db");
@@ -128,6 +143,14 @@ export async function createDrizzlePipelineStore(): Promise<PipelineStore> {
     // Spec 2026-10-19 (S5): EGY tantárgy nyitott memória-kártyái (`subject = $1`).
     // Review #311: a kártyák és a bizonyíték-kulcsaik EGY pillanatképből (REPEATABLE READ, csak olvasás) — egy közben záruló írás nem
     // keverhet régi kártyát új kulccsal.
+    // V1 sorozatszabály: ugyanabban a tantárgy–évfolyamban a legutóbbi, MÁSIK térképű, kiosztást hordozó futás (csak olvasás).
+    async loadPreviousSeriesVariety(subject, classroom, excludeMapId) {
+      const rows = await db.select({ output: studioJobs.output }).from(studioJobs)
+        .innerJoin(knowledgeMaps, eq(knowledgeMaps.id, studioJobs.mapId))
+        .where(and(eq(knowledgeMaps.subject, subject), eq(knowledgeMaps.classroom, classroom), sql`${studioJobs.mapId} <> ${excludeMapId}`, sql`${studioJobs.output} ? 'openingForm'`))
+        .orderBy(sql`${studioJobs.createdAt} DESC`).limit(1);
+      return seriesPreviousOf(rows[0]?.output);
+    },
     async loadSubjectMemory(subject) {
       const [{ dbPool }, { loadSubjectMemoryCards }] = await Promise.all([import("../db"), import("../memory/store")]);
       const client = await dbPool.connect();
