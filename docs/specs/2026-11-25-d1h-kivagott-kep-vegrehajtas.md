@@ -28,5 +28,18 @@ Terv: `docs/specs/2026-11-25-d1h-kivagott-kep.md`.
    (az ábra-forduló után, kapcsoló + forrásvizuál BE mellett), `server/studio/pipeline-store.ts` (mentési határ).
 3. Próbahiba commit után; kapulánc; PR.
 
-## D1H-3 … D1H-4
-A D1H-2 beolvadása után, ugyanebben a fájlban részletezve.
+## D1H-2 — kész (#596, 5d91d7cb)
+
+## D1H-3 — kivágás PDF-oldalból
+Döntés: a PDF-oldal raszterizálása a meglévő `pdfjs-dist` (3.11, legacy) + új, ELŐRE FORDÍTOTT natív függőség: `@napi-rs/canvas`
+(nincs fordítás a Renderen; a platform-bináris opcionális függőségként jön). Kísérlet (2026-11-25, scratch): a vektoros alakzat és a
+szabványos betűs szöveg is kirajzolódik (`standardFontDataUrl` a csomag `standard_fonts` könyvtárára).
+1. RED: `source/tests/pdf-page-render.test.ts` — a megadott oldal képpé (PNG) a hosszabb oldalon ≤ 2400 px; nem létező oldal és nem
+   PDF → hiba; a `placeSourceImages` PDF-forrásnál a keret szerinti részt vágja ki (a kivágás helye színnel ellenőrizve), a
+   forrásmegjelölés oldalszámot kap (feltöltöttnél „…, N. oldal”; webes szkennelt PDF-nél a W1b-fejléc); egy futásban az oldal egyszer
+   raszterizálódik.
+2. GREEN: `server/studio/pdf-page-render.ts`, `server/studio/source-image-crops.ts`, `package.json` (`@napi-rs/canvas`).
+3. Próbahiba commit után (külön, leválasztott munkafán, ha a lánc fut); kapulánc; PR.
+
+## D1H-4
+A D1H-3 beolvadása után: `STUDIO_SOURCE_IMAGES=on` élesben, mérés egy valódi (képes PDF + webes kép) leckén.
