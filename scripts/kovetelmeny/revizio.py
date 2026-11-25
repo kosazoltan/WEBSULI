@@ -10,6 +10,7 @@ Parancsok:
   ellenoriz [--napok 3] [--fetch] automatikus revízió → revisions + findings (idempotens: a nyitott leletet frissíti)
   lelet-add --code C --kind K --detail D --evidence E [--severity s] [--slice s]
   lelet-lista [--minden] [--kind k]
+  lelet-zar <id> --evidence E [--status megoldva|elvetve]   nyitott (főleg kézi) lelet lezárása bizonyítékkal
   allit <code> <status> --evidence E   kézi státusz + kézi bizonyíték (manual_evidence; a gyűjtő nem írja felül)
 Minden kézi bevitel maszkolva kerül a DB-be (maszk.py); az SQL mindenhol ?-paraméteres, a dinamikus rész csak '?'-lista.
 Git-hiba vagy sikertelen --fetch esetén a revízió nem ír „tiszta” eredményt: leáll, illetve az érintett leletet megőrzi.
@@ -321,6 +322,16 @@ def cmd_lelet_add(c, a):
     print("rögzítve (maszkolva)")
 
 
+def cmd_lelet_zar(c, a):
+    """Nyitott lelet lezárása; a bizonyíték maszkolva a meglévő mögé fűződik. Zárt / nem létező lelet → kilépési kód 1."""
+    n = c.execute("UPDATE findings SET status=?, evidence=coalesce(evidence,'') || ?, last_seen=? WHERE id=? AND status='nyitott'",
+                  (a.status, f" | lezárva: {mask(a.evidence)}", NOW, a.id)).rowcount
+    c.commit()
+    if not n:
+        sys.exit("nincs ilyen nyitott lelet")
+    print(f"#{a.id} → {a.status} (maszkolva)")
+
+
 def cmd_lelet_lista(c, a):
     q = """SELECT f.id,f.kind,f.severity,f.status,r.code,f.detail,f.proposed_slice FROM findings f JOIN requirements r ON r.id=f.requirement_id
            WHERE 1=1""" + ("" if a.minden else " AND f.status='nyitott'") + (" AND f.kind=?" if a.kind else "") + \
@@ -374,6 +385,10 @@ def main():
     p.add_argument("--minden", action="store_true")
     p.add_argument("--kind")
     p.add_argument("--limit", type=int, default=60)
+    p = sp.add_parser("lelet-zar")
+    p.add_argument("id", type=int)
+    p.add_argument("--evidence", required=True)
+    p.add_argument("--status", default="megoldva", choices=["megoldva", "elvetve"])
     p = sp.add_parser("allit")
     p.add_argument("code")
     p.add_argument("status")
@@ -381,7 +396,8 @@ def main():
     a = ap.parse_args()
     c = connect(a.db)
     {"allapot": cmd_allapot, "lista": cmd_lista, "tetel": cmd_tetel, "kereses": cmd_kereses, "felulirasok": cmd_felulirasok,
-     "ellenoriz": cmd_ellenoriz, "lelet-add": cmd_lelet_add, "lelet-lista": cmd_lelet_lista, "allit": cmd_allit}[a.cmd](c, a)
+     "ellenoriz": cmd_ellenoriz, "lelet-add": cmd_lelet_add, "lelet-lista": cmd_lelet_lista, "lelet-zar": cmd_lelet_zar,
+     "allit": cmd_allit}[a.cmd](c, a)
 
 
 if __name__ == "__main__":
