@@ -9,6 +9,7 @@ import compression from "compression";
 import helmet from "helmet";
 import cors, { type CorsOptionsDelegate } from "cors";
 import { flushPendingMaterialResults } from "./routes";
+import { runShutdownFlushes } from "./shutdown-flush";
 import { mountAppRoutes } from "./app-routes";
 import { beginRealtimeShutdown, drainWindowMsFromEnv, getRealtime } from "./realtime";
 import { mpMode } from "./realtime/config";
@@ -713,6 +714,7 @@ app.use((req, res, next) => {
       shuttingDown = true;
       stopSkillLearningAudit();
       log(`${signal} received. Starting graceful shutdown...`);
+      const shutdownStartedAt = Date.now();
       const force = setTimeout(() => {
         logger.error("Could not close connections in time, forcefully shutting down");
         process.exit(1);
@@ -745,10 +747,16 @@ app.use((req, res, next) => {
           await new Promise((resolve) => setTimeout(resolve, 3_000));
         }
         await realtimeDrained;
-        // Spec 2026-10-18-regi-anyag-eredmeny-azonnal: the still-coalesced material results go out before the pool closes (max 10 s).
-        await Promise.race([flushPendingMaterialResults(), new Promise((resolve) => setTimeout(resolve, 10_000))]).catch((err: unknown) => logger.warn("Material result flush failed", err));
-        // Review #365 (spec 2026-10-22-uj-lecke-ertesito): a függő új-lecke értesítők a pool lezárása előtt (max 15 s).
-        await Promise.race([(await import("./daily-reminder")).pendingNewLessonNotifications(), new Promise((resolve) => setTimeout(resolve, 15_000))]).catch((err: unknown) => logger.warn("New lesson notification flush failed", err));
+        // B6 / R33 (docs/specs/2026-11-25-eredmeny-email-b6.md): a pool lezárása előtti ürítések PÁRHUZAMOSAN, mindegyik a saját
+        // korlátja és a kényszerleállításig hátralévő idő (10 s tartalékkal) közül a kisebbikig: a régi anyagok összevont eredményei
+        // (spec 2026-10-18-regi-anyag-eredmeny-azonnal, max 10 s), a függő új-lecke értesítők (review #365, max 15 s) és az
+        // eredménylevelek — várakozó / halasztott / küldés alatt álló, B6 R14 + R41 — (max 15 s). Egyik hibája sem akasztja meg a többit.
+        const flushBudgetMs = shutdownStartedAt + 295_000 - 10_000 - Date.now();
+        await runShutdownFlushes([
+          { name: "material-results", maxMs: 10_000, run: () => flushPendingMaterialResults() },
+          { name: "new-lesson-notifications", maxMs: 15_000, run: async () => (await import("./daily-reminder")).pendingNewLessonNotifications() },
+          { name: "lesson-results", maxMs: 15_000, run: async () => (await import("./lesson-result-email")).flushLessonResults(Math.min(15_000, flushBudgetMs)) },
+        ], flushBudgetMs, (name, err) => logger.warn(`Shutdown flush failed: ${name}`, err));
         // Vak kör L5 + 2. vak kör L2: a futó kisfilmkör (legfeljebb 60 s, a fenti várakozással párhuzamosan telt); ami ezután is fut,
         // annak MINDEN szolgáltatói várakozása, letöltése és ffmpeg-gyereke megszakad (a fejezet nem kap hibás sort), majd a kör — és
         // vele az advisory lock DB-kapcsolata — lezárulására rövid várakozás, még a pool lezárása előtt.

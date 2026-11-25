@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { GapQuestion, QUIZ_FORMAT_LABEL, savedQuestionFormat, type QuizFormatLookup } from "./quizFormat";
 import { noteResultResponse } from "./resultAwaiting";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -9,8 +10,8 @@ import { FinishPracticeButton } from "./FinishPracticeButton";
 import { VerdictFeedback } from "./VerdictFeedback";
 import { displayOrder } from "@shared/option-order";
 
-export function PracticeAccess({ lessonId, enabled, onFinished, onReview, children }: {
-  lessonId?: string; enabled: boolean; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void; children: ReactNode;
+export function PracticeAccess({ lessonId, enabled, formats, onFinished, onReview, children }: {
+  lessonId?: string; enabled: boolean; formats?: QuizFormatLookup; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void; children: ReactNode;
 }) {
   const auth = useQuery<{ id: string } | null>({
     queryKey: ["/api/auth/user"], enabled: !!lessonId, retry: false,
@@ -24,11 +25,11 @@ export function PracticeAccess({ lessonId, enabled, onFinished, onReview, childr
   if (!lessonId || (!auth.isPending && !auth.isError && !auth.data)) return <>{children}</>;
   if (auth.isPending) return <p role="status">Gyakorlás betöltése…</p>;
   if (auth.isError) return <div role="alert">Az azonosítás nem sikerült. <button className="lesson-outline-btn" onClick={() => void auth.refetch()}>Újra</button></div>;
-  return <SavedLessonQuiz key={`${auth.data!.id}:${lessonId}`} userId={auth.data!.id} lessonId={lessonId} enabled={enabled} onFinished={onFinished} onReview={onReview} />;
+  return <SavedLessonQuiz key={`${auth.data!.id}:${lessonId}`} userId={auth.data!.id} lessonId={lessonId} enabled={enabled} formats={formats} onFinished={onFinished} onReview={onReview} />;
 }
 
-function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
-  userId: string; lessonId: string; enabled: boolean; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void;
+function SavedLessonQuiz({ userId, lessonId, enabled, formats, onFinished, onReview }: {
+  userId: string; lessonId: string; enabled: boolean; formats?: QuizFormatLookup; onFinished: (finished: boolean | null) => void; onReview: (questionId: string) => void;
 }) {
   const [round, setRound] = useState<PracticeView | null>(null);
   const questionElements = useRef(new Map<string, HTMLElement>());
@@ -90,9 +91,9 @@ function SavedLessonQuiz({ userId, lessonId, enabled, onFinished, onReview }: {
       {!!result.weakConceptIds.length && <button className="lesson-outline-btn" onClick={() => onReview(round.questions.find(q => q.coversConceptIds.some(id => result.weakConceptIds.includes(id)))!.questionId)}>Átnézem a magyarázatot</button>}
       <p>A következő körben a még nem látott, hibás és esedékes kérdések kerülnek előre.</p><button className="lesson-outline-btn" disabled={busy} onClick={() => void run(begin)}>Új kvíz indítása</button>
     </section> : <>
-      {round.questions.map((q, questionIndex) => <section key={q.id} ref={element => { if (element) questionElements.current.set(q.id, element); else questionElements.current.delete(q.id); }} tabIndex={-1} className="lesson-block fusion-quiz" data-quiz-id={q.questionId}><span className="fusion-eyebrow">{questionIndex + 1}. kérdés</span><h3>{q.prompt}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display, the stored index is posted. */}{(q.fixedOrder ? q.options.map((_, i) => i) : displayOrder(q.id, q.options)).map((pickedIndex, position) => <button key={pickedIndex} className="lesson-option" disabled={busy || !!q.answer || !!error} aria-pressed={q.answer?.pickedIndex === pickedIndex} data-state={q.answer?.pickedIndex === pickedIndex ? q.answer.correct ? "right" : "wrong" : undefined} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/answer`, { questionId: q.id, pickedIndex, usedHint: q.hintUsed }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[pickedIndex]}</button>)}</div>
+      {round.questions.map((q, questionIndex) => { const format = savedQuestionFormat(formats, q.questionId, q.prompt); return <section key={q.id} ref={element => { if (element) questionElements.current.set(q.id, element); else questionElements.current.delete(q.id); }} tabIndex={-1} className="lesson-block fusion-quiz" data-quiz-id={q.questionId} data-quiz-format={format}><span className="fusion-eyebrow">{questionIndex + 1}. kérdés{QUIZ_FORMAT_LABEL[format] ? ` · ${QUIZ_FORMAT_LABEL[format]}` : ""}</span><h3>{format === "fillGap" ? <GapQuestion text={q.prompt} fill={q.answer ? q.options[q.answer.pickedIndex] : undefined} /> : q.prompt}</h3><div className="fusion-choices">{/* Spec 2026-11-02-valasz-keveres: shuffled display, the stored index is posted. */}{(q.fixedOrder ? q.options.map((_, i) => i) : displayOrder(q.id, q.options)).map((pickedIndex, position) => <button key={pickedIndex} className="lesson-option" disabled={busy || !!q.answer || !!error} aria-pressed={q.answer?.pickedIndex === pickedIndex} data-state={q.answer?.pickedIndex === pickedIndex ? q.answer.correct ? "right" : "wrong" : undefined} onClick={() => void run(() => apiRequest("POST", `/api/lessons/practice/${round.id}/answer`, { questionId: q.id, pickedIndex, usedHint: q.hintUsed }))}><span className="lesson-option-key">{"ABCD"[position]}</span>{q.options[pickedIndex]}</button>)}</div>
         {q.answer ? <VerdictFeedback right={q.answer.correct} text={q.answer.feedback}>{q.answer.usedHint ? " · Segítséggel megoldva" : ""}</VerdictFeedback> : <button className="lesson-ghost-btn" disabled={busy || !!error} onClick={() => void run(async () => { const saved = await apiRequest<PracticeView>("POST", `/api/lessons/practice/${round.id}/hint`, { questionId: q.id }); onReview(q.questionId); return saved; })}>Segítség: vissza a magyarázathoz</button>}
-      </section>)}
+      </section>; })}
       <FinishPracticeButton className="fusion-primary" total={round.questions.length} unanswered={round.questions.length - answered} disabled={busy || !!error} onContinue={() => {
         const question = round.questions.find(question => !question.answer);
         const element = question && questionElements.current.get(question.id);

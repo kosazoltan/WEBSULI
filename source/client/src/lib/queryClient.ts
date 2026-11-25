@@ -32,7 +32,8 @@ async function throwIfResNotOk(res: Response, preReadText?: string) {
 const CSRF_TOKEN_TIMEOUT_MS = 15_000;
 
 /** B4b: `ownerBinding` — a szerver hirdeti a kör-kilét kötését (a B4 kapcsolója, `resultOwnerBinding: true`). */
-type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean };
+/** B5b: `partial` — a szerver fogadja és ütemezi a „félbehagyva” pillanatképet (`resultPartial: true`, a RESULT_PARTIAL_EMAIL kapcsoló). */
+type TokenInfo = { token: string; resultApi: boolean; ownerBinding: boolean; partial: boolean };
 
 // SECURITY: CSRF Token Manager
 // Fetches and caches CSRF token for protecting mutating requests
@@ -78,7 +79,7 @@ class CSRFTokenManager {
       }
 
       const data = await res.json();
-      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true };
+      return { token: data.csrfToken, resultApi: supportsResultApi(data), ownerBinding: data.resultOwnerBinding === true, partial: data.resultPartial === true };
     } finally {
       clearTimeout(timer);
     }
@@ -91,6 +92,17 @@ class CSRFTokenManager {
 }
 
 const csrfTokenManager = new CSRFTokenManager();
+
+/**
+ * B5b: a szerver hirdeti-e a pillanatkép képességét. Hiba (nincs token) → nem: ilyenkor pillanatkép nem megy (a régi viselkedés).
+ * A token gyorsítótárazott, így a lap elhagyásakor a válasz azonnali (a tanuló első válaszakor előre betöltjük: `warmResultToken`).
+ */
+export async function resultPartialReady(): Promise<boolean> {
+  try { return (await csrfTokenManager.getToken()).partial; } catch { return false; }
+}
+export function warmResultToken(): void {
+  void csrfTokenManager.getToken().catch(() => undefined);
+}
 
 // Dev-only request logger — production buildben néma, hogy ne szemetelje
 // tele a konzolt (167 tananyagnál kérésenként 2 sor volt).

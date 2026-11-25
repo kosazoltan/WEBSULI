@@ -22,10 +22,13 @@ test("quizRoundComplete: van kérdés, és mindegyikre van válasz", () => {
 test("a küldés feltétele: lezárt kör VAGY (csak kvíznél) teljes kör; a feladatoknál továbbra is csak a lezárás", () => {
   const source = readFileSync(new URL("../client/src/lesson-runtime/resultReport.ts", import.meta.url), "utf8");
   assert.match(source, /const done = !!round\.finishedAt \|\| \(kind === "quiz" && quizRoundComplete\(round\)\);/);
-  assert.match(source, /if \(!lessonId \|\| !done \|\| sending\.current \|\| !\(ready \|\| timedOut\)\) return;/);
-  // A körönkénti egyszeri küldés őrei változatlanok: a localStorage-jelző és a folyamatban lévő küldés.
+  assert.match(source, /if \(!lessonId \|\| !done \|\| !\(ready \|\| timedOut\)\) return;/);
+  // A körönkénti egyszeri küldés őrei: a localStorage-jelző és a folyamatban lévő küldés. B5b / R20 (dokumentált spec-változás,
+  // docs/specs/2026-11-25-eredmeny-email-b5b.md 6. pont): az „úton van” őr KÖRÖNKÉNTI (a jelző kulcsán), nem komponensszintű.
   assert.match(source, /if \(localStorage\.getItem\(flag\)\) return;/);
-  assert.match(source, /sending\.current = true;/);
+  assert.match(source, /if \(sentInMemory\.has\(flag\) \|\| sending\.current\.has\(flag\)\) return;/);
+  assert.match(source, /sending\.current\.add\(flag\);/);
+  assert.match(source, /finally \{ sending\.current\.delete\(flag\); \}/);
 });
 
 // --- Eredmény-e-mail B1b (R2): korhatár az utolsó válaszhoz ---
