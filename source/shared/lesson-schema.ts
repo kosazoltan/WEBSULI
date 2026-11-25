@@ -96,17 +96,49 @@ export const legacyAnimKindSchema = z.enum(ANIM_KINDS.filter((k) => !(SOURCE_VIS
  * „sérültnek” az új ábrás leckét (lásd a 2026-09-24-es `princess`-téma esetet). Íráskor a séma szigorú.
  */
 export function dropUnknownAnimateBlocks(raw: unknown): unknown {
+  return dropUnknownBlocks(raw);
+}
+
+/** Az ismeretlen (újabb programverziós) blokk helyén álló szöveg (V-kompat). */
+export const UNKNOWN_SECTION_TEXT = "Ez a rész a program újabb változatával készült. Frissítsd az oldalt, és megjelenik.";
+
+const isKnownBlock = (b: unknown): boolean => {
+  if (!b || typeof b !== "object") return false;
+  const { kind, tryKind, animKind } = b as { kind?: unknown; tryKind?: unknown; animKind?: unknown };
+  if (!(BLOCK_KINDS as readonly unknown[]).includes(kind)) return false;
+  if (kind === "try") return (TRY_KINDS as readonly unknown[]).includes(tryKind);
+  if (kind === "animate") return (ANIM_KINDS as readonly unknown[]).includes(animKind);
+  return true;
+};
+
+/**
+ * V-kompat (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md, review #583, #598): olvasáskor az újabb programverzió
+ * ismeretlen blokkfajtája (`kind`), feladatfajtája (`tryKind`) és ábrafajtája (`animKind`) HELYÉN egy rövid, frissítésre kérő
+ * magyarázat áll — a régi, gyorsítótárazott kliens a leckét nem mutatja „sérültnek”. A blokk NEM törlődik, hanem helyettesítődik
+ * (review #598): a blokkindexek (Próba-beküldés `blockIndex`, mentett válaszok, feladatállapot, kisfilm-ábrahivatkozás) a szerveren
+ * tárolt, szűretlen leckével egyeznek, és a fejezetek sem tűnnek el. A magyarázat fogalma a helyettesített blokké, ennek híján a
+ * lecke első fogalma. Íráskor a séma szigorú.
+ */
+export function dropUnknownBlocks(raw: unknown): unknown {
   if (!raw || typeof raw !== "object" || !Array.isArray((raw as { sections?: unknown }).sections)) return raw;
   const lesson = raw as { sections: Array<{ blocks?: unknown }> };
+  if (lesson.sections.every((s) => !s || !Array.isArray(s.blocks) || s.blocks.every(isKnownBlock))) return raw;
+  const conceptOf = (b: unknown) => {
+    const c = (b as { coversConceptIds?: unknown } | null)?.coversConceptIds;
+    return Array.isArray(c) && c.length > 0 && c.every((x) => typeof x === "string") ? (c as string[]) : undefined;
+  };
+  const lessonConcept = lesson.sections.flatMap((s) => (s && Array.isArray(s.blocks) ? s.blocks : [])).map(conceptOf).find(Boolean);
   return {
     ...lesson,
     sections: lesson.sections.map((section) => !section || !Array.isArray(section.blocks) ? section : {
       ...section,
-      blocks: section.blocks.filter((b) => !(b && typeof b === "object" && (b as { kind?: unknown }).kind === "animate"
-        && !(ANIM_KINDS as readonly unknown[]).includes((b as { animKind?: unknown }).animKind))),
+      blocks: section.blocks.map((b) => isKnownBlock(b) ? b : {
+        kind: "explain", text: UNKNOWN_SECTION_TEXT, depth: "core", readAloud: false, coversConceptIds: (conceptOf(b) ?? lessonConcept ?? []).slice(0, 1),
+      }),
     }),
   };
 }
+
 export type TryKind = (typeof TRY_KINDS)[number];
 export type ExplainDepth = (typeof EXPLAIN_DEPTHS)[number];
 export type AgeBand = (typeof AGE_BANDS)[number];
