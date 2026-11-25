@@ -28,6 +28,14 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 /**
+ * A lövés középső lövedékének vízszintes sebessége (vak ellenőrzés L2): nyitott kérdésnél a célzássegéd NEM téríti el — a kristály
+ * kiválasztása a játékosé (U-J6-1), az eltérített lövedék másik kristályra hajolhatna. Billentyűzetnél soha nincs segéd.
+ */
+export function shotCenterVx(a: { touchAssist: boolean; questionOpen: boolean; assistVx: number }): number {
+  return a.touchAssist && !a.questionOpen ? a.assistVx : 0;
+}
+
+/**
  * A középső lövedék vízszintes sebessége: a legközelebbi, kúpon belüli élő cél felé mutató
  * `clamp(speed × dx / dist, −maxVx, maxVx)`; nincs ilyen cél → 0.
  */

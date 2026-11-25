@@ -145,6 +145,10 @@ for (const [width, height] of [[390, 844], [844, 390]]) {
 }
 
 for (const [width, height] of [[390, 844], [844, 390]]) {
+  // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 9.; végrehajtás J6a): a régi eset a BLOKKOLÓ `Mini-teszt`
+  // dialógust rögzítette (a háromválaszos lecke-kérdés azonnal, modálisan, magyarázattal). Az új követelmény nem lazább: a menet
+  // kapu nélkül indul, a lecke-kérdés (a tananyag-kérdés megy elsőnek) a nem blokkoló kérdés-sávon és három feliratos kristályon
+  // érkezik; mindhárom válasz látható és koppintható, vízszintes túlcsordulás nincs, és a magyarázat a „Miért?” gombra nyílik.
   test(`a three-choice lesson question is playable with its explanation at ${width}x${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.addInitScript(() => { localStorage.setItem("websuli.classroomGrade", "7"); localStorage.setItem("websuli.spaceQuiz.grade", "7"); });
@@ -160,15 +164,18 @@ for (const [width, height] of [[390, 844], [844, 390]]) {
     const loaded = page.waitForResponse(r => r.url().includes("material-quizzes"));
     await page.goto("/games/space-asteroid-quiz"); await loaded;
     await page.getByRole("button", { name: /Indulhat —/ }).click();
-    const quiz = page.getByRole("dialog", { name: "Mini-teszt", exact: true });
-    await expect(quiz).toContainText("Melyik a terület mértékegysége?");
-    await expect(quiz).toHaveCSS("opacity", "1");
-    await expect(quiz.locator("..")).toHaveCSS("opacity", "1");
-    await expect(quiz.getByRole("button")).toHaveCount(3);
-    for (const answer of ["cm", "cm²", "cm³"]) await expect(quiz.getByRole("button", { name: answer, exact: true })).toBeVisible();
+    // J6a: nincs induló kvíz-kapu — a játék azonnal fut; a kérdés a bemelegítés (10 mp) után, nem blokkoló sávon érkezik.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const bar = page.getByTestId("sa-question");
+    await expect(bar).toContainText("Melyik a terület mértékegysége?", { timeout: 40_000 });
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    const crystals = page.locator('[data-testid="sa-crystals"] button');
+    await expect(crystals).toHaveCount(3);
+    for (const answer of ["cm", "cm²", "cm³"]) await expect(page.getByRole("button", { name: `Kristály: ${answer}`, exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/shared-bank-${width}x${height}.png` });
-    await quiz.getByRole("button", { name: "cm", exact: true }).click();
+    await page.getByRole("button", { name: "Kristály: cm", exact: true }).click();
+    await page.getByTestId("play-why").click();
     await expect(page.getByTestId("quiz-feedback-why")).toHaveText("A területet négyzetegységgel mérjük.");
     await expect(page.getByRole("button", { name: "Értem, megyek tovább" })).toBeInViewport();
     expect(errors).toEqual([]);
