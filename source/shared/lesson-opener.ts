@@ -164,14 +164,16 @@ export function openerVarietyPick(classroom: number, seed: number): { form: Open
 const VARIETY_OPENING_ARC = "A nyitás 3–6 mondat: hős és helyzet; a lecke tantárgyi problémája és az elakadás; felismerés vagy segítő; a Célkártya stratégiája működés közben; a végén NYITOTT kérdés, amelyre a lecke adja meg a választ. A szerkezetet a kiosztott forma alakítja — nem kell minden elemnek külön mondat.";
 
 /** A Stúdió szerzői promptjának szerződése: Célkártya + 5 mondatos mini mese + visszatérés (évfolyamfüggő). */
-export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean; variety?: { seed: number } } = {}): string {
+export function lessonOpenerContract(classroom: number, opts: { section0InScope?: boolean; variety?: { seed: number; form?: OpeningForm } } = {}): string {
   const version = opts.variety ? LESSON_OPENER_VERSION_VARIETY : LESSON_OPENER_VERSION;
   if (opts.section0InScope === false) {
     return `CÉLKÁRTYA ÉS MINI MESE (${version}): ebben a célzott javításban az 1. fejezet nem része a kimenetnek — most nincs Célkártya és mini mese, a meglévőt nem érinted.`;
   }
   const stage = openerStageForClassroom(classroom);
   const s = OPENER_STAGES[stage];
-  const pick = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
+  // Review #611: a futás KIOSZTOTT formája (pl. a sorozatszabállyal eltolt) az előírás; a hős a magból marad.
+  const seeded = opts.variety ? openerVarietyPick(classroom, opts.variety.seed) : undefined;
+  const pick = seeded && opts.variety?.form ? { ...seeded, form: opts.variety.form } : seeded;
   return [
     `CÉLKÁRTYA ÉS MINI MESE (${version}; az 1. fejezet első két blokkja, utána a tanítás):`,
     `- ${stageLine(stage, Boolean(pick))}`,

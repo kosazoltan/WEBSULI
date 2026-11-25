@@ -575,7 +575,7 @@ export function buildAuthorPrompt(
     LESSON_ARC_CONTRACT,
     LESSON_METHOD_CONTRACT,
     // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): kapcsolóval (alapból KI) — kikapcsolva a prompt bájtra változatlan.
-    ...(lessonOpenerEnabled() ? [lessonOpenerContract(map.classroom, { section0InScope: !repair || repair.targetSections.includes(0), ...(variety && effectiveLessonVariety() ? { variety } : {}) }), playfulAuthorRules(effectiveLessonVariety())] : []),
+    ...(lessonOpenerEnabled() ? [lessonOpenerContract(map.classroom, { section0InScope: !repair || repair.targetSections.includes(0), ...(variety && effectiveLessonVariety() ? { variety: { ...variety, ...(runOpeningForm() ? { form: runOpeningForm()! } : {}) } } : {}) }), playfulAuthorRules(effectiveLessonVariety())] : []),
     // V1: a futás kiosztott tengelyei (témakör, összefoglaló forma, hosszsáv) — csak BE kapcsolónál ÉS kiosztásnál; különben bájtra a régi.
     ...(effectiveLessonVariety() && runVarietyAxes() ? [varietyAxesContract(runVarietyAxes()!, lessonLengthBudget(map).targetWords)] : []),
     // Spec 2026-10-14-tananyag-tomorseg-lefedettseg (S2): a korábbi „Ne rövidítsd vázlattá a bankok kedvéért” a hosszítás felé

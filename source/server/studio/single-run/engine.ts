@@ -592,6 +592,17 @@ export function appendLektorArchive(prev: unknown, round: number, notes: Readonl
  * a job kimenetébe kerül (`lessonVariety: true`; KI állapotban a mező nem jön létre — a kimenet a régi), és a futás minden olvasója
  * (szerzői prompt, bank, mentés) ezt a rögzített értéket látja.
  */
+/**
+ * Review #611 (V1 sorozatszabály): az első só (1..SERIES_SHAPE_SALT_MAX), amelynek végleges blokkváz-aláírása eltér az előző leckéétől;
+ * ha a korláton belül nincs ilyen (vagy nincs előzmény, vagy a 0. só már eltér), 0. Determinisztikus: ugyanarra a tervre ugyanazt adja.
+ */
+export const SERIES_SHAPE_SALT_MAX = 12;
+export function seriesShapeSalt(signatureFor: (salt: number) => string, previous: string | undefined): number {
+  if (!previous || signatureFor(0) !== previous) return 0;
+  for (let salt = 1; salt <= SERIES_SHAPE_SALT_MAX; salt++) if (signatureFor(salt) !== previous) return salt;
+  return 0;
+}
+
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const varietyOn = lessonVarietyForRun(input, deps.lessonVariety);
   return runWithLessonVariety(varietyOn, () => runSingleLessonScoped(input, deps, varietyOn));
@@ -758,7 +769,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // V1 sorozatszabály: friss szerzői körnél a sorozat (tantárgy–évfolyam) legutóbbi, másik térképű kiosztása — hiba / időtúllépés nem állítja
   // meg a futást (előzmény nélkül a mag dönt). Folytatásnál nincs lekérés: a mentett kiosztás számít.
   let seriesPrev: SeriesPrevious | undefined;
-  if (varietyOn && !resumed?.lesson && store.loadPreviousSeriesVariety) {
+  // Review #611: a szerzői állomáson (lecke nélkül) megszakadt futásnak már MENTETT kiosztása van — az számít, új lekérés nincs.
+  const savedAxes = varietyOn && typeof output.openingForm === "string";
+  if (varietyOn && !resumed?.lesson && !savedAxes && store.loadPreviousSeriesVariety) {
     try { seriesPrev = await withKnowledgeDeadline(store.loadPreviousSeriesVariety(promptMap.subject, promptMap.classroom, mapId), "sorozat-előzmény"); }
     catch (error) { log(`[EGYFUTÁS] Sorozat-előzmény kihagyva: ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 160)}`); }
   }
@@ -767,9 +780,15 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   const shapeSeed = (salt: number) => seedFrom(salt ? `${mapId}#${salt}` : mapId);
   let outline = applySectionShapes(plannedOutline, shapedNow ? shapeSeed(savedSalt ?? 0) : undefined, savedAssigned);
   if (shapedNow && savedSalt === undefined && seriesPrev?.shapeSignature && seriesPrev.shapeSignature === shapeSignature(outline.sections)) {
-    outline = applySectionShapes(plannedOutline, shapeSeed(1), savedAssigned);
-    output = { ...output, shapeSalt: 1 };
-    log("[EGYFUTÁS] Sorozatszabály: a blokkváz azonos volt az előző leckéével — újramagozva.");
+    // Review #611: egyetlen újramagozás nem garantál eltérő vázat — korlátos, determinisztikus keresés, a végleges aláírás ellenőrizve.
+    const salt = seriesShapeSalt((s) => shapeSignature(applySectionShapes(plannedOutline, shapeSeed(s), savedAssigned).sections), seriesPrev.shapeSignature);
+    if (salt > 0) {
+      outline = applySectionShapes(plannedOutline, shapeSeed(salt), savedAssigned);
+      output = { ...output, shapeSalt: salt };
+      log(`[EGYFUTÁS] Sorozatszabály: a blokkváz azonos volt az előző leckéével — újramagozva (só: ${salt}).`);
+    } else {
+      log("[EGYFUTÁS] Sorozatszabály: a tervhez nincs eltérő blokkváz a keresési korláton belül — a váz marad.");
+    }
   }
   // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
   // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
@@ -816,7 +835,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // utólag forma (a mentett jelölő és a lektor sem állít kiosztást).
   let assignedForm: string | null = null;
   if (varietyOn) {
-    if (!resumed?.lesson) {
+    if (!resumed?.lesson && !savedAxes) {
       const seed = seedFrom(mapId);
       // V1: témakör, összefoglaló forma, hosszsáv a magból; a sorozatszabály a nyitásformát is a következőre léptetheti.
       const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);

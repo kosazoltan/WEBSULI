@@ -107,3 +107,8 @@ kapcsolónál; KI állapotban a prompt bájtra változatlan.
    `server/studio/single-run/engine.ts` (kiosztás, mentés a job állapotába, folytatásnál a mentett), `server/studio/pipeline-store.ts`
    (`loadPreviousSeriesVariety`: a sorozat legutóbbi, ugyanabban a tantárgy–évfolyamban kiosztott futása).
 3. Próbahiba, kapulánc, PR. A lektori „az összefoglaló a kiosztott formát követi” ellenőrzés a lektor listájában.
+
+### V1 — review #611 (2026-11-25)
+- A szerzői szerződés a futás KIOSZTOTT nyitásformáját írja elő (a sorozatszabállyal eltoltat is); a hős a magból marad — a szerző, a lektor és a jelölő ugyanazt a formát kapja.
+- Eltérő blokkváz: korlátos (1–12), determinisztikus só-keresés a végleges aláírás ellenőrzésével (`seriesShapeSalt`); ha nincs eltérő, a váz marad (naplózva). A só a job állapotába kerül.
+- A szerzői állomáson (lecke nélkül) megszakadt futás folytatása a mentett tengelyeket tölti vissza; új előzmény-lekérés és újraosztás nincs.
