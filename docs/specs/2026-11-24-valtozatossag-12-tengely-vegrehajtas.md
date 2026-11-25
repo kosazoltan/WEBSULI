@@ -91,6 +91,28 @@ Szabály (gyártás, változatosság BE): ha a csomag kvíze ≥ 6 kérdés, leg
 - Ismétlődés-kulcs: a kakukktojás-törzs („Melyik nem illik a sorba?”) és minden `oddOneOut` tétel az opciókészlettel kulcsolt.
 - Bejelentkezett tanuló mentett kvíze: a típus a lecke azonos kérdéséből (questionId + azonos szöveg) — címke és kitöltött hiány; eltérő szövegnél (frissült lecke) választós.
 
+## V1 — végrehajtás (2026-11-25)
+Tengelyek: 2 (nyitásformák bővítése), 6 (témakontextus a példákban), 8 (szöveges összefoglaló formák), 10 (fejezethossz-sáv), és a közös
+sorozatszabály (két egymás utáni lecke ugyanabban a tantárgy–évfolyam sorozatban nem kap azonos vázat). Csak BE változatossági
+kapcsolónál; KI állapotban a prompt bájtra változatlan.
+1. RED: `source/tests/lesson-variety-axes.test.ts`:
+   - 200 leckeazonosítón minden nyitásforma (korcsoportonként) és minden témakontextus előfordul, egyik sem > 25%;
+   - a kiosztás determinisztikus; a fejezethossz-sáv ≥ 2 fejezetnél nem egyforma;
+   - sorozatszabály: ha az előző lecke nyitásformája / témája / összefoglaló formája / blokkváza azonos lenne, a kiosztás determinisztikusan
+     a következőre lép (blokkváznál újramagozás), előzmény nélkül a mag dönt;
+   - szerzői szerződés: BE + kiosztásnál tartalmazza a témakört, az összefoglaló formát és a fejezetenkénti hosszsávot; a lektori lista
+     az összefoglaló formát méri.
+2. GREEN: `shared/lesson-variety-axes.ts` (új), `shared/lesson-opener.ts` (3 új nyitásforma: kihívás, képtalálós, híres történet),
+   `server/studio/lesson-variety-flag.ts` (a futás kiosztott tengelyei), `server/studio/step-io.ts` (szerző + lektor),
+   `server/studio/single-run/engine.ts` (kiosztás, mentés a job állapotába, folytatásnál a mentett), `server/studio/pipeline-store.ts`
+   (`loadPreviousSeriesVariety`: a sorozat legutóbbi, ugyanabban a tantárgy–évfolyamban kiosztott futása).
+3. Próbahiba, kapulánc, PR. A lektori „az összefoglaló a kiosztott formát követi” ellenőrzés a lektor listájában.
+
+### V1 — review #611 (2026-11-25)
+- A szerzői szerződés a futás KIOSZTOTT nyitásformáját írja elő (a sorozatszabállyal eltoltat is); a hős a magból marad — a szerző, a lektor és a jelölő ugyanazt a formát kapja.
+- Eltérő blokkváz: korlátos (1–12), determinisztikus só-keresés a végleges aláírás ellenőrzésével (`seriesShapeSalt`); ha nincs eltérő, a váz marad (naplózva). A só a job állapotába kerül.
+- A szerzői állomáson (lecke nélkül) megszakadt futás folytatása a mentett tengelyeket tölti vissza; új előzmény-lekérés és újraosztás nincs.
+
 ## V2a — végrehajtás (2026-11-25): öt új feladatfajta — séma, pontozó, megjelenítő (gyártás nélkül)
 Előfeltétel: a V-kompat élesítése (a régi kliens az ismeretlen `tryKind` helyén frissítésre kérő magyarázatot mutat). A V2a a fajtákat
 NEM hirdeti a modellnek (a szerzői katalógus és a vázlat `tryKind`-ja a régi hármas — `PROMPT_TRY_KINDS`); a gyártási prompt és a kapu

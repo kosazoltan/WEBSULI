@@ -1,3 +1,4 @@
+import type { VarietyAxes } from "../../shared/lesson-variety-axes";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { storedVarietyMarker } from "../../shared/lesson-feedback-openers";
 import { openingFormById } from "../../shared/lesson-opener";
@@ -32,7 +33,15 @@ export function effectiveLessonVariety(): boolean {
  * (a szerző kimarad) nincs beállítva: ilyenkor sem a lektor, sem a mentett jelölő nem állít kiosztást.
  */
 type RunOpeningForm = { id: string; description: string };
-const formScope = new AsyncLocalStorage<{ form?: RunOpeningForm }>();
+const formScope = new AsyncLocalStorage<{ form?: RunOpeningForm; axes?: VarietyAxes }>();
+/** V1: a futás kiosztott további tengelyei (témakör, összefoglaló forma, hosszsáv) — a szerző és a lektor ebből kapja. */
+export function setRunVarietyAxes(axes: VarietyAxes | undefined): void {
+  const holder = formScope.getStore();
+  if (holder) holder.axes = axes;
+}
+export function runVarietyAxes(): VarietyAxes | undefined {
+  return formScope.getStore()?.axes;
+}
 export function setRunOpeningForm(form: RunOpeningForm | undefined): void {
   const holder = formScope.getStore();
   if (holder) holder.form = form;

@@ -55,7 +55,8 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm } from "../lesson-variety-flag";
+import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
+import { avoidSeriesRepeat, exampleThemeById, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -591,6 +592,17 @@ export function appendLektorArchive(prev: unknown, round: number, notes: Readonl
  * a job kimenetébe kerül (`lessonVariety: true`; KI állapotban a mező nem jön létre — a kimenet a régi), és a futás minden olvasója
  * (szerzői prompt, bank, mentés) ezt a rögzített értéket látja.
  */
+/**
+ * Review #611 (V1 sorozatszabály): az első só (1..SERIES_SHAPE_SALT_MAX), amelynek végleges blokkváz-aláírása eltér az előző leckéétől;
+ * ha a korláton belül nincs ilyen (vagy nincs előzmény, vagy a 0. só már eltér), 0. Determinisztikus: ugyanarra a tervre ugyanazt adja.
+ */
+export const SERIES_SHAPE_SALT_MAX = 12;
+export function seriesShapeSalt(signatureFor: (salt: number) => string, previous: string | undefined): number {
+  if (!previous || signatureFor(0) !== previous) return 0;
+  for (let salt = 1; salt <= SERIES_SHAPE_SALT_MAX; salt++) if (signatureFor(salt) !== previous) return salt;
+  return 0;
+}
+
 export async function runSingleLesson(input: SingleRunInput, deps: SingleRunDeps): Promise<SingleRunResult> {
   const varietyOn = lessonVarietyForRun(input, deps.lessonVariety);
   return runWithLessonVariety(varietyOn, () => runSingleLessonScoped(input, deps, varietyOn));
@@ -754,7 +766,30 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   const shapedNow = planned === undefined && varietyOn;
   // S6b 1. vak kör (L1): a terv eredetét a tisztítás ELŐTT állapítjuk meg — a mentett, program által kiosztott terv `tryKind`-ja megmarad.
   const savedAssigned = varietyOn && resumed?.outline !== undefined && output.sectionShapes === true;
-  const outline = applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined, savedAssigned);
+  // V1 sorozatszabály: friss szerzői körnél a sorozat (tantárgy–évfolyam) legutóbbi, másik térképű kiosztása — hiba / időtúllépés nem állítja
+  // meg a futást (előzmény nélkül a mag dönt). Folytatásnál nincs lekérés: a mentett kiosztás számít.
+  let seriesPrev: SeriesPrevious | undefined;
+  // Review #611: a szerzői állomáson (lecke nélkül) megszakadt futásnak már MENTETT kiosztása van — az számít, új lekérés nincs.
+  const savedAxes = varietyOn && typeof output.openingForm === "string";
+  if (varietyOn && !resumed?.lesson && !savedAxes && store.loadPreviousSeriesVariety) {
+    try { seriesPrev = await withKnowledgeDeadline(store.loadPreviousSeriesVariety(promptMap.subject, promptMap.classroom, mapId), "sorozat-előzmény"); }
+    catch (error) { log(`[EGYFUTÁS] Sorozat-előzmény kihagyva: ${cleanModelText(error instanceof Error ? error.message : String(error)).slice(0, 160)}`); }
+  }
+  // V1: ha a kiosztott blokkváz az előző leckéével azonos, egyszer újramagozunk (a só a job állapotába kerül, folytatásnál az számít).
+  const savedSalt = typeof output.shapeSalt === "number" && Number.isInteger(output.shapeSalt) ? output.shapeSalt : undefined;
+  const shapeSeed = (salt: number) => seedFrom(salt ? `${mapId}#${salt}` : mapId);
+  let outline = applySectionShapes(plannedOutline, shapedNow ? shapeSeed(savedSalt ?? 0) : undefined, savedAssigned);
+  if (shapedNow && savedSalt === undefined && seriesPrev?.shapeSignature && seriesPrev.shapeSignature === shapeSignature(outline.sections)) {
+    // Review #611: egyetlen újramagozás nem garantál eltérő vázat — korlátos, determinisztikus keresés, a végleges aláírás ellenőrizve.
+    const salt = seriesShapeSalt((s) => shapeSignature(applySectionShapes(plannedOutline, shapeSeed(s), savedAssigned).sections), seriesPrev.shapeSignature);
+    if (salt > 0) {
+      outline = applySectionShapes(plannedOutline, shapeSeed(salt), savedAssigned);
+      output = { ...output, shapeSalt: salt };
+      log(`[EGYFUTÁS] Sorozatszabály: a blokkváz azonos volt az előző leckéével — újramagozva (só: ${salt}).`);
+    } else {
+      log("[EGYFUTÁS] Sorozatszabály: a tervhez nincs eltérő blokkváz a keresési korláton belül — a váz marad.");
+    }
+  }
   // 3. vak kör (L7): a terv EREDETE verziózott futásadat — `sectionShapes: true` csak akkor, ha a sorokat a program osztotta ki (friss
   // modellterv BE futásban). Folytatásnál kizárólag a mentett jelző számít: a tulajdonos jóváhagyott tervéből indult futás folytatása
   // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
@@ -800,14 +835,22 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // utólag forma (a mentett jelölő és a lektor sem állít kiosztást).
   let assignedForm: string | null = null;
   if (varietyOn) {
-    if (!resumed?.lesson) {
-      const pick = openerVarietyPick(promptMap.classroom, seedFrom(mapId)).form;
+    if (!resumed?.lesson && !savedAxes) {
+      const seed = seedFrom(mapId);
+      // V1: témakör, összefoglaló forma, hosszsáv a magból; a sorozatszabály a nyitásformát is a következőre léptetheti.
+      const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);
+      const pick = openingFormById(assigned.openingForm, promptMap.classroom)!;
       assignedForm = pick.id;
-      output = { ...output, openingForm: pick.id };
+      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands };
       setRunOpeningForm(pick);
+      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands });
     } else if (typeof output.openingForm === "string") {
       const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
+      // V1: folytatásnál a mentett tengelyek (régi, tengely nélküli checkpointnál nincs kiosztás).
+      const theme = exampleThemeById(output.exampleTheme), recap = recapFormById(output.recapForm);
+      const bands = Array.isArray(output.lengthBands) && output.lengthBands.every((b) => b === "rövid" || b === "közepes" || b === "hosszabb") ? output.lengthBands as LengthBand[] : undefined;
+      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands });
     }
   }
   if (!resumed?.lesson) await save("author", output);

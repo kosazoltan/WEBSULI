@@ -142,7 +142,9 @@ test("S6a-v2: a gyártómotor a fejezetív-kiosztáshoz a futás állapotát olv
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../server/studio/single-run/engine.ts", import.meta.url), "utf8");
   // 3. vak kör (L7): a feltétel nevesítve (`shapedNow`) — a viselkedést a `lesson-variety-paths` motor-tesztje méri.
-  assert.ok(src.includes("const shapedNow = planned === undefined && varietyOn;") && src.includes("applySectionShapes(plannedOutline, shapedNow ? seedFrom(mapId) : undefined"));
+  // V1: a mag a sorozatszabály sójával (0 = a térkép azonosítója, mint korábban; a só a job állapotából).
+  assert.ok(src.includes("const shapedNow = planned === undefined && varietyOn;") && src.includes("applySectionShapes(plannedOutline, shapedNow ? shapeSeed(savedSalt ?? 0) : undefined")
+    && src.includes("seedFrom(salt ? `${mapId}#${salt}` : mapId)"));
 });
 
 test("S6b-v2: a szerzői prompt try-fajta mondata és a szerzői hang a FUTÁS állapotát követi (KI futás BE környezetben is a régi prompt)", async () => {
