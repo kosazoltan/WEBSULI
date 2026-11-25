@@ -38,4 +38,14 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
 4. **U4d — kliens.** (A bejelentkezett tanuló gyakorlókör-válaszában is érkezik `awaiting`.)
    - Az `awaiting` válasz és a lecke állapota alapján figyelmeztetés a lecke végén és tetején.
    - Teszt: e2e E7.
+   - Részletek (U4d):
+     - Szerver: a `sendPracticeResult` a párosítás eredményét (`awaiting`) azonnal adja, a levél a háttérben megy; az `answerPractice` /
+       `finishPractice` a kör lezárásakor legfeljebb 3 s-ig vár rá, és a válasz nézetébe `resultAwaiting` kerül (időtúllépés / hiba → nincs mező).
+     - Kliens: `client/src/lesson-runtime/resultAwaiting.ts` — leckénkénti tár (`localStorage`, memóriás tartalékkal) és `useResultAwaiting`
+       hook; a vendég / párosított út (`useResultReport`) a POST-válasz `awaiting`-jét írja, a bejelentkezett kvíz a `resultAwaiting`-et;
+       bármely rész `awaiting` nélküli sikeres beküldése törli.
+     - UI: `ResultAwaitingNotice` (`data-testid="result-awaiting"`) a lecke tetején (eszközsor alatt) és a kész rész eredménye alatt, gombbal
+       a hiányzó részhez; a hiányzó rész beküldése után eltűnik.
+     - Tesztek: egységteszt a tárra (beállítás, törlés, másik lecke független); DB: E9b — a gyakorlókör nézete `resultAwaiting: "tasks"`;
+       e2e E7 — a POST-válasz `awaiting`-jére (útvonal-helyettesítéssel) a figyelmeztetés megjelenik, a másik rész után eltűnik.
 5. **U4e — élesítés.** A `RESULT_COMBINED_EMAIL` alapértéke élesben (`NODE_ENV=production`) BE lesz, csak az U4b–U4d beolvadása után. Teszt: a kapcsolóteszt a V0 mintájára.
