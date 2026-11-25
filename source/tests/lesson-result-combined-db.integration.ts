@@ -129,8 +129,8 @@ test("E9: a bejelentkezett tanuló gyakorlóköre (sendPracticeResult) ugyanazon
 
 // Review #586 — a kézbesítés tartóssága, a kilét és a kapcsoló-időszakok.
 /**
- * FLAKE-U4-R1 (docs/specs/2026-11-25-flake-u4-r1.md): a kézbesítés nyoma (`delivered_at`) a háttérküldés UTÁN, a kézbesítési zár
- * tranzakciójában íródik — a levelek megérkezése után sem azonnal. Korlátos (legfeljebb 5 s) lekérdező várakozás a várt állapotig.
+ * FLAKE-U4-R1 (docs/specs/2026-11-25-flake-u4-r1.md): a kézbesítés nyoma (`delivered_at`) a háttér-kézbesítés VÉGÉN, külön
+ * (modulszintű `db`) utasítással íródik, nem a zár tranzakciójában — a levelek megérkezése után sem azonnal. Korlátos (legfeljebb 5 s) lekérdező várakozás a várt állapotig.
  */
 const waitRows = async <T,>(read: () => Promise<T>, expected: T): Promise<T> => {
   let rows = await read();
