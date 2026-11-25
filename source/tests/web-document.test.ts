@@ -208,3 +208,16 @@ test("review #592: a ZIP méretkapuja a formátumfelismerés (mimetype-olvasás)
   await assert.rejects(sniffWebFormat(bomb, ""), /túl nagy/i);
   await assert.rejects(readWebDocument(bomb, "", URL_), /túl nagy/i);
 });
+
+test("review #592: BOM-os UTF-16 szöveg charset nélkül is helyesen dekódolva", async () => {
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("Törtek és számlálók UTF-16-ban.", "utf16le")]);
+  assert.equal((await readWebDocument(le, "text/plain", URL_)).text, "Törtek és számlálók UTF-16-ban.");
+  const be = Buffer.from(Buffer.from("Arány", "utf16le").swap16());
+  assert.equal((await readWebDocument(Buffer.concat([Buffer.from([0xfe, 0xff]), be]), "", URL_)).text, "Arány");
+});
+
+test("review #592: ismétlődő FAT-szektorhivatkozású PPT → sérült fájl hiba (nem fűzi újra a szektort)", async () => {
+  const bad = ppt(["Szöveg"], []);
+  for (let i = 1; i < 109; i++) bad.writeUInt32LE(0, 76 + i * 4);
+  await assert.rejects(readWebDocument(bad, "", URL_), /sérült/);
+});

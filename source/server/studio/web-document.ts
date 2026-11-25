@@ -210,6 +210,8 @@ export function readCfbStream(bytes: Buffer, name: string): Buffer | null {
     for (let i = 0; i < size / 4 - 1; i++) { const v = sec.readUInt32LE(i * 4); if (v !== FREESECT && v !== ENDOFCHAIN) fatSectors.push(v); }
     difat = sec.readUInt32LE(size - 4);
   }
+  // Review #592: ismétlődő FAT-szektorhivatkozás (vagy a fájlnál több FAT-szektor) sérült / rosszindulatú fájl — nem fűzzük újra.
+  if (new Set(fatSectors).size !== fatSectors.length || fatSectors.length > Math.ceil(bytes.length / size)) throw new Error("A régi Office-fájl sérült (FAT-szektorok).");
   const fat: number[] = [];
   for (const f of fatSectors) { const sec = sectorAt(f); for (let i = 0; i + 4 <= sec.length; i += 4) fat.push(sec.readUInt32LE(i)); }
   const chain = (start: number, table: number[]) => {
@@ -312,7 +314,9 @@ export async function readWebDocument(bytes: Buffer, contentType: string, url: s
     }
     case "html": case "text": {
       const { charsetOf, decode, htmlToText } = await import("./safe-fetch");
-      const body = decode(new Uint8Array(bytes), charsetOf(contentType, new Uint8Array(bytes)));
+      // Review #592: a BOM a fejléc / meta előtt dönt (UTF-16LE / UTF-16BE / UTF-8) — a BOM-os UTF-16 nem dekódolódhat UTF-8-ként.
+      const bom = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf-16le" : bytes[0] === 0xfe && bytes[1] === 0xff ? "utf-16be" : bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? "utf-8" : null;
+      const body = decode(new Uint8Array(bytes), bom ?? charsetOf(contentType, new Uint8Array(bytes))).replace(/^\uFEFF/, "");
       if (kind === "text") return { format: "text", title: "", text: body.trim(), images: [], needsOcr: false };
       const { title, text } = htmlToText(body);
       return { format: "html", title, text, images: [], needsOcr: false };
