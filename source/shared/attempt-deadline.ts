@@ -6,12 +6,17 @@ export type AttemptDeadline = { left(): number; within<T>(p: Promise<T>): Promis
 
 export function attemptDeadline(ms: number, now: () => number = Date.now): AttemptDeadline {
   const at = now() + ms;
-  const left = () => Math.max(0, at - now());
+  // A lejárati időzítő lefutása végleges: a Node időzítője a Date.now-hoz képest ms-kerekítéssel korábban is tüzelhet, ezért
+  // lejárat után a `left` akkor is 0, ha az óra még a határidő előtt áll (különben 1 ms-os POST indulna; CI #610).
+  let lapsed = false;
+  const left = () => (lapsed ? 0 : Math.max(0, at - now()));
   return {
     left,
     within<T>(p: Promise<T>): Promise<T | undefined> {
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const expired = new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), left()); });
+      const expired = new Promise<undefined>(resolve => {
+        timer = setTimeout(() => { lapsed = true; resolve(undefined); }, left());
+      });
       return Promise.race([p, expired]).finally(() => clearTimeout(timer));
     },
   };

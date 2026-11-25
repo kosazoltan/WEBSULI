@@ -13,6 +13,17 @@ test("a határidőn túl függő előkészítés undefined-dal ér véget, és a
   assert.equal(d.left(), 0);
 });
 
+test("CI #610: ha a lejárati időzítő az órához képest korábban fut le (ms-kerekítés), a within után a hátralévő idő akkor is pontosan 0", async () => {
+  // Az órát kézzel léptetjük: az időzítő lefutásakor az óra még 1 ms-mal a határidő előtt áll (a Node időzítője a Date.now-hoz
+  // képest ms-kerekítéssel korábban is tüzelhet). Lejárat után a kísérlet nem indíthat 1 ms-os POST-ot.
+  let clock = 1_000;
+  const d = attemptDeadline(5, () => clock);
+  const pending = d.within(new Promise<string>(() => undefined));
+  clock = 1_004;
+  assert.equal(await pending, undefined);
+  assert.equal(d.left(), 0, "lejárat után a hátralévő idő 0");
+});
+
 test("a határidőn belül teljesülő előkészítés értéke átjön, a hátralévő idő pozitív", async () => {
   const d = attemptDeadline(5_000);
   assert.equal(await d.within(Promise.resolve("fp")), "fp");
