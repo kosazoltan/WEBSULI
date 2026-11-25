@@ -42,14 +42,17 @@ export async function sweepPendingResults(opts: { now?: Date; limit?: number } =
   }
   const stale = new Date(now.getTime() - REDELIVER_AFTER_MS);
   const undelivered = (await db.execute(sql`SELECT ${COLS} FROM lesson_result_pending WHERE sent_at IS NOT NULL AND delivered_at IS NULL
-    AND sent_at <= ${stale} ORDER BY sent_at LIMIT ${limit}`)).rows as Row[];
+    AND sent_at <= ${stale} ORDER BY random() LIMIT ${limit}`)).rows as Row[];
+  // Review #589: véletlen sorrend — a tartósan kézbesíthetetlen (pl. hibás lecke-JSON) sorok nem foglalhatják el minden órában
+  // ugyanazt a keretet, a mögöttük várók is sorra kerülnek.
   const seenPairs = new Set<string>();
   for (const row of undelivered) {
     try {
       if (row.sent_reason === "pair" && row.pair_key) {
-        if (seenPairs.has(row.pair_key)) continue;
-        seenPairs.add(row.pair_key);
-        const pair = (await db.execute(sql`SELECT ${COLS} FROM lesson_result_pending WHERE pair_key = ${row.pair_key}`)).rows as Row[];
+        const pk = `${row.lesson_id}|${row.pair_key}`; // review #589: (lecke, kulcs) szerint
+        if (seenPairs.has(pk)) continue;
+        seenPairs.add(pk);
+        const pair = (await db.execute(sql`SELECT ${COLS} FROM lesson_result_pending WHERE lesson_id = ${row.lesson_id} AND pair_key = ${row.pair_key}`)).rows as Row[];
         const t = pair.find(r => r.kind === "tasks"); const q = pair.find(r => r.kind === "quiz");
         if (!t?.graded || !q?.graded || !t.learner || !q.learner) continue;
         const parts: PairedParts = { tasks: t.graded as GradedTasks, quiz: q.graded as GradedQuiz, tasksRound: t.round_id, quizRound: q.round_id,

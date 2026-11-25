@@ -26,8 +26,8 @@ export const isTwoPartExperience = (experience: { tasks: readonly unknown[]; qui
 export const PAIR_WINDOW_DAYS = 7;
 
 /** A pár kulcsa a tulajdonossal együtt (review #586: két tanuló azonos kör-azonosítói sem ütközhetnek a levélnaplóban). */
-export const pairKeyOf = (ownerKey: string, tasksRound: string, quizRound: string) =>
-  createHash("sha256").update(["combined", ownerKey, tasksRound, quizRound].join("|")).digest("hex");
+export const pairKeyOf = (lessonId: string, ownerKey: string, tasksRound: string, quizRound: string) =>
+  createHash("sha256").update(["combined", lessonId, ownerKey, tasksRound, quizRound].join("|")).digest("hex");
 
 export type PendingLearner = { learner: string; learnerFirst?: string; learnerId?: string; guest: boolean };
 export type PairedParts = { tasks: GradedTasks; quiz: GradedQuiz; tasksRound: string; quizRound: string; pairKey: string;
@@ -60,7 +60,7 @@ export async function pairOrPark(input: { lessonId: string; ownerKey: string; ki
     if (used.length) {
       const key = used[0].pair_key;
       const pair = key ? (await tx.execute(sql`SELECT id, kind, round_id, graded, learner, pair_key, delivered_at FROM lesson_result_pending
-        WHERE pair_key = ${key}`)).rows as Row[] : [];
+        WHERE lesson_id = ${lessonId} AND pair_key = ${key}`)).rows as Row[] : [];
       const undelivered = pair.length === 2 && pair.every(r => r.delivered_at === null);
       return { type: "alreadySent", redeliver: undelivered ? partsOf(pair) : null } as const;
     }
@@ -84,7 +84,7 @@ export async function pairOrPark(input: { lessonId: string; ownerKey: string; ki
     const [m] = mate;
     const tasksRound = kind === "tasks" ? roundId : m.round_id;
     const quizRound = kind === "quiz" ? roundId : m.round_id;
-    const pairKey = pairKeyOf(ownerKey, tasksRound, quizRound);
+    const pairKey = pairKeyOf(lessonId, ownerKey, tasksRound, quizRound);
     await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'pair', pair_key = ${pairKey} WHERE id = ${m.id}`);
     await tx.execute(sql`INSERT INTO lesson_result_pending (lesson_id, owner_key, kind, round_id, graded, learner, sent_at, sent_reason, pair_key)
       VALUES (${lessonId}, ${ownerKey}, ${kind}, ${roundId}, ${graded}::jsonb, ${learner}::jsonb, now(), 'pair', ${pairKey})`);
@@ -96,14 +96,9 @@ export async function pairOrPark(input: { lessonId: string; ownerKey: string; ki
 }
 
 /** A sikeres kézbesítés tartós nyoma (review #586): csak ezután számít a pár lezártnak. */
-export async function markPairDelivered(pairKey: string): Promise<void> {
-  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE pair_key = ${pairKey} AND delivered_at IS NULL`);
-}
-
-/** Egy kiürített (régi úton küldött) rész sikeres kézbesítésének nyoma (review #586). */
-export async function markPartDelivered(lessonId: string, ownerKey: string, roundId: string, kind: "tasks" | "quiz"): Promise<void> {
-  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey}
-    AND kind = ${kind} AND round_id = ${roundId} AND sent_reason = 'timeout' AND delivered_at IS NULL`);
+export async function markPairDelivered(lessonId: string, pairKey: string): Promise<void> {
+  // Review #589: (lecke, kulcs) szerint határolva — más lecke azonos kulcsú párja nem jelölődhet.
+  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE lesson_id = ${lessonId} AND pair_key = ${pairKey} AND delivered_at IS NULL`);
 }
 
 /**
@@ -111,15 +106,18 @@ export async function markPartDelivered(lessonId: string, ownerKey: string, roun
  * maradhatnak bent (egy későbbi BE állás alatt elavult párt képeznének): a régi út egyrészes levélként küldi őket. A hívó küld; ez
  * a függvény csak kiveszi és `timeout` jelöléssel lezárja őket.
  */
-export async function takeParkedForLegacy(lessonId: string, ownerKey: string): Promise<Array<{ graded: GradedTasks | GradedQuiz; learner: PendingLearner; roundId: string }>> {
+export type StoredPart = { id: string; owner_key: string; kind: "tasks" | "quiz"; round_id: string; graded: GradedTasks | GradedQuiz | null;
+  learner: PendingLearner | null; pair_key: string | null };
+
+export async function takeParkedForLegacy(lessonId: string, ownerKey: string): Promise<StoredPart[]> {
   return db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`${lessonId}|${ownerKey}`}))`);
-    // Review #586: a delivered_at itt NEM íródik — csak a sikeres régi úti küldés után (markPartDelivered); a kézbesítetlen
+    // Review #586: a delivered_at itt NEM íródik — csak a sikeres régi úti küldés után (deliverStoredPart); a kézbesítetlen
     // `timeout` sort a söprő (U4c) pótolja.
     // U4c: a régi út körkulcsa (= roundKeyOf(tulajdonos, rész, kör)) a pair_key-ben — a söprő ebből tudja, hogy a pótlás a régi levélforma.
     const rows = (await tx.execute(sql`UPDATE lesson_result_pending SET sent_at = now(), sent_reason = 'timeout',
       pair_key = encode(sha256(convert_to(owner_key || '|' || kind || '|' || round_id, 'UTF8')), 'hex')
-      WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey} AND sent_at IS NULL RETURNING round_id, graded, learner`)).rows as Array<{ round_id: string; graded: GradedTasks | GradedQuiz; learner: PendingLearner }>;
-    return rows.map(r => ({ graded: r.graded, learner: r.learner, roundId: r.round_id }));
+      WHERE lesson_id = ${lessonId} AND owner_key = ${ownerKey} AND sent_at IS NULL RETURNING id, owner_key, kind, round_id, graded, learner, pair_key`)).rows as StoredPart[];
+    return rows;
   });
 }

@@ -290,3 +290,32 @@ test("S6: két egyidejű söprés ugyanarra a lejárt részre pontosan egy level
   assert.equal(sent.length, 2, "egy levél (két admin)");
   assert.match(sent[0].subject, /Feladatok \(részleges: a kvíz hiányzik\)/);
 });
+
+// Review #589 — a kézbesítési zár és a régi (U4b) sorok.
+test("T1: a pair_key nélkül lezárt (U4b-kori) kézbesítetlen timeout sor a régi körkulccsal és levélformával pótlódik", async () => {
+  const { sweepPendingResults } = await sweeper();
+  await post("comb-two", quizBody("fp-t1", "t1-q"));
+  await dbPool.query(`UPDATE lesson_result_pending SET sent_at = now() - interval '20 minutes', sent_reason = 'timeout', pair_key = NULL WHERE owner_key = 'guest:fp-t1'`);
+  await sweepPendingResults({ now: new Date() });
+  await settle(2);
+  assert.equal(sent.length, 2);
+  assert.match(sent[0].subject, / — Kvíz — /);
+  assert.deepEqual((await rowsOf("guest:fp-t1")).map(r => r.d), [true]);
+});
+
+test("T2: két egyidejű pótlásból a második nem jelölheti kézbesítettnek a folyamatban lévő (később meghiúsuló) küldést", async () => {
+  const { sweepPendingResults } = await sweeper();
+  // Kézbesítetlen timeout sor új körrel (tartalommal), 20 perce elküldve; a küldő lassan, hibával válaszol.
+  await post("comb-two", quizBody("fp-t2b", "t2b-q"));
+  await dbPool.query(`UPDATE lesson_result_pending SET created_at = now() - interval '8 days' WHERE owner_key = 'guest:fp-t2b'`);
+  setResultSender(async () => { await new Promise(r => setTimeout(r, 400)); throw new Error("lassú hiba"); });
+  try {
+    await sweepPendingResults({ now: new Date() }); // lejárt → timeout, a küldés meghiúsul
+    await dbPool.query(`UPDATE lesson_result_pending SET sent_at = now() - interval '20 minutes' WHERE owner_key = 'guest:fp-t2b'`);
+    await Promise.all([sweepPendingResults({ now: new Date() }), sweepPendingResults({ now: new Date() })]);
+  } finally {
+    setResultSender(async (subject, html, to) => { if (failing) throw new Error("átmeneti hiba"); sent.push({ subject, html, to }); });
+  }
+  const rows = await rowsOf("guest:fp-t2b");
+  assert.deepEqual(rows.map(r => [r.d, r.scrubbed]), [[false, false]], "kézbesítetlen marad, a tartalma megvan (pótolható)");
+});

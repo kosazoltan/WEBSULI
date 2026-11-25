@@ -16,7 +16,7 @@ import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
 import { recordLearnerActivity, resolveLearner } from "./learners";
 import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-results";
-import { isTwoPartExperience, markPairDelivered, markPartDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner } from "./lesson-result-combine";
+import { isTwoPartExperience, markPairDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner, type StoredPart } from "./lesson-result-combine";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -494,14 +494,8 @@ lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, as
   }
   if (!combinedOn && isTwoPartExperience(experience)) {
     // Review #586 (kapcsoló-időszakok): KI állásban a korábban (BE alatt) félretett részek a régi úton, egyrészes levélként mennek.
-    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(async p => {
-      const report = { failed: 0 };
-      const r = await sendLessonResult({ lessonId: lessonIdF,
-        roundKey: roundKeyOf(who, p.graded.kind, p.roundId), learner: p.learner.learner, ...(p.learner.learnerFirst ? { learnerFirst: p.learner.learnerFirst } : {}),
-        ...(p.learner.learnerId ? { learnerId: p.learner.learnerId } : {}), guest: p.learner.guest, graded: p.graded }, true, report);
-      // Review #586: a kézbesítés nyoma csak sikeres küldés után — a kézbesítetlen sort a söprő (U4c) pótolja.
-      if (report.failed === 0 && (r.sent > 0 || r.duplicate)) await markPartDelivered(lessonIdF, who, p.roundId, p.graded.kind);
-    })))
+    // Review #586/#589: a kézbesítés nyoma csak sikeres küldés után, a kézbesítési zár alatt — a kézbesítetlen sort a söprő (U4c) pótolja.
+    void takeParkedForLegacy(lessonIdF, who).then(parts => Promise.all(parts.map(p => deliverStoredPart(lessonIdF, p))))
       .catch(error => logger.error("[LESSON-RESULT] félretett részek kiürítése hiba:", error));
   }
   // Nem várjuk meg: a tanuló felülete nem függ a levéltől.
@@ -581,11 +575,15 @@ async function pairWithRetry(input: Parameters<typeof pairOrPark>[0]): Promise<A
 export async function deliverCombined(lessonId: string, pair: PairedParts, firstTime: boolean) {
   // A levél neve: a kilétet hordozó rész (a fiókos / párosított adat elsőbbséget kap a vendéggel szemben).
   const who = pair.tasksLearner.learnerId || !pair.tasksLearner.guest ? pair.tasksLearner : pair.quizLearner;
-  const report = { failed: 0 };
-  const result = await sendLessonResult({ lessonId, roundKey: pair.pairKey, learner: who.learner,
-    ...(who.learnerFirst ? { learnerFirst: who.learnerFirst } : {}), ...(pair.tasksLearner.learnerId ? { learnerId: pair.tasksLearner.learnerId } : {}),
-    guest: who.guest, graded: pair.tasks, combined: { tasks: pair.tasks, quiz: pair.quiz } }, true, report);
-  if (report.failed === 0 && (result.sent > 0 || result.duplicate)) await markPairDelivered(pair.pairKey);
+  await withDeliveryLock(`${lessonId}|${pair.pairKey}`, async () => {
+    const report = { failed: 0 };
+    // Review #589: retry nélkül — a tartós pótlás a söprőé (a háttér-újrapróba a záron kívül futna, és a „duplikátum” ne jelenthessen
+    // folyamatban lévő küldést).
+    const result = await sendLessonResult({ lessonId, roundKey: pair.pairKey, learner: who.learner,
+      ...(who.learnerFirst ? { learnerFirst: who.learnerFirst } : {}), ...(pair.tasksLearner.learnerId ? { learnerId: pair.tasksLearner.learnerId } : {}),
+      guest: who.guest, graded: pair.tasks, combined: { tasks: pair.tasks, quiz: pair.quiz } }, false, report);
+    if (report.failed === 0 && (result.sent > 0 || result.duplicate)) await markPairDelivered(lessonId, pair.pairKey);
+  });
   // Review #586: a kvízrész is a tanulói naplóba (a jelzősor a feladatrészé, az a sendLessonResult-ban naplózódik) — egyszer, a párosításkor.
   if (firstTime && pair.quizLearner.learnerId) await recordQuizActivity(lessonId, pair.quizLearner.learnerId, pair.quiz.summary.percent);
 }
@@ -594,17 +592,37 @@ export async function deliverCombined(lessonId: string, pair: PairedParts, first
  * U4c: egy tárolt `timeout` sor (kézbesítése). Ha a sor kulcsa a régi út körkulcsa (KI állású kiürítés, `takeParkedForLegacy`), a régi
  * egyrészes levél megy; különben (söprő: 7 nap pár nélkül) a jelölt részleges összevont levél. A kézbesítés nyoma csak siker után.
  */
-export async function deliverStoredPart(lessonId: string, row: { id: string; owner_key: string; kind: "tasks" | "quiz"; round_id: string;
-  graded: GradedTasks | GradedQuiz | null; learner: PendingLearner | null; pair_key: string | null }): Promise<boolean> {
-  if (!row.graded || !row.learner || !row.pair_key) return false;
-  const legacy = row.pair_key === roundKeyOf(row.owner_key, row.kind, row.round_id);
-  const report = { failed: 0 };
-  const r = await sendLessonResult({ lessonId, roundKey: row.pair_key, learner: row.learner.learner, ...(row.learner.learnerFirst ? { learnerFirst: row.learner.learnerFirst } : {}),
-    ...(row.learner.learnerId ? { learnerId: row.learner.learnerId } : {}), guest: row.learner.guest, graded: row.graded,
-    ...(legacy ? {} : { combined: row.graded.kind === "tasks" ? { tasks: row.graded as GradedTasks, quiz: null } : { tasks: null, quiz: row.graded as GradedQuiz } }) }, false, report);
-  if (report.failed !== 0 || !(r.sent > 0 || r.duplicate)) return false;
-  await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE id = ${row.id} AND delivered_at IS NULL`);
-  return true;
+export async function deliverStoredPart(lessonId: string, row: StoredPart): Promise<boolean> {
+  if (!row.graded || !row.learner) return false;
+  // Review #589: a korábbi (U4b) változat a kiürített részt pair_key nélkül zárta le — ilyenkor a régi út körkulcsa a tartalék.
+  const legacyKey = roundKeyOf(row.owner_key, row.kind, row.round_id);
+  const key = row.pair_key ?? legacyKey;
+  const legacy = key === legacyKey;
+  const graded = row.graded; const learner = row.learner;
+  const done = await withDeliveryLock(`${lessonId}|${key}`, async () => {
+    const report = { failed: 0 };
+    const r = await sendLessonResult({ lessonId, roundKey: key, learner: learner.learner, ...(learner.learnerFirst ? { learnerFirst: learner.learnerFirst } : {}),
+      ...(learner.learnerId ? { learnerId: learner.learnerId } : {}), guest: learner.guest, graded,
+      ...(legacy ? {} : { combined: graded.kind === "tasks" ? { tasks: graded as GradedTasks, quiz: null } : { tasks: null, quiz: graded as GradedQuiz } }) }, false, report);
+    if (report.failed !== 0 || !(r.sent > 0 || r.duplicate)) return false;
+    await db.execute(sql`UPDATE lesson_result_pending SET delivered_at = now() WHERE id = ${row.id} AND delivered_at IS NULL`);
+    return true;
+  });
+  return done === true;
+}
+
+/**
+ * Review #589: egy kulcs kézbesítése egyszerre csak egy helyen fut (tranzakciós `pg_try_advisory_xact_lock`, a küldés idejére
+ * tartva). Így a „duplikátum” eredmény a záron belül mindig KORÁBBI, lezárt küldést jelent (a sikertelen foglalás felszabadul),
+ * folyamatban lévőt nem — a kézbesítettnek jelölés és a tartalom-törlés nem előzheti meg a valódi sikert. Foglalt zár → kihagyás
+ * (`null`); a másik fél kézbesít / jelöl, vagy a söprő később pótol.
+ */
+async function withDeliveryLock<T>(key: string, fn: () => Promise<T>): Promise<T | null> {
+  return db.transaction(async (tx) => {
+    const [got] = (await tx.execute(sql`SELECT pg_try_advisory_xact_lock(hashtext(${`deliver|${key}`})) AS ok`)).rows as Array<{ ok: boolean }>;
+    if (!got?.ok) return null;
+    return fn();
+  });
 }
 
 async function recordQuizActivity(lessonId: string, learnerId: string, percent: number) {
