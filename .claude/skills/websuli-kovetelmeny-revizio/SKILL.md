@@ -39,8 +39,11 @@ Adatbázis: `%LOCALAPPDATA%\hermes\projekt-tudas\websuli\kovetelmenyek.db` (rep�
 6. **Felülírások**: mindig a lánc legújabb eleme számít. Ha a régi megoldás még él, és az új nincs átvezetve → lelet
    (`felulirt_de_nem_atvezetve`). A régi, felülírt utasítást visszaállítani TILOS.
 7. **Cél és terv**: `revizio.py lelet-lista` (súlyosság szerint) → cél + szeletlista a repó rendjében: spec → végrehajtási utasítás →
-   bukó teszt → kód → kapulánc → PR (`.hermes/skills/websuli-szeletmenet/SKILL.md`). Minden szelet SQL-feladat is
-   (`feladat.mjs add --source "kovetelmeny:<code>"`); tulajdonosi döntést igénylő tételek (élesítés, fizetős futás) egy űrlapba.
+   bukó teszt → kód → kapulánc → PR (`.hermes/skills/websuli-szeletmenet/SKILL.md`). Minden lelet / szelet feladat a repó SQL
+   feladat-nyilvántartásában (`websuli-feladat-nyilvantartas` skill): a gyűjtés után a `python -B scripts/kovetelmeny/feladat.py
+   szinkron` a nyitott követelményekből maga képez feladatot; a lelet-szeletet `feladat.py uj <KÓD> … --kovetelmeny <code>` + `terv`
+   (egységek, mérhető feltételek) + `kapcsol <KÓD> finding <lelet-id>` rögzíti, a haladást a commitok `Állapot:` sora vezeti
+   (gépszintű lista mellette: `feladat.mjs add --source "kovetelmeny:<code>"`); tulajdonosi döntést igénylő tételek egy űrlapba.
 8. **Jelentés**: státuszeloszlás, nyitott leletek típusonként, a 10–15 legfontosabb nem kész tétel bizonyítékkal, felülírási láncok,
    nem elérhető források.
 
