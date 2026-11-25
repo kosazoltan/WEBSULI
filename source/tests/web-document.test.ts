@@ -68,17 +68,17 @@ const mht = (html: string, img?: Buffer) => Buffer.from([
 ].join("\r\n"), "utf8");
 
 test("A1: formátum a bájtokból — a fejléc / kiterjesztés nem dönt", async () => {
-  assert.equal(sniffWebFormat(pdf(["x"]), "text/html"), "pdf");
-  assert.equal(sniffWebFormat(await docx(["a"]), "application/octet-stream"), "docx");
-  assert.equal(sniffWebFormat(await pptx([["a"]]), ""), "pptx");
-  assert.equal(sniffWebFormat(await odf("application/vnd.oasis.opendocument.presentation", ["a"]), ""), "odp");
-  assert.equal(sniffWebFormat(await odf("application/vnd.oasis.opendocument.text", ["a"]), ""), "odt");
-  assert.equal(sniffWebFormat(ppt(["a"], []), "application/vnd.ms-powerpoint"), "ppt");
-  assert.equal(sniffWebFormat(mht("<p>a</p>"), "message/rfc822"), "mht");
-  assert.equal(sniffWebFormat(PNG, "application/pdf"), "image");
-  assert.equal(sniffWebFormat(Buffer.from("<html><p>x</p></html>"), "text/html"), "html");
-  assert.equal(sniffWebFormat(Buffer.from("sima szöveg"), "text/plain"), "text");
-  assert.equal(sniffWebFormat(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7]), "application/octet-stream"), null);
+  assert.equal(await sniffWebFormat(pdf(["x"]), "text/html"), "pdf");
+  assert.equal(await sniffWebFormat(await docx(["a"]), "application/octet-stream"), "docx");
+  assert.equal(await sniffWebFormat(await pptx([["a"]]), ""), "pptx");
+  assert.equal(await sniffWebFormat(await odf("application/vnd.oasis.opendocument.presentation", ["a"]), ""), "odp");
+  assert.equal(await sniffWebFormat(await odf("application/vnd.oasis.opendocument.text", ["a"]), ""), "odt");
+  assert.equal(await sniffWebFormat(ppt(["a"], []), "application/vnd.ms-powerpoint"), "ppt");
+  assert.equal(await sniffWebFormat(mht("<p>a</p>"), "message/rfc822"), "mht");
+  assert.equal(await sniffWebFormat(PNG, "application/pdf"), "image");
+  assert.equal(await sniffWebFormat(Buffer.from("<html><p>x</p></html>"), "text/html"), "html");
+  assert.equal(await sniffWebFormat(Buffer.from("sima szöveg"), "text/plain"), "text");
+  assert.equal(await sniffWebFormat(Buffer.from([0, 1, 2, 3, 4, 5, 6, 7]), "application/octet-stream"), null);
 });
 
 test("A1: PDF szövegréteg oldalszámmal; DOCX; PPTX diánként jegyzettel; ODP / ODT; régi PPT szövegrekordok; MHT", async () => {
