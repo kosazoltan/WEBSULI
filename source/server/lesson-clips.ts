@@ -426,12 +426,13 @@ export async function stopLessonClipWorker(waitMs = 30_000): Promise<void> {
   clearTimeout(timer);
 }
 /** Indítás (csak élesben hívja a szerver). Gyártás csak `auto` módban; különben nem indul időzítő. */
-export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void }, env: Record<string, string | undefined> = process.env): ClipMode {
+export function startLessonClipWorker(store: ClipStore, makeDeps: () => { deps: ClipDeps; model: string; maintenance?: () => void; rss?: () => number }, env: Record<string, string | undefined> = process.env): ClipMode {
   const mode = clipsMode(env);
   if (mode !== "auto" || started) return mode;
   started = true;
-  const { deps, model, maintenance } = makeDeps();
-  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: () => process.memoryUsage().rss, shouldStop: () => stopping };
+  const { deps, model, maintenance, rss } = makeDeps();
+  // FLAKE-KISFILM-RSS: a memóriamérés befecskendezhető (teszt); élesben a folyamat valódi RSS-e.
+  const opts = { dailyLimit: clipDailyLimit(env), mediaBudgetBytes: clipMediaBudgetBytes(env), model, rss: rss ?? (() => process.memoryUsage().rss), shouldStop: () => stopping };
   let running = false;
   const run = async () => {
     if (running || stopping) return;
