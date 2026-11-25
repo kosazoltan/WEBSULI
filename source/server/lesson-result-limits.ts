@@ -26,6 +26,18 @@ export function resetPartialLimiter(): void { void partialLimiterStore.resetAll(
 export const partialLimiter = rateLimit({ store: partialLimiterStore, keyGenerator: clientIpKeyGenerator, windowMs: RESULT_RATE_LIMIT.windowMs, limit: RESULT_RATE_LIMIT.partial, standardHeaders: true, legacyHeaders: false, message,
   skip: req => !isPartialRequest(req) });
 
+/**
+ * U4d (review #591): a várakozó-rész lekérdezés (`/results/status`) SAJÁT kerete — a kliens betöltéskor, fókuszkor és beküldés után kérdez,
+ * így egy osztály közös IP-je mögött a beküldésnél jóval több kérés jön; ezek nem fogyaszthatják a végleges / pillanatkép-keretet és a
+ * közös írási keretet sem (600 / 15 perc / IP ≈ 30 tanuló × 20 lekérdezés).
+ */
+export const RESULT_STATUS_RATE_LIMIT = 600;
+const statusLimiterStore = new MemoryStore();
+export function resetStatusLimiter(): void { void statusLimiterStore.resetAll(); }
+export const statusLimiter = rateLimit({ store: statusLimiterStore, keyGenerator: clientIpKeyGenerator, windowMs: RESULT_RATE_LIMIT.windowMs, limit: RESULT_STATUS_RATE_LIMIT, standardHeaders: true, legacyHeaders: false, message: { message: "Túl sok lekérdezés." } });
+const RESULT_STATUS_PATH = /^\/[A-Za-z0-9_-]{1,64}\/results\/status$/;
+export const isResultStatus = (req: Request) => req.method === "POST" && RESULT_STATUS_PATH.test(req.path);
+
 /** R46: a lecke eredmény-POST útvonala a `/api/lessons` csatolási ponthoz képest (a router: `/:lessonId/results`). */
 const RESULT_POST_PATH = /^\/[A-Za-z0-9_-]{1,64}\/results$/;
 export const isResultPost = (req: Request) => req.method === "POST" && RESULT_POST_PATH.test(req.path);
@@ -40,6 +52,8 @@ export function lessonsWriteGate(limiter: RequestHandler): RequestHandler {
     // R46 (#510, 8. vak kör L5): a pontos eredmény-POST saját, egymástól független kerete (60 + 60 / 15 perc / IP, R9) érvényes — a közös
     // 100-as keret különben a 41. végleges beküldést elutasítaná. A CSRF-őr ettől változatlan.
     if (isResultPost(req)) return next();
+    // U4d (review #591): a várakozó-rész lekérdezésnek saját kerete van (`statusLimiter`).
+    if (isResultStatus(req)) return next();
     return limiter(req, res, next);
   };
 }

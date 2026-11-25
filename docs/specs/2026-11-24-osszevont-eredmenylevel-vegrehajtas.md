@@ -38,4 +38,16 @@ Terv: `docs/specs/2026-11-24-osszevont-eredmenylevel.md`. Szeletek, mindegyik k�
 4. **U4d — kliens.** (A bejelentkezett tanuló gyakorlókör-válaszában is érkezik `awaiting`.)
    - Az `awaiting` válasz és a lecke állapota alapján figyelmeztetés a lecke végén és tetején.
    - Teszt: e2e E7.
+   - Részletek (U4d):
+     - Szerver: a `sendPracticeResult` a párosítás eredményét (`awaiting`) azonnal adja, a levél a háttérben megy; az `answerPractice` /
+       `finishPractice` a kör lezárásakor legfeljebb 3 s-ig vár rá, és a válasz nézetébe `resultAwaiting` kerül (időtúllépés / hiba → nincs mező).
+     - Kliens (review #591 után): az állapot forrása a SZERVER — `POST /api/lessons/:id/results/status` (`{fingerprint?, learner?}`, a
+       beküldéssel azonos tulajdonoskulcs; kapcsoló KI / kilét nélkül / 7 napnál régebbi rész → `null`). A `useResultAwaiting` betöltéskor,
+       fókuszkor / láthatóváváláskor és minden beküldés (gyakorlókör-lezárás) után kérdez; a lekérdezések sorszámozottak, csak a legutolsó
+       válasza érvényes. Nincs helyi tár (más kilét, újratöltés, lejárat, több lap mind a szerverállapotból következik). A gyakorlókör csak
+       BE kapcsolónál vár (≤3 s) a párosításra.
+     - UI: `ResultAwaitingNotice` (`data-testid="result-awaiting"`) a lecke tetején (eszközsor alatt) és a kész rész eredménye alatt, gombbal
+       a hiányzó részhez; a hiányzó rész beküldése után eltűnik.
+     - Tesztek: egység (sorszámozás, időkorlát); DB: E9b (gyakorlókör nézete `resultAwaiting: "tasks"`), S7 (status: kilét, KI kapcsoló,
+       lejárat, pár után null); e2e E7 (megjelenik / a másik rész után eltűnik), E7b (újratöltés után a szerverállapotból ismét látszik).
 5. **U4e — élesítés.** A `RESULT_COMBINED_EMAIL` alapértéke élesben (`NODE_ENV=production`) BE lesz, csak az U4b–U4d beolvadása után. Teszt: a kapcsolóteszt a V0 mintájára.

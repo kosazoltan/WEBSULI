@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { Router, type NextFunction, type Request, type Response } from "express";
+import { z } from "zod";
 import { clientIpKey } from "./lib/client-ip";
-import { partialLimiter, resultLimiter } from "./lesson-result-limits";
+import { partialLimiter, resultLimiter, statusLimiter } from "./lesson-result-limits";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "./db";
 import { arbiterVerdicts, lessonResultEmails, lessons, users } from "../shared/schema";
@@ -16,7 +17,7 @@ import type { AttemptAnswer, AttemptQuestion } from "../shared/lesson-attempt";
 import { logger } from "./lib/logger";
 import { recordLearnerActivity, resolveLearner } from "./learners";
 import { contributorKey, maybeRelaxTightening, recordTaskResults } from "./task-results";
-import { isTwoPartExperience, markPairDelivered, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner, type StoredPart } from "./lesson-result-combine";
+import { isTwoPartExperience, markPairDelivered, PAIR_WINDOW_DAYS, pairOrPark, resultCombinedEmailEnabled, takeParkedForLegacy, type PairedParts, type PendingLearner, type StoredPart } from "./lesson-result-combine";
 
 /**
  * Tanulói eredmény e-mailben az adminoknak (docs/specs/2026-10-17-eredmeny-email.md) — „motorháztető alatt”: a tanuló felülete
@@ -343,6 +344,30 @@ async function learnerName(userId: string | undefined): Promise<string> {
 // Eredmény-e-mail B2 (#510 R9): a két eredménykeret (végleges / pillanatkép, 60 + 60 / 15 perc / IP) a `lesson-result-limits.ts`-ben.
 /** POST /api/lessons/:lessonId/results — a feladatok / a helyi kvíz befejezésekor (vendég is). Mindig 202, ha a kérés érvényes. */
 export const lessonResultsRouter = Router();
+
+const awaitingStatusSchema = z.object({ fingerprint: z.string().max(80).optional(), learner: z.string().max(120).optional() }).strict();
+
+/**
+ * U4d (review #591): POST /api/lessons/:lessonId/results/status — az összevont levél várakozó része a SZERVER állapotából, a beküldéssel
+ * azonos tulajdonoskulccsal (fiók / párosított tanuló / ujjlenyomatos vendég). Kapcsoló KI, kétértelmű vendég vagy 7 napnál régebbi
+ * nyitott rész → `null`. A kliens ezt kérdezi betöltéskor, fókuszkor és minden beküldés után (nincs helyi, kilét nélküli tár).
+ */
+lessonResultsRouter.post("/:lessonId/results/status", statusLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = awaitingStatusSchema.safeParse(req.body ?? {});
+    if (!parsed.success || !/^[A-Za-z0-9_-]{1,64}$/.test(req.params.lessonId)) return res.status(400).json({ message: "Érvénytelen kérés." });
+    if (!resultCombinedEmailEnabled()) return res.json({ awaiting: null });
+    const userId = (req.user as { id?: string } | undefined)?.id;
+    let paired: Awaited<ReturnType<typeof resolveLearner>> = null;
+    if (!userId && parsed.data.learner) { try { paired = await resolveLearner(parsed.data.learner); } catch { paired = null; } }
+    const owner = userId ?? (paired ? `learner:${paired.id}` : parsed.data.fingerprint ? `guest:${parsed.data.fingerprint}` : null);
+    if (!owner) return res.json({ awaiting: null });
+    const rows = (await db.execute(sql`SELECT kind FROM lesson_result_pending WHERE lesson_id = ${req.params.lessonId} AND owner_key = ${owner}
+      AND sent_at IS NULL AND created_at > now() - make_interval(days => ${PAIR_WINDOW_DAYS})`)).rows as Array<{ kind: "tasks" | "quiz" }>;
+    const held = rows.length === 1 ? rows[0].kind : null;
+    return res.json({ awaiting: held === "tasks" ? "quiz" : held === "quiz" ? "tasks" : null });
+  } catch (error) { next(error); }
+});
 lessonResultsRouter.post("/:lessonId/results", resultLimiter, partialLimiter, async (req: Request, res: Response, next: NextFunction) => {
   // Review #280: az Express 4 nem továbbítja az async hibát — a handler maga adja át (next).
   try {
@@ -544,8 +569,9 @@ export async function sendPracticeResult(input: { userId: string; attemptId: str
       // Review #586: az átmeneti DB-hiba nem veszítheti el a kész gyakorlókört — korlátos újrapróba (a hívó csak naplóz).
       const outcome = await pairWithRetry({ lessonId: input.lessonId, ownerKey: input.userId, kind: "quiz", roundId: input.attemptId, graded, learner: { learner, guest: false } });
       if (outcome.type === "parked") return { awaiting: outcome.awaiting };
-      if (outcome.type === "paired") await deliverCombined(input.lessonId, outcome, true);
-      if (outcome.type === "alreadySent" && outcome.redeliver) await deliverCombined(input.lessonId, outcome.redeliver, false);
+      // U4d: a párosítás eredménye azonnal megy vissza (a gyakorlókör válasza erre vár), a levél a háttérben — a tartós pótlás a söprőé.
+      if (outcome.type === "paired") void deliverCombined(input.lessonId, outcome, true).catch(error => logger.error("[LESSON-RESULT] összevont háttérküldés hiba:", error));
+      if (outcome.type === "alreadySent" && outcome.redeliver) void deliverCombined(input.lessonId, outcome.redeliver, false).catch(error => logger.error("[LESSON-RESULT] összevont újrakézbesítés hiba:", error));
       return { awaiting: null };
     }
   }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { noteResultResponse } from "./resultAwaiting";
 import { apiRequest } from "@/lib/queryClient";
 import { getFingerprint } from "@/lib/fingerprintCache";
 import { getLearnerToken } from "@/lib/learnerProfile";
@@ -98,7 +99,9 @@ export function useResultReport(lessonId: string | undefined, kind: "tasks" | "q
           const attempt = (pageAttempts.get(flag) ?? 0) + 1;
           pageAttempts.set(flag, attempt);
           try {
-            await apiRequest("POST", `/api/lessons/${lessonId}/results`, (ctx: { ownerBinding: boolean }) => bodyFor(learnerNow(ctx)), { resultTimes: times, retries: 0, keepalive: kind === "quiz" });
+            const response = await apiRequest("POST", `/api/lessons/${lessonId}/results`, (ctx: { ownerBinding: boolean }) => bodyFor(learnerNow(ctx)), { resultTimes: times, retries: 0, keepalive: kind === "quiz" });
+            // U4d: az összevont levél várakozó része (`awaiting`) a figyelmeztetéshez; anélküli válasz törli.
+            noteResultResponse(lessonId, response);
             break;
           } catch (error) {
             if (attempt >= RESULT_REPORT_ATTEMPTS || !isRetryableRequestError(error)) throw error;
