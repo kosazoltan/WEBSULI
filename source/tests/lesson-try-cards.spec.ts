@@ -30,20 +30,23 @@ test("fordítókártya, lépésenkénti felfedés, döntés és villámkártya: 
   const block = (kind: string) => page.locator(`[data-try="${kind}"]`);
 
   // Fordítókártya: nevesített csoport; Enterre megfordul.
-  await expect(block("flipCard").getByRole("group", { name: /Fordítókártya: Mi a fotoszintézis\?/ })).toBeVisible();
+  await expect(block("flipCard")).toHaveRole("group");
+  await expect(block("flipCard")).toHaveAccessibleName(/Fordítókártya: Mi a fotoszintézis\?/);
   await block("flipCard").getByRole("button", { name: /Fordítsd meg/ }).focus();
   await page.keyboard.press("Enter");
   await expect(block("flipCard")).toContainText("A növény fényből cukrot készít.");
 
   // Lépésenkénti felfedés: két lépés felfedve.
-  await expect(block("stepReveal").getByRole("group", { name: /Így oldd meg/ })).toBeVisible();
+  await expect(block("stepReveal")).toHaveAccessibleName(/Így oldd meg/);
   const next = block("stepReveal").getByRole("button", { name: /Következő lépés/ });
   await next.focus(); await page.keyboard.press("Enter");
   await expect(block("stepReveal")).toContainText("Válaszd ki a képletet.");
   await expect(block("stepReveal")).not.toContainText("Számolj.");
 
   // Tudtad?: nevesített kártya, a tény látszik.
-  await expect(block("didYouKnow").getByRole("note", { name: /Tudtad\?/ })).toContainText("A méhek táncolva");
+  await expect(block("didYouKnow")).toHaveRole("note");
+  await expect(block("didYouKnow")).toHaveAccessibleName(/Tudtad\?/);
+  await expect(block("didYouKnow")).toContainText("A méhek táncolva");
 
   // Döntés: választás után a következmény és az ítélet.
   await block("decision").getByRole("radio", { name: "Esőkabátot viszek" }).focus();

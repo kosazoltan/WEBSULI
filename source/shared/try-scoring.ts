@@ -12,6 +12,9 @@
  */
 export const V2_TRY_KINDS = ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"] as const;
 export type V2TryKind = (typeof V2_TRY_KINDS)[number];
+/** V3a: kártyaformák és döntés–következmény (a `try` keretben; pontozás csak a döntésnél: legjobb = 1, más = 0). */
+export const V3_TRY_KINDS = ["flipCard", "stepReveal", "didYouKnow", "decision", "flashcards"] as const;
+export type V3TryKind = (typeof V3_TRY_KINDS)[number];
 
 export type Verdict = "teljes" | "részleges" | "rossz";
 export type TryScore = { points: number; max: number; verdict: Verdict };
@@ -105,6 +108,30 @@ export function scoreEstimate(spec: unknown, value: number | null | undefined): 
   return score(rel <= 0.05 + 1e-9 ? 2 : rel <= 0.15 + 1e-9 ? 1 : 0, 2);
 }
 
+export type FlipCardSpec = { front: string; back: string };
+export const readFlipCard = (spec: unknown): FlipCardSpec => { const s = (spec ?? {}) as Record<string, unknown>; return { front: str(s.front), back: str(s.back) }; };
+export type StepRevealSpec = { title?: string; steps: string[] };
+export const readStepReveal = (spec: unknown): StepRevealSpec => { const s = (spec ?? {}) as Record<string, unknown>; return { ...(str(s.title) ? { title: str(s.title) } : {}), steps: arr(s.steps).map(str).filter(Boolean) }; };
+export type DidYouKnowSpec = { fact: string; source?: string };
+export const readDidYouKnow = (spec: unknown): DidYouKnowSpec => { const s = (spec ?? {}) as Record<string, unknown>; return { fact: str(s.fact), ...(str(s.source) ? { source: str(s.source) } : {}) }; };
+export type DecisionSpec = { situation: string; options: Array<{ text: string; consequence: string; best: boolean }> };
+export function readDecision(spec: unknown): DecisionSpec {
+  const s = (spec ?? {}) as Record<string, unknown>;
+  return { situation: str(s.situation), options: arr(s.options).flatMap((x) => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    return str(o.text) && str(o.consequence) ? [{ text: str(o.text), consequence: str(o.consequence), best: o.best === true }] : [];
+  }) };
+}
+export function scoreDecision(spec: unknown, choice: number | null | undefined): TryScore {
+  const { options } = readDecision(spec);
+  return score(typeof choice === "number" && options[choice]?.best ? 1 : 0, 1);
+}
+export type FlashcardsSpec = { cards: Array<{ front: string; back: string }> };
+export function readFlashcards(spec: unknown): FlashcardsSpec {
+  const s = (spec ?? {}) as Record<string, unknown>;
+  return { cards: arr(s.cards).flatMap((x) => { const o = (x ?? {}) as Record<string, unknown>; return str(o.front) && str(o.back) ? [{ front: str(o.front), back: str(o.back) }] : []; }) };
+}
+
 /** A séma (írás) szabályai fajtánként — üres lista: érvényes. Ismeretlen fajtára üres (azt a `tryKind` enum szűri). */
 export function trySpecProblems(kind: string, spec: unknown): string[] {
   const p: string[] = [];
@@ -128,6 +155,22 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     if (num(s.min) === undefined || num(s.max) === undefined || n.min >= n.max) p.push("A számegyenesnek min < max kell.");
     if (!Number.isFinite(n.target) || n.target < n.min || n.target > n.max) p.push("A cél a számegyenesen belül legyen.");
     if (!(n.tolerance > 0) || n.tolerance > (n.max - n.min) / 4) p.push("A tűrés pozitív, és legfeljebb a tartomány negyede.");
+  } else if (kind === "flipCard") {
+    const f = readFlipCard(spec);
+    if (!f.front || !f.back) p.push("A fordítókártyának eleje és hátoldala is kell.");
+  } else if (kind === "stepReveal") {
+    const n = readStepReveal(spec).steps.length;
+    if (n < 2 || n > 8) p.push("A lépésenkénti felfedés 2–8 lépésből áll.");
+  } else if (kind === "didYouKnow") {
+    if (!readDidYouKnow(spec).fact) p.push("A „Tudtad?” kártyának tény kell.");
+  } else if (kind === "decision") {
+    const d = readDecision(spec);
+    if (!d.situation) p.push("A döntéshez helyzetleírás kell.");
+    if (d.options.length < 2 || d.options.length > 4) p.push("A döntés 2–4 lehetőséget kér, mindegyik következménnyel.");
+    if (d.options.filter((o) => o.best).length !== 1) p.push("A döntésnek pontosan egy legjobb lehetősége van.");
+  } else if (kind === "flashcards") {
+    const n = readFlashcards(spec).cards.length;
+    if (n < 2 || n > 12) p.push("A villámkártya-csomag 2–12 kártyából áll.");
   } else if (kind === "estimate") {
     const e = readEstimate(spec);
     const s = (spec ?? {}) as Record<string, unknown>;
