@@ -24,4 +24,6 @@ test("új kind és új tryKind a leckében: a lecke nem sérült, az ismert blok
   await expect(page.getByText(/sérült|nem sikerült betölteni/i)).toHaveCount(0);
   await expect(page.getByText("ISMERETLEN-KARTYA")).toHaveCount(0);
   await expect(page.getByText("ISMERETLEN-FELADAT")).toHaveCount(0);
+  // Review #598: az ismeretlen blokk helyén frissítésre kérő magyarázat áll (a blokkindexek nem csúsznak el).
+  await expect(page.getByText(/újabb változatával készült/).first()).toBeVisible();
 });
