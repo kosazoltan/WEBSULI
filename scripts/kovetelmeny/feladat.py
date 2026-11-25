@@ -169,8 +169,8 @@ def secure_path(path: Path):
         for p in (path, Path(str(path) + "-journal"), Path(str(path) + "-wal")):
             if p.exists():
                 os.chmod(p, 0o600)
-    except OSError:
-        pass
+    except OSError as e:  # Windowson a %LOCALAPPDATA% felhasználónkénti; a jogosultság-szűkítés hibája nem állítja meg a munkát
+        print(f"figyelmeztetés: a DB-jogosultság nem szűkíthető ({e.__class__.__name__})", file=sys.stderr)
 
 
 def migrate(c: sqlite3.Connection):
@@ -1101,7 +1101,7 @@ def main(argv=None) -> int:
         try:
             sys.stdout.reconfigure(encoding="utf-8")
         except (ValueError, OSError):
-            pass
+            pass  # nem újrakonfigurálható kimenet (pl. átirányított cső): az alapkódolás marad — szándékos
     a = build_parser().parse_args(argv)
     if a.ha_van_db and not Path(a.db).exists():
         if not a.q:

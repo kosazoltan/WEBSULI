@@ -189,7 +189,7 @@ class Maszkolas(Alap):
     def test_email_es_token_nem_kerul_a_db_be(self):
         F.new_task(self.c, "T-6", "Kérés: valaki.pelda@example.com írta", goal="token=abcdef1234567890 kulccsal")
         F.add_event(self.c, "T-6", "megjegyzes", "Bearer abcdefghijklmnop1234 a fejlécben", actor="teszt")
-        F.link(self.c, "T-6", "doc", "postgres://felhasznalo:jelszo@db.example.invalid/x")
+        F.link(self.c, "T-6", "doc", "postgres://felhasznalo:jelszo@127.0.0.1:5432/x")
         dump = "\n".join(self.c.iterdump())
         self.assertNotIn("valaki.pelda@", dump)
         self.assertNotIn("abcdef1234567890", dump)
