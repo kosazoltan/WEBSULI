@@ -1,5 +1,6 @@
 import { LESSON_QUALITY_CONTRACT } from "./lesson-quality";
 import { foldCaseUnlessSpelling, isSpellingPrompt } from "./option-key";
+import { isNumericOption } from "./single-choice-check";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
 import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
@@ -86,11 +87,23 @@ export const openTaskSchema = z.object({
     previousRequiredOrder: z.array(z.array(text(160)).min(1)).min(2).max(4).optional(),
   }).optional(),
 });
+/**
+ * V4 (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): kvízkérdés-típusok az index-alapú adatmodellben (hiányzó mező =
+ * `choice`). A régi kliens a mezőt levágja, és egyválasztósként helyesen pontoz.
+ */
+export const QUIZ_FORMATS = ["choice", "fillGap", "oddOneOut", "number"] as const;
+export type QuizFormat = (typeof QUIZ_FORMATS)[number];
+const GAP = /_{3,}/g;
 export const experienceQuizSchema = z.object({
   ...binding, question: text(), options: z.array(text(500)).min(3).max(4),
   correctIndex: z.number().int().min(0).max(3), feedbackPerOption: z.array(text(1000)).min(3).max(4),
   intent: z.enum(["recall", "apply"]).optional(),
+  format: z.enum(QUIZ_FORMATS).optional(),
 }).superRefine((q, ctx) => {
+  // V4: típusonkénti alakszabály.
+  if (q.format === "fillGap" && (q.question.match(GAP) ?? []).length !== 1) ctx.addIssue({ code: "custom", message: "A kiegészítő kérdésben pontosan egy ___ hiány legyen." });
+  if (q.format === "oddOneOut" && q.options.length !== 4) ctx.addIssue({ code: "custom", message: "A kakukktojás-kérdés pontosan 4 opciót kér." });
+  if (q.format === "number" && !q.options.every(isNumericOption)) ctx.addIssue({ code: "custom", message: "A számolós kérdés minden opciója szám (mértékegységgel is lehet)." });
   // Spec 2026-10-21-ciklus8 (review #361): helyesírási kérdésnél a csak betűméretben eltérő opciók különbözők (közös kulcs: option-key).
   const spelling = isSpellingPrompt(q.question);
   if (new Set(q.options.map(s => foldCaseUnlessSpelling(s.normalize("NFC"), spelling))).size !== q.options.length) ctx.addIssue({ code: "custom", message: "A válaszlehetőségek legyenek különbözők." });
@@ -265,9 +278,11 @@ export function questionKey(text: string): string {
  */
 // A `questionKey` kimenetére illik (kisbetűs, szóköz és írásjel nélkül): „melyik [az] állítás [a] hamis” vagy „melyik [az] igaz állítás”.
 const SELECTOR_STEM = /^melyik(?:az?)?(?:(?:állítás|mondat|kijelentés|megállapítás)a?(?:hamis|igaz|helyes|helytelen|téves)|(?:hamis|igaz|helyes|helytelen|téves)(?:állítás|mondat|kijelentés|megállapítás))$/u;
-export function quizDuplicateKey(q: { question: string; options?: readonly string[] }): string {
+// V4, review #603: a kakukktojás-kérdés („Melyik nem illik a sorba?”) is kiválasztó törzs — a tartalom az opciókészletben van.
+const ODD_ONE_OUT_STEM = /^melyiknemillik(?:a)?sorba$/u;
+export function quizDuplicateKey(q: { question: string; options?: readonly string[]; format?: string }): string {
   const stem = questionKey(q.question);
-  if (!q.options?.length || !SELECTOR_STEM.test(stem)) return stem;
+  if (!q.options?.length || !(SELECTOR_STEM.test(stem) || ODD_ONE_OUT_STEM.test(stem) || q.format === "oddOneOut")) return stem;
   // Review #414: az opció kulcsa NEM a `questionKey` — az eldobná az összehasonlító jeleket („x < 0” és „x > 0” egyformának látszana).
   // Itt csak a kis-/nagybetű és a szóköz nem számít; minden más jel a tartalom része.
   const optionKey = (o: string) => o.normalize("NFC").toLocaleLowerCase("hu").replace(/\s+/g, "");
@@ -323,7 +338,14 @@ export function experienceTheme(seed: string): LessonExperience["theme"] {
  * (csomagséma, `experiencePacketSchema`, keresztellenőrzés, aritmetika, pontozó) fogalmazva, a csomag saját számaival.
  * Egy szabály egy helyen: a skill a viselkedést mondja, ez a mércét; a `OPEN_ANSWER_RULES_HU` a pontozó részleteit.
  */
-export function bankPacketContract(c: { sectionIndex: number; conceptIds: readonly string[]; methodKinds: readonly string[]; taskCount: number; taskTarget: number; quizCount: number; quizTarget: number; language?: string }): string {
+/** V4: ≥ 6 kvízkérdésnél legalább 2 különböző típus (hiányzó mező = choice). A hiba az utolsó tételre mutat (javító kör). */
+export function quizFormatProblems(quiz: ReadonlyArray<{ id: string; format?: string }>): string[] {
+  if (quiz.length < 6) return [];
+  if (new Set(quiz.map((q) => q.format ?? "choice")).size >= 2) return [];
+  return [`${quiz.at(-1)!.id}: a csomag kvíze egytípusú — legalább 2 különböző format kell (fillGap, oddOneOut vagy number is); ezt a tételt írd át más típusra.`];
+}
+
+export function bankPacketContract(c: { sectionIndex: number; conceptIds: readonly string[]; methodKinds: readonly string[]; taskCount: number; taskTarget: number; quizCount: number; quizTarget: number; quizFormats?: boolean; language?: string }): string {
   return [
     "BANKCSOMAG-SZERZŐDÉS (a program méri; a hibás tétel javító kört kap, a csomagszintű hiba teljes újraírást):",
     `1. Darabszám: methods legalább ${c.methodKinds.length} (kindek: ${c.methodKinds.join(", ")}), legfeljebb 20; tasks PONTOSAN ${c.taskTarget}, quiz PONTOSAN ${c.quizTarget} (a program ennél kevesebbet elutasít — a tartalék kötelező; csak a mentő kivétel mehet ${c.taskCount}/${c.quizCount}-ig); glossary: ${c.language ? `legalább 4 elem (${c.language}) — a fejezet MINDEN tanított idegen szava / kifejezése, mindegyik példamondattal és magyar fordítással: ez a lecke kiejtésgyakorlójának alapja (meghallgatás + kimondás)` : "[]"}.`,
@@ -336,6 +358,8 @@ export function bankPacketContract(c: { sectionIndex: number; conceptIds: readon
     "8. JAVÍTÁSI MÓD: csak a JAVÍTÁSI JOGOSULTSÁG tételei és mezői cserélhetők, eredeti id-val, minden mezővel; új id és törlés tilos; a többit a program változatlanul megőrzi.",
     // Spec 2026-10-20-bank-kimeneti-keret: előre megadott keret — a levágott válasz a teljes kimenetet elveszíti (mért: job be3bd5d2).
     `9. KIMENETI KERET (a túl hosszú válasz levágódik és elvész): ez a csomag ${c.taskTarget} nyílt feladat + ${c.quizTarget} kvízkérdés + legalább ${c.methodKinds.length} módszer — tömören: kérdés legfeljebb 2 mondat (≤ 300 karakter), sample legfeljebb 3 mondat (≤ 400 karakter), kvízopciónként legfeljebb 1 mondatos magyarázat (≤ 200 karakter), módszer prompt / answer legfeljebb 2 mondat (≤ 300 karakter); pontosan a kért darabszám, nem több. A gondolkodásban ne írd meg előre a csomagot (csak a számolásokat és a kulcsokat ellenőrizd); a JSON-t egyszer írd le.`,
+    // V4: kvízkérdés-típusok (csak változatosság BE).
+    ...(c.quizFormats ? ['10. KVÍZTÍPUSOK: minden kvíztételnek format mezője van: "choice" (egyválasztós), "fillGap" (kiegészítés: a kérdésben PONTOSAN egy ___ hiány, az opciók a hiány kitöltései), "oddOneOut" (kakukktojás: „Melyik nem illik a sorba?”, PONTOSAN 4 opció, a helyes a kilógó), "number" (számolós: minden opció szám, mértékegységgel is). Ha a csomag kvíze legalább 6 kérdés, legalább 2 különböző format legyen; a number csak számítással megoldható kérdéshez.'] : []),
   ].join("\n");
 }
 
