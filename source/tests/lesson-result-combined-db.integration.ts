@@ -319,3 +319,13 @@ test("T2: két egyidejű pótlásból a második nem jelölheti kézbesítettnek
   const rows = await rowsOf("guest:fp-t2b");
   assert.deepEqual(rows.map(r => [r.d, r.scrubbed]), [[false, false]], "kézbesítetlen marad, a tartalma megvan (pótolható)");
 });
+
+// U4d (E9b): a bejelentkezett tanuló gyakorlókörének lezáró válasza a nézetben hozza a várakozó részt.
+test("E9b: a gyakorlókör lezáró válaszának nézete resultAwaiting: tasks (a feladatok még hiányoznak)", async () => {
+  const { beginPractice, answerPractice } = await import("../server/rewards/lesson-attempts");
+  await db.insert(users).values({ id: "comb-user3", email: "comb-user3@example.test", firstName: "Teszt", lastName: "Hármas" }).onConflictDoNothing();
+  const view = await beginPractice("comb-user3", "comb-two");
+  let last: Record<string, unknown> = view as never;
+  for (const q of view.questions) last = await answerPractice("comb-user3", view.id, q.id, 0, false) as never;
+  assert.equal(last.resultAwaiting, "tasks");
+});
