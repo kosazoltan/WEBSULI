@@ -131,6 +131,17 @@ Fajták és DOKUMENTÁLT pontozás (`shared/try-scoring.ts`, determinisztikus):
    `client/src/lesson-runtime/useLessonProgress.ts`, `shared/lesson-block-label.ts`, `server/studio/grounding.ts`, `server/studio/step-io.ts`.
 3. Próbahiba, kapulánc, PR.
 
+## V3a — végrehajtás (2026-11-25): kártyaformák és döntés–következmény (séma, megjelenítő, állapot; gyártás nélkül)
+A V2a-ra épül (azonos keret: `try` blokk, a V-kompat tűri). Fajták: `flipCard` (fordítókártya), `stepReveal` (lépésenkénti felfedés),
+`didYouKnow` („Tudtad?”), `decision` (döntés–következmény: 2–4 lehetőség, pontosan egy „legjobb”; pont: legjobb = 1, más = 0 —
+`shared/try-scoring.ts`), `flashcards` (villámkártyák, 2–12 kártya; az összefoglaló villámkártya-formája a V3b gyártásában).
+Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compareCards`, `table`, idővonal) — a V3b a gyártásban kéri.
+1. RED: `source/tests/try-cards.test.ts` (séma: helyes / hibás; a döntés pontozása), `source/tests/lesson-try-cards.spec.ts` (e2e: a kártya
+   akadálymentes nevet visel, billentyűzettel kezelhető, az állapot a lecke újranyitásakor visszaáll).
+2. GREEN: `shared/try-scoring.ts`, `client/src/lesson-runtime/blocks/try-cards.tsx`, `try-blocks.tsx`, `useLessonProgress.ts`,
+   `shared/lesson-block-label.ts`, `server/studio/grounding.ts`.
+3. Próbahiba, kapulánc, PR (a V2a beolvadása után).
+
 ### V2a — review #615 / #609 / #617 (2026-11-25)
 - **Megoldhatatlan csúszka:** a séma (`trySpecProblems`) a számegyenesnél és a becslésnél is ellenőrzi, hogy a `min + k·step` rácson (≤ max) van-e teljes pontot érő érték (`sliderHasFullScore`, a célhoz legközelebbi két rácspont); ha nincs, elutasít.
 - **Célszám:** a prompt nélküli számegyenes alaputasítása kiírja a célszámot; ha a prompt nem tartalmazza, zárójelben hozzáfűződik.
