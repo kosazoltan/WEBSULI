@@ -72,3 +72,32 @@ test("szójáték-kapu: ≥ 3 fejezetnél a kiosztott szójáték nem első feje
   assert.deepEqual(wordGameProblems(ok, "wordSearch"), []);
   assert.deepEqual(wordGameProblems(l, undefined), []);
 });
+test("V5b (a #612 tanulsága): a boss- és a szójáték-szerződés csak ott, ahol a kapu is méri (≥ 3 fejezet)", () => {
+  for (const n of [1, 2]) {
+    const c = varietyAxesContract({ ...pickVarietyAxes(1, n, { language: true }), wordGame: "crossword" }, 900);
+    assert.doesNotMatch(c, /BOSS-KÉRDÉS/, `${n} fejezet`);
+    assert.doesNotMatch(c, /SZÓJÁTÉK/, `${n} fejezet`);
+  }
+  const three = varietyAxesContract({ ...pickVarietyAxes(1, 3, { language: true }), wordGame: "crossword" }, 900);
+  assert.match(three, /BOSS-KÉRDÉS/);
+  assert.match(three, /SZÓJÁTÉK/);
+});
+
+test("V5b (a #612 tanulsága): a szójáték helye a program által kiosztott blokksorban — nem első fejezet, nem a kártya és nem a villámkártya helye; idempotens", async () => {
+  const { placeVarietyCards, CARD_FORMS, RECAP_FORMS } = await import("../shared/lesson-variety-axes");
+  const sec = (blocks: string[], tryKind?: string) => ({ plannedBlocks: blocks, ...(tryKind ? { tryKind } : {}) });
+  const plain = RECAP_FORMS.find((r) => r.id !== "villamkartya")!;
+  const flash = RECAP_FORMS.find((r) => r.id === "villamkartya")!;
+  const four = [sec(["explain", "check"]), sec(["explain", "check"]), sec(["explain", "check"]), sec(["explain", "check", "recap"])];
+  const a = placeVarietyCards(four, { cardForm: CARD_FORMS[0], recapForm: plain, wordGame: "wordSearch" });
+  const cardAt = a.findIndex((s) => s.tryKind === CARD_FORMS[0].id), gameAt = a.findIndex((s) => s.tryKind === "wordSearch");
+  assert.ok(cardAt >= 1 && gameAt >= 1 && cardAt !== gameAt, JSON.stringify(a));
+  assert.ok(a[gameAt].plannedBlocks.includes("try"));
+  assert.deepEqual(placeVarietyCards(a, { cardForm: CARD_FORMS[0], recapForm: plain, wordGame: "wordSearch" }), a, "idempotens");
+  const three = four.slice(0, 3);
+  const b = placeVarietyCards(three, { cardForm: CARD_FORMS[0], recapForm: flash, wordGame: "crossword" });
+  assert.equal(b.filter((s) => s.tryKind === CARD_FORMS[0].id).length, 0, "< 4 fejezetnél nincs kártya");
+  assert.equal(b[2].tryKind, "flashcards");
+  assert.equal(b[1].tryKind, "crossword", "3 fejezetnél a szójáték a középső fejezetbe kerül");
+  assert.deepEqual(placeVarietyCards(four.slice(0, 2), { recapForm: plain, wordGame: "crossword" }).some((s) => s.tryKind === "crossword"), false, "< 3 fejezetnél nincs szójáték");
+});
