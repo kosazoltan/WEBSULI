@@ -337,10 +337,13 @@ def main(argv=None) -> int:
             set_instruction(c, a.id, a.allapot, a.bizonyitek)
             _out(a, {"id": a.id, "allapot": a.allapot}, lambda: print(f"utasítás #{a.id}: {a.allapot}"))
         elif a.cmd == "utasitasok":
+            # review #623 (Sourcery): paraméterezett IN-lista (a konstans-literál helyett is) — SQL-összefűzés nélkül.
             sql = "SELECT id, at, forras, allapot, task_code, szoveg, bizonyitek FROM utasitasok"
+            params: tuple = ()
             if a.nyitott:
-                sql += f" WHERE allapot IN ({F._in(UTASITAS_NYITOTT)})"
-            rows = _rows(c.execute(sql + " ORDER BY at"))
+                sql += " WHERE allapot IN (" + ",".join("?" * len(UTASITAS_NYITOTT)) + ")"
+                params = tuple(UTASITAS_NYITOTT)
+            rows = _rows(c.execute(sql + " ORDER BY at", params))
             _out(a, rows, lambda: [print(safe(f"#{r['id']} {r['allapot']:<11} [{r['task_code'] or '—'}] "
                                               f"{F._cut(r['szoveg'], 120)}")) for r in rows])
         elif a.cmd == "folyamat-start":
