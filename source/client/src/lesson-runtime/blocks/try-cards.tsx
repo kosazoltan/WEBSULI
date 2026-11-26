@@ -5,6 +5,7 @@ import { readDecision, readDidYouKnow, readFlashcards, readFlipCard, readStepRev
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
+import { RadioRow } from "./try-blocks-v2";
 
 /**
  * V3a (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): kártyaformák és döntés–következmény. Minden kártya nevesített
@@ -69,12 +70,9 @@ export function Decision({ spec, persisted, onPersist }: TryProps) {
   return (
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="decision" role="group" aria-label={`Döntés: ${d.situation}`}>
       <p className="text-sm font-medium">{d.situation}</p>
-      <div role="radiogroup" aria-label="Mit választasz?" className="flex flex-col gap-2">
-        {d.options.map((o, i) => (
-          <button key={i} type="button" role="radio" aria-checked={choice === i} onClick={() => pick(i)}
-            className={cn("min-h-11 text-left px-3 py-2 rounded-md border text-sm", choice === i ? "border-primary bg-primary/10" : "bg-muted/40 hover:bg-muted")}>{o.text}</button>
-        ))}
-      </div>
+      {/* Review #609: valódi rádiócsoport (egy Tab-megálló, a nyilak léptetnek és választanak) — a V2a közös RadioRow-ja. */}
+      <RadioRow label="Mit választasz?" options={d.options.map((_, i) => i)} value={choice} onSelect={pick}
+        optionLabel={(i) => d.options[i].text} className="flex-col" />
       {choice !== null && d.options[choice] && (
         <div className="space-y-1" aria-live="polite">
           <p className="text-sm"><span className="font-medium">Következmény: </span>{d.options[choice].consequence}</p>
