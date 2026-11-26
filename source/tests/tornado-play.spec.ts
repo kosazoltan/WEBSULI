@@ -481,6 +481,37 @@ for (const viewport of [{ width: 360, height: 640 }, { width: 390, height: 844 }
   });
 }
 
+for (const viewport of [{ width: 360, height: 640 }, { width: 390, height: 844 }] as const) {
+  test.describe(`KAPU-WIN K3 közepes címkék ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("közepes válaszoknál (a 3 oszlopot túlcsordulják) a gombok 2 oszlopban állnak, és nem takarják a járművet", async ({ page }) => {
+      await startPlaying(page);
+      await page.evaluate(() => (window as unknown as GameWindow).__websuliGame!.forceState({ question: true, answers: "medium" } as never));
+      await expect(page.getByTestId("tornado-quiz")).toHaveAttribute("data-mode", "buttons");
+      await page.waitForTimeout(500);
+      const labels = await page.locator('[data-testid="tornado-quiz"] .play-question-label').allTextContents();
+      expect(labels, "a mérő-tétel címkéi").toEqual(["szeretem, tetszik", "a folyó mellett", "zenét hallgat"]);
+      const car = (await page.evaluate(() => (window as unknown as GameWindow).__websuliTornado!.getVehicleScreenBox()))!;
+      const clear: Rect = { left: car.left, right: car.right, top: Math.min(car.aheadTop, car.top - 48), bottom: car.bottom };
+      const opts = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('[data-testid="tornado-quiz"] .play-question-option')).map((el) => {
+          const r = el.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+        }),
+      );
+      expect(opts.length).toBe(3);
+      const rows = new Set(opts.map((o) => Math.round(o.top))).size;
+      expect(rows, "legfeljebb két gombsor").toBeLessThanOrEqual(2);
+      for (const [i, o] of opts.entries()) {
+        expect(overlaps(o, clear), `a(z) ${i + 1}. gomb (${Math.round(o.top)}–${Math.round(o.bottom)}) a járművet / az utat takarja (${Math.round(clear.top)}–${Math.round(clear.bottom)})`).toBe(false);
+        expect(o.bottom - o.top, "a gomb érintési célja ≥ 48 px").toBeGreaterThanOrEqual(48);
+        expect(o.right).toBeLessThanOrEqual(viewport.width + 1);
+      }
+    });
+  });
+}
+
 test.describe("J7b KICSI 6 390x844", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
 
