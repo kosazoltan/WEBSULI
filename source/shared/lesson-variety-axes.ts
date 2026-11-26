@@ -99,14 +99,50 @@ export function varietyAxesContract(axes: VarietyAxes, targetWords: number): str
     "VÁLTOZATOSSÁG (a program osztotta ki, kötelező):",
     `- PÉLDÁK TÉMAKÖRE: ${axes.exampleTheme.label} (${axes.exampleTheme.description}). Az example / try / check blokkok szituációi ebből a körből valók, ahol a tananyag engedi — a tantárgyi pontosság mindig elsőbb; ha a téma erőltetett lenne, a fejezet a saját, tárgyhoz illő helyzetét használja.`,
     `- ÖSSZEFOGLALÓ FORMÁJA: ${axes.recapForm.label} — ${axes.recapForm.description}. A lecke záró recap blokkja ezt a formát követi (a nyitás szerződésének visszatérő ELSŐ pontja után).`,
-    ...(axes.cardForm ? [`- KÁRTYA: a lecke egy NEM első fejezetébe pontosan egy ${axes.cardForm.label} kerül (${axes.cardForm.description}) — try blokk: {"kind":"try","tryKind":"${axes.cardForm.id}","spec":${axes.cardForm.spec},"coversConceptIds":[…]}; tartalma a fejezet tanításából következik.`] : []),
+    // Review #612: a kártyakérés csak ott, ahol a kapu is méri (≥ 4 fejezet) — rövidebb leckénél nem teljesíthető a „nem első fejezet”.
+    ...(axes.cardForm && axes.lengthBands.length >= CARD_MIN_SECTIONS ? [`- KÁRTYA: a lecke egy NEM első fejezetébe pontosan egy ${axes.cardForm.label} kerül (${axes.cardForm.description}) — try blokk: {"kind":"try","tryKind":"${axes.cardForm.id}","spec":${axes.cardForm.spec},"coversConceptIds":[…]}; tartalma a fejezet tanításából következik.`] : []),
     `- FEJEZETHOSSZ (ritmus; a teljes szókereten belül): ${axes.lengthBands.map((b, i) => `${i + 1}. fejezet: ${b} (kb. ${Math.round(avg * BAND_WEIGHT[b])} szó)`).join("; ")}.`,
   ].join("\n");
 }
 
+/** V3b: a kártya-kiosztás (szerződés, kapu, tervbeli hely) legalább ennyi fejezetnél él. */
+export const CARD_MIN_SECTIONS = 4;
+
+type PlanSection = { plannedBlocks: readonly string[]; tryKind?: string };
+/** A fejezet sorába (ha még nincs) egy `try` hely a `check` elé, ennek hiányában a záró `recap` elé, különben a végére. */
+function withTrySlot<S extends PlanSection>(s: S, tryKind: string, beforeRecap = false): S {
+  const blocks = [...s.plannedBlocks];
+  const recap = blocks.lastIndexOf("recap"), existing = blocks.indexOf("try");
+  // Meglévő try-hely: annak a fajtája változik (a recap elé kért helynél csak akkor, ha a recap előtt áll).
+  if (existing >= 0 && (!beforeRecap || recap < 0 || existing < recap)) return { ...s, tryKind };
+  const check = beforeRecap ? -1 : blocks.indexOf("check");
+  blocks.splice(check >= 0 ? check : recap >= 0 ? recap : blocks.length, 0, "try");
+  return { ...s, plannedBlocks: blocks, tryKind } as S;
+}
+
+/**
+ * Review #612 (Codex, Vercel, Copilot): program által kiosztott (pontos blokksorú) tervnél a kiosztott kártya és a villámkártyás
+ * összefoglaló HELYE a tervben van — különben a kötelező pontos sor és a kötelező plusz `try` blokk ellentmond egymásnak. A villámkártya
+ * az utolsó fejezet recap-ja elé kerül; a kártya egy nem első (villámkártyánál nem is utolsó) fejezet try-helyére — ha van ilyen fejezet
+ * try-hellyel, annak fajtája lesz, különben az elsőként szóba jövő fejezet kap try-helyet. Idempotens; < 4 fejezetnél nincs kártya.
+ */
+export function placeVarietyCards<S extends PlanSection>(sections: readonly S[], axes: { cardForm?: Pick<CardForm, "id">; recapForm: Pick<AxisOption, "id"> }): S[] {
+  const out = [...sections];
+  const last = out.length - 1;
+  const flash = axes.recapForm.id === "villamkartya" && last >= 0;
+  if (flash && out[last].tryKind !== "flashcards") out[last] = withTrySlot(out[last], "flashcards", true);
+  const card = axes.cardForm;
+  if (card && out.length >= CARD_MIN_SECTIONS && !out.slice(1).some((s) => s.tryKind === card.id)) {
+    const candidates = out.map((_, i) => i).filter((i) => i >= 1 && !(flash && i === last));
+    const at = candidates.find((i) => out[i].plannedBlocks.includes("try")) ?? candidates[0];
+    if (at !== undefined) out[at] = withTrySlot(out[at], card.id);
+  }
+  return out;
+}
+
 /** V3b kapu: ≥ 4 fejezetes leckében a kiosztott kártya egy NEM első fejezetben szerepel (különben javító kör). */
 export function cardFormProblems(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string }> }> }, card: CardForm | undefined): string[] {
-  if (!card || lesson.sections.length < 4) return [];
+  if (!card || lesson.sections.length < CARD_MIN_SECTIONS) return [];
   if (lesson.sections.slice(1).some((s) => s.blocks.some((b) => b.kind === "try" && b.tryKind === card.id))) return [];
   return [`VÁLTOZATOSSÁG / KÁRTYA: a lecke egy nem első fejezetébe pontosan egy ${card.label} kell (try blokk, tryKind=${card.id}, spec: ${card.spec}).`];
 }

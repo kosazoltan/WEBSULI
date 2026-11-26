@@ -58,7 +58,7 @@ import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { lessonVarietyForRun, runVarietyAxes, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
-import { avoidSeriesRepeat, cardFormById, cardFormProblems, exampleThemeById, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { avoidSeriesRepeat, cardFormById, cardFormProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -807,12 +807,6 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
   const programAssigned = shapedNow || savedAssigned;
   output = { ...output, outline, approvedOutline: outline, ...(programAssigned ? { sectionShapes: true } : {}) };
-  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
-  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
-  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
-  const assignedPlanLines = programAssigned
-    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}${section.tryKind ? ` — tryKind: "${section.tryKind}"` : ""}`).join("\n")}`
-    : "";
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
   // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
@@ -866,6 +860,22 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands, cardForm: cardFormById(output.cardForm) });
     }
   }
+  // Review #612 (Codex, Vercel, Copilot): program által kiosztott tervnél a kártya és a villámkártyás összefoglaló helye a végleges
+  // blokksorban van (különben a pontos sor és a plusz try blokk ellentmond). Idempotens: a mentett, már elhelyezett terv változatlan.
+  const axesNow = varietyOn && programAssigned ? runVarietyAxes() : undefined;
+  if (axesNow) {
+    const placed = placeVarietyCards(outline.sections, axesNow);
+    if (placed.some((sec, i) => sec !== outline.sections[i])) {
+      outline = { ...outline, sections: placed as typeof outline.sections };
+      output = { ...output, outline, approvedOutline: outline };
+    }
+  }
+  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
+  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
+  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
+  const assignedPlanLines = programAssigned
+    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}${section.tryKind ? ` — tryKind: "${section.tryKind}"` : ""}`).join("\n")}`
+    : "";
   if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
