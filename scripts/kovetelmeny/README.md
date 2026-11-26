@@ -97,3 +97,23 @@ beadott / folyamatban lévő / kész feladatokra; a kanban és az MD-k csak olva
   `attekintes`, `kereses`, `szinkron`, `visszatoltes` — mindegyik `--json`-nal is.
 - **Tesztek:** `python -B -m unittest discover -s scripts/kovetelmeny -p "test_*.py"` (ideiglenes DB és git-repó; gh helyettesítve);
   a kapu-segéd: `node --test scripts/qa/gates/feladat-szinkron.test.mjs`.
+
+## Projekt-memória (PROJEKT-MEMORIA-SQL) — `memoria.py`
+
+Ugyanebben a DB-fájlban, két ÚJ táblával (terv: `docs/specs/2026-11-26-projekt-memoria-sql.md`). A tulajdonos kérése: a fejlesztés
+állapota egy helyről, SQL-ből legyen látható — kiadott és végrehajtott utasítások, folyamatok, elvégzett kódolás, lezárt folyamatok,
+hátralék, hiányosság, teendő.
+
+- **`utasitasok`** — a tulajdonos (vagy az ügynök) KIADOTT utasítása a beérkezéskor, maszkolva; feladathoz / követelményhez köthető;
+  állapot `kiadva → folyamatban → vegrehajtva` (+ `reszben`, `felulirva`, `elvetve`). `vegrehajtva` csak bizonyítékkal (commit,
+  PR, mérés, élő ellenőrzés). Az újabb utasítás felülírja a régit: `utasitas … --felulirja <id>` → a régi `felulirva`.
+- **`folyamatok`** — folyamat-futások (`kapulanc|deploy|e2e|unit|elemzes|revizio|szinkron|egyeb`): indulás, vége, eredmény
+  (`fut|ok|bukott|megszakadt`), összegzés, bizonyíték. A > 24 órája „fut” sor a jelentésben elakadtként látszik.
+- **Jelentés:** `python scripts/kovetelmeny/memoria.py jelentes [--napok 7] [--json]` — kiadott (nyitott) és végrehajtott
+  utasítások, futó / elakadt / lezárt folyamatok, elvégzett kódolás (a main commitjai `Állapot:` sorral: git-napló + a gyűjtő
+  forrásai), lezárt feladatok, hátralék (nyitott feladatok prioritás és állapot szerint, %-kal), hiányosságok (nyitott revíziós
+  leletek + nyitott követelmények), teendők (következő lépések).
+- **Parancsok:** `utasitas`, `utasitas-allapot`, `utasitasok`, `folyamat-start`, `folyamat-vege`, `jelentes` (mind `--json`-nal).
+- **Mikor írjuk:** minden tulajdonosi utasítás beérkezésekor `utasitas` (a feladat kódjával); a lezáráskor `utasitas-allapot …
+  vegrehajtva --bizonyitek`; minden kapulánc / deploy / hosszú mérés `folyamat-start` / `folyamat-vege` (a Hermes-agent
+  `lanc-futtat.sh` ezt magától írja, ha a modul elérhető).

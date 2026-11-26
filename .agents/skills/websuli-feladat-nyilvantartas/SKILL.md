@@ -15,14 +15,16 @@ követelmény-DB-vel közös fájl). Eszköz: `python -B scripts/kovetelmeny/fel
 | Pillanat | Parancs |
 |---|---|
 | Munkamenet / folytatás eleje, tömörítés után | `feladat.py szinkron` → `feladat.py attekintes` (25 sor: %, következő lépés, blokkoló, PR) |
-| Új tulajdonosi kérés | `feladat.py uj <KÓD> "<cím>" --cel … --kovetelmeny <K-kód> --prio 1-5` |
+| Új tulajdonosi kérés | `memoria.py utasitas "<a kérés szövege>" --feladat <KÓD>` (kiadott utasítás, beérkezéskor) + `feladat.py uj <KÓD> "<cím>" --cel … --kovetelmeny <K-kód> --prio 1-5`; az újabb utasítás a régit `--felulirja <id>`-vel váltja |
+| Kapulánc / deploy / hosszú mérés / modell-elemzés | `memoria.py folyamat-start <fajta> <ref> --feladat <KÓD>` → `folyamat-vege <id> ok\|bukott\|megszakadt --osszegzes … --bizonyitek <log/SHA>` (a `lanc-futtat.sh` a láncokat magától írja) |
+| Utasítás teljesült | `memoria.py utasitas-allapot <id> vegrehajtva --bizonyitek "<PR/commit/mérés/élő ellenőrzés>"` (bizonyíték nélkül elutasítja) |
 | Szelet tervezése (spec után) | `feladat.py terv <KÓD> --egyseg "RED" --egyseg "GREEN …" --kriterium "<mérhető feltétel>"`; `uj … --szelet <név> --ag <ág> --spec <út> --szulo <szülő>` |
 | Minden commit | a `Állapot: <szelet> k/n egység kész — következő: …` sor (a szinkron ebből vezeti az egységeket és a következő lépést) |
 | Szelet vége, PR-nyitás, merge / deploy után | `feladat.py szinkron` (a `gate:pr` és a `gate:merge` végén automatikusan is fut, nem blokkoló) |
 | Élesítés / élő ellenőrzés | `feladat.py allapot <KÓD> elesitve\|elo_ellenorizve --bizonyitek "<mérés>"`; kapcsoló-döntés: `feladat.py kapcsolo <NÉV> <érték> --forras "tulajdonos <dátum>" --feladat <KÓD>` |
 | Elfogadási feltétel igazolva | `feladat.py kriterium <KÓD> <n> --teljesult --bizonyitek "<commit/PR/fájl:sor/mérés>"` |
 | Akadály | `feladat.py allapot <KÓD> blokkolt --blokkolo "<mi és kire vár>"` |
-| Munkamenet zárása (záró hurok előtt) | `feladat.py szinkron` + `attekintes`; minden félbehagyott teendő legyen feladat (`uj`) következő lépéssel |
+| Munkamenet zárása (záró hurok előtt) | `feladat.py szinkron` + `memoria.py jelentes --napok 1` (kiadott / végrehajtott utasítás, folyamat, kódolás, hátralék, hiányosság, teendő); minden félbehagyott teendő legyen feladat (`uj`) következő lépéssel, minden nyitott futás lezárva |
 
 ## Szabályok
 
@@ -38,6 +40,8 @@ követelmény-DB-vel közös fájl). Eszköz: `python -B scripts/kovetelmeny/fel
 - Minden szöveg maszkolva kerül a DB-be; titkot, valódi e-mail-címet akkor se írj bele. Éles beállítást ez az eszköz nem olvas és nem ír.
 
 ## Lekérdezés-minták
+
+- Projekt-memória egy képernyőn: `memoria.py jelentes [--napok 7] [--json]`; `memoria.py utasitasok --nyitott`.
 
 - `feladat.py attekintes [--minden]`, `lista --nyitott --allapot review,blokkolt`, `tetel <KÓD>` (egységek, feltételek, hivatkozások, idővonal),
   `kereses "kivágott kép"`, `kapcsolo` (tulajdonosi döntés vs. legutóbb mért élő érték: ELTÉR / egyezik / nem mért).
