@@ -971,6 +971,8 @@ export function buildConceptFixPrompt(lesson: Lesson, map: PromptMap, conceptId:
     D1_RULE_TEXT,
     LESSON_QUALITY_CONTRACT,
     SOURCE_REVIEW_RULES,
+    // review #626: a publikált lecke célzott javítása is a gyakorlatiassági szabályt követi (TANANYAG-GYAKORLATI P3).
+    PRACTICE_TEACHING_RULE,
     "",
     `Target concept id: ${conceptId}`,
     "",
