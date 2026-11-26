@@ -155,6 +155,9 @@ test("animate and try only accept the planned kinds", () => {
     didYouKnow: { fact: "f" },
     decision: { situation: "s", options: [{ text: "a", consequence: "x", best: true }, { text: "b", consequence: "y", best: false }] },
     flashcards: { cards: [{ front: "a", back: "b" }, { front: "c", back: "d" }] },
+    // V5a
+    wordSearch: { words: ["alma", "körte", "szilva"] },
+    crossword: { entries: [{ answer: "alma", clue: "a" }, { answer: "körte", clue: "b" }, { answer: "meggy", clue: "c" }] },
   };
   for (const tryKind of TRY_KINDS) {
     assert.throws(

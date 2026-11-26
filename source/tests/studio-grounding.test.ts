@@ -341,3 +341,9 @@ test("angol nevű fogalom magyar tanításban: a kurált definíció érdemi sza
   const bare = { localId: "x", term: "Kör kerülete", examWeight: "core" } as MapConcept;
   assert.equal(checkGrounding("Ez a mondat semmit sem mond a témáról, csak hosszú.", bare), false, "definíció nélkül a régi szabály marad");
 });
+test("review #616: a keresztrejtvény rejtett megfejtése nem bizonyíték, a látható meghatározás igen", () => {
+  const c = [{ localId: "fs", term: "Fotoszintézis", examWeight: "core" }] as MapConcept[];
+  const entries = (answer: string, clue: string) => [{ answer, clue }, { answer: "levél", clue: "A fa része" }, { answer: "gyökér", clue: "A fa alja" }];
+  assert.equal(groundingReport([{ kind: "try", tryKind: "crossword", spec: { entries: entries("fotoszintézis", "Így készít a növény cukrot") }, coversConceptIds: ["fs"] }], c).ok, false);
+  assert.equal(groundingReport([{ kind: "try", tryKind: "crossword", spec: { entries: entries("cukor", "A fotoszintézis terméke") }, coversConceptIds: ["fs"] }], c).ok, true);
+});

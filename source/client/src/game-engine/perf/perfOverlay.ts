@@ -52,8 +52,11 @@ export type PerfOverlayOptions = {
   getReactRenders(): number;
   /** A játék saját jelzője: fut-e a képkocka-hurok (review #504 L1). Ha nincs, a panel a képkockák idejéből becsül. */
   isRunning?(): boolean;
-  /** A felső HUD alja a `host` tetejétől (CSS px) — a panel ez alá kerül (review #504 L3). Alap: 4 px. */
-  getTopInset?(): number;
+  /**
+   * A felső HUD alja a `host` tetejétől (CSS px) — a panel ez alá kerül (review #504 L3). Alap: 4 px. KAPU-WIN: `reading` = a
+   * „Számok” nézet — ilyenkor a játék a nem érinthető súgósor nélküli HUD-aljat adhatja (alacsony fekvő nézetben a mérősorok férjenek ki).
+   */
+  getTopInset?(reading: boolean): number;
 };
 
 export type PerfSnapshot = {
@@ -183,6 +186,8 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   }
   // Review #504 (vak, L3): elrendezést a panel NEM olvas a képkocka-hurokban — a helyét és a vászon CSS-méretét a méretfigyelő
   // és a másodperces időzítő frissíti (a mért JS / render idejébe így nem kerül kényszerített elrendezés-számítás).
+  /** KAPU-WIN: a nézet (olvasó / kapcsolók) a helyzetszámítás előtt ismert legyen — a `syncView` írja, és újrahelyez. */
+  const view = { reading: false };
   let cssWidth = canvas.clientWidth;
   let cssHeight = canvas.clientHeight;
   const placeTop = () => {
@@ -193,7 +198,7 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
       return;
     }
     root.style.display = "";
-    const inset = opts.getTopInset?.() ?? 4;
+    const inset = opts.getTopInset?.(view.reading) ?? 4;
     const top = Math.max(4, Math.round(Number.isFinite(inset) ? inset : 4));
     root.style.left = `${Math.round(r.left + r.width / 2)}px`;
     root.style.top = `${Math.round(r.top) + top}px`;
@@ -241,6 +246,10 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   row.append(bCollapse, bView, ...toggleButtons);
   let reading = false;
   const syncView = () => {
+    if (view.reading !== reading) {
+      view.reading = reading;
+      placeTop();
+    }
     root.classList.toggle("bc-perf-reading", reading);
     bView.textContent = reading ? "Kapcsolók" : "Számok";
     bView.setAttribute("aria-pressed", reading ? "true" : "false");

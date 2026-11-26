@@ -142,6 +142,26 @@ Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compare
    `shared/lesson-block-label.ts`, `server/studio/grounding.ts`.
 3. Próbahiba, kapulánc, PR (a V2a beolvadása után).
 
+## V5a — végrehajtás (2026-11-25): szókereső és keresztrejtvény (séma, rácsgenerátor, megjelenítő; gyártás nélkül)
+A V3a-ra épül (`try` keret). Fajták: `wordSearch` (3–10 szó, 3–12 betű; a rács a szavakból számolt MAGBÓL determinisztikus,
+vízszintes / függőleges / átlós elhelyezés, kitöltés magyar betűkkel) és `crossword` (3–10 bejegyzés: megfejtés + meghatározás; a
+rácsgenerátor determinisztikus, a bejegyzések keresztezik egymást, ahol lehet; ami nem fér el keresztezve, külön sorba kerül).
+Pontozás (`shared/word-grid.ts`): szókereső — pont = megtalált szavak; keresztrejtvény — pont = helyesen kitöltött bejegyzések
+(kis- / nagybetű és ékezet nélküli összevetés NEM: a magyar ékezet számít, csak a kis- / nagybetű nem).
+1. RED: `source/tests/word-grid.test.ts` (determinizmus azonos bemenetre; minden szó / bejegyzés a rácsban olvasható; a keresztrejtvény
+   betűi ütközésmentesek; pontozás teljes / részleges / rossz; séma), `source/tests/lesson-word-grid.spec.ts` (e2e: billentyűzettel
+   megoldható, az állapot visszaáll).
+2. GREEN: `shared/word-grid.ts`, `shared/try-scoring.ts` (fajták, séma), `client/src/lesson-runtime/blocks/try-word-grid.tsx`, regiszter,
+   állapot, címke, grounding.
+3. A gyártás (szókincsleckénél kötelező kiosztás) és a fejezetvégi boss-kérdés a V5b.
+### V5a — újraépítés és review #616 (2026-11-26)
+- A V3a utódja (#619) fölé épült újra (`feat/v5a-szokereso-v2`, utasítás → RED → kód); a #616 lezárva, utódja ez a PR.
+- **Találat a rács tartalmából:** `matchSelection` (shared/word-grid.ts) — a kijelölt egyenes betűsora oda-vissza olvasva dönt, nem a generátor nyilvántartott helye; a kijelölt szakasz színeződik.
+- **Egyedi azonosítók:** a keresztrejtvény mezői `useId` előtagot kapnak (a lecke minden fejezete egyszerre mountolt).
+- **Méret 360 px-en:** a szókereső cellái nem gombok (a lecke 44 px-es gomb-minimuma átfedést okozott), a rácsok `minmax(0, 1fr)` oszlopokkal a rendelkezésre álló szélességhez igazodnak (legfeljebb 2,25 / 2 rem / cella).
+- **Grounding:** a keresztrejtvény rejtett megfejtése nem bizonyíték, csak a látható meghatározás.
+- Tesztek (RED a javítás előtt): `word-grid.test.ts`, `studio-grounding.test.ts`, `lesson-word-grid.spec.ts` (+2).
+
 ## V2b — végrehajtás (2026-11-25): az öt új feladatfajta GYÁRTÁSA
 Előfeltétel: a V-kompat, a V2a és a V3a élesben (a megjelenítők a kliensen). A szerző és a vázlat innentől az öt új gyakorlófajtát is
 ismeri (`PROMPT_TRY_KINDS`), a kiosztás (S6b) fajtakészlete bővül:
