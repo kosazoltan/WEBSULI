@@ -10,7 +10,7 @@
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import * as THREE from "three";
@@ -3180,6 +3180,8 @@ export default function BlockCraftQuiz() {
    * egymást — a hosszabb szöveg a közös „Mutasd”-dal olvasható.
    */
   const lockVisible = phase === "play" && q.bind.presentation !== null;
+  /** FLAKE-BC-K1K2: a zár mérője ref-ben, hogy a megoldás-kijelzés váltásakor festés előtt azonnal újramérhessünk. */
+  const lockMeasureRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!lockVisible) {
       stoneBandRef.current = null;
@@ -3303,13 +3305,20 @@ export default function BlockCraftQuiz() {
       stoneBandRef.current = best;
     };
     measure();
+    lockMeasureRef.current = measure;
     const id = window.setInterval(measure, 200);
     return () => {
       window.clearInterval(id);
+      lockMeasureRef.current = null;
       stoneBandRef.current = null;
       root.style.removeProperty("--bc-pq-lines");
     };
   }, [lockVisible]);
+  // FLAKE-BC-K1K2: a megoldás-kijelzés („Miért?” sor) a kártyát azonnal megnöveli — a takarásállapot (rúnaréteg-szünetgomb) a
+  // kijelzés képkockájában, festés előtt frissül, nem a következő 5 Hz-es ütemben (terhelt gépen ez több száz ms rálógás volt).
+  useLayoutEffect(() => {
+    lockMeasureRef.current?.();
+  }, [q.bind.reveal]);
 
   // HUD ≤ 10 Hz (KSZ-9): a mag állapotából pillanatkép, csak változáskor.
   useEffect(() => {
