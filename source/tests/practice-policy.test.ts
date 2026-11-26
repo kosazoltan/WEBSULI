@@ -92,6 +92,30 @@ describe("practice-policy: helyzet vs. helyzet nélküli kérdés (élő bankbó
   });
 });
 
+describe("practice-policy: review #625", () => {
+  it("a formátum önmagában nem alkalmazás (number)", () => {
+    assert.equal(classifyQuizItem(q("Mikor volt a mohácsi csata?", ["1526", "1541", "1456"], { format: "number" })).kind, "fogalmi");
+    assert.equal(classifyQuizItem(q("Hány csont alkotja a felnőtt ember csontvázát?", ["206", "106", "306"], { format: "number" })).kind, "fogalmi");
+  });
+  it("képlet hiányzó tagjának felidézése fogalmi", () => {
+    assert.equal(classifyQuizItem(q("A háromszög területe = alap × magasság / ___", ["2", "3", "4"], { format: "fillGap" })).kind, "fogalmi");
+  });
+  it("sport-pontérték nem a feladatlap pontozása", () => {
+    assert.notEqual(classifyQuizItem(q("Hány pontot ér egy büntetődobás a kosárlabdában?", ["1", "2", "3"])).kind, "meta");
+    assert.notEqual(classifyQuizItem(q("Egy kosárlabdázó büntetőt dobott, és bement. Hány pontot kap?", ["1 pont", "2 pont", "3 pont"])).kind, "meta");
+  });
+  it("idézet vagy két szám nem menti fel a feladatlap szerkezetére kérdező tételt", () => {
+    assert.equal(classifyQuizItem(q("Milyen feladattípus szerepel a „Szólások” feladatlapon?", ["párosítás", "esszé", "teszt"])).kind, "meta");
+    assert.equal(classifyQuizItem(q("Hány feladat szerepel a 2026-os felvételi 1. lapján?", ["8", "10", "12"])).kind, "meta");
+  });
+  it("a felső határ (75%) fölött nem teljesül", () => {
+    const exp = { quiz: Array.from({ length: 12 }, (_, i) => ({ id: `q${i}`, question: `Számold ki: ${i} + 7 = ?`, options: ["1", "2", "3"] })), tasks: [] };
+    const a = auditExperience(exp as never);
+    assert.equal(a.quiz.counts.alkalmazas, 12);
+    assert.equal(a.quiz.status, "magas");
+  });
+});
+
 describe("practice-policy: nyílt feladat", () => {
   it("konkrét mondat javítása — alkalmazás", () => {
     assert.equal(classifyOpenTask({ q: "Javítsd ki az elválasztást ebben a sorban: „oszt-ály”.", sample: "osz-tály" }).kind, "alkalmazas");
