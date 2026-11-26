@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { lessonHeaderGradeLabel } from "@shared/classrooms";
-import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Target, Volume2, XCircle, PlayCircle, Hand, Image as ImageIcon } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronRight, HelpCircle, Leaf, Lightbulb, ListChecks, Sparkles, Swords, Target, Volume2, XCircle, PlayCircle, Hand, Image as ImageIcon } from "lucide-react";
 import { SourceImageAnim } from "./blocks/source-image";
 
 import { Button } from "@/components/ui/button";
@@ -207,8 +207,9 @@ function CheckBlock({
   };
 
   return (
-    <div className="lesson-block space-y-3" data-block="check">
-      <BlockHead icon={HelpCircle} label={label ?? theme.labels.check} kind="check" />
+    <div className={cn("lesson-block space-y-3", block.boss && "ring-2 ring-amber-400 rounded-xl p-3")} data-block="check" data-boss={block.boss ? "true" : undefined}>
+      {/* V5b: a fejezetvégi boss-kérdés kiemelt fejléccel. */}
+      <BlockHead icon={block.boss ? Swords : HelpCircle} label={block.boss ? "Főellenség-kérdés" : label ?? theme.labels.check} kind="check" />
       <p className={cn("font-medium", theme.body)}>{block.question}</p>
 
       <div className="grid gap-2">

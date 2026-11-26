@@ -58,7 +58,8 @@ import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { lessonVarietyForRun, runVarietyAxes, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
-import { avoidSeriesRepeat, cardFormById, cardFormForLength, cardFormProblems, recapFlashcardProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { avoidSeriesRepeat, bossProblems, cardFormById, cardFormForLength, cardFormProblems, recapFlashcardProblems, wordGameById, wordGameProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { lessonLanguage } from "../../../shared/lesson-experience";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -844,14 +845,14 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     if (!resumed?.lesson && !savedAxes) {
       const seed = seedFrom(mapId);
       // V1: témakör, összefoglaló forma, hosszsáv a magból; a sorozatszabály a nyitásformát is a következőre léptetheti.
-      const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);
+      const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length, { language: !!lessonLanguage(promptMap.subject) }) }, seriesPrev, promptMap.classroom);
       const pick = openingFormById(assigned.openingForm, promptMap.classroom)!;
       assignedForm = pick.id;
       // Review #647: 4-nél rövidebb leckénél nincs kártya (a mentett érték sem fogyasztja a sorozat-forgást).
       const card = cardFormForLength(outline.sections.length, assigned.cardForm);
-      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, ...(card ? { cardForm: card.id } : {}) };
+      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, ...(card ? { cardForm: card.id } : {}), ...(assigned.wordGame ? { wordGame: assigned.wordGame } : {}) };
       setRunOpeningForm(pick);
-      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: card });
+      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: card, wordGame: assigned.wordGame });
     } else if (typeof output.openingForm === "string") {
       const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
@@ -859,7 +860,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       const theme = exampleThemeById(output.exampleTheme), recap = recapFormById(output.recapForm);
       const bands = Array.isArray(output.lengthBands) && output.lengthBands.every((b) => b === "rövid" || b === "közepes" || b === "hosszabb") ? output.lengthBands as LengthBand[] : undefined;
       // V3b: a kártyaforma csak a mentett értékből (régi, kártya nélküli checkpoint: nincs kártya-kiosztás).
-      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands, cardForm: cardFormById(output.cardForm) });
+      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands, cardForm: cardFormById(output.cardForm), wordGame: wordGameById(output.wordGame) });
     }
   }
   // Review #612 (Codex, Vercel, Copilot): program által kiosztott tervnél a kártya és a villámkártyás összefoglaló helye a végleges
@@ -912,6 +913,8 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     // V3b: a kiosztott kártya (≥ 4 fejezetnél) — javító kört kap.
     // Review #647: a TERVEZETT fejezetszám dönt; a villámkártyás összefoglaló flashcards blokkja is kapu.
     const card = varietyOn ? [...cardFormProblems(parsed.data, runVarietyAxes()?.cardForm, outline.sections.length), ...recapFlashcardProblems(parsed.data, runVarietyAxes()?.recapForm)] : [];
+    // V5b: boss-kérdés és szójáték (csak kiosztott tengelyekkel futó, BE változatosságú körben).
+    if (varietyOn && runVarietyAxes()) card.push(...bossProblems(parsed.data), ...wordGameProblems(parsed.data, runVarietyAxes()?.wordGame));
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons), ...card];
     if (problems.length && dropNotes.length) {
       telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;

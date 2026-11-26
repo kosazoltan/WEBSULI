@@ -10,6 +10,11 @@ const withSections = (n: number): L => {
   const l = structuredClone(fusionFixture());
   while (l.sections.length < n) l.sections.push(structuredClone(l.sections[l.sections.length - 1]));
   l.sections = l.sections.slice(0, n);
+  // Fejezetenként egy kérdés (a fixtúra tanító blokkjainak fogalmával).
+  for (const s of l.sections) {
+    const ids = (s.blocks.find((b) => "coversConceptIds" in b) as { coversConceptIds: string[] }).coversConceptIds.slice(0, 1);
+    s.blocks.push({ kind: "check", question: "Melyik igaz?", options: ["Ez", "Az"], correctIndex: 0, feedbackPerOption: ["Jó.", "Nem."], coversConceptIds: ids } as never);
+  }
   return l;
 };
 const checks = (l: L) => l.sections.flatMap((s, si) => s.blocks.map((b, bi) => ({ b: b as Record<string, unknown>, si, bi })).filter((x) => x.b.kind === "check"));
