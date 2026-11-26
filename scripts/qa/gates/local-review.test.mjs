@@ -99,7 +99,7 @@ test('töredék: a nagy új-fájl hunk sorhatáron, összefüggő @@ fejlécekke
   assert.ok(parts.length >= 3, 'több darab');
   let next = 1;
   for (const [i, c] of parts.entries()) {
-    const m = /^@@ -0,0 \+(\d+),(\d+) @@ töredék (\d+)\/(\d+)/m.exec(c.text);
+    const m = /^@@ -0,0 \+(\d+),(\d+) @@ slice (\d+)\/(\d+)/m.exec(c.text);
     assert.ok(m, `a(z) ${i + 1}. darabnak saját, megjelölt hunk-fejléce van`);
     assert.equal(Number(m[1]), next, 'összefüggő új sorszámok');
     assert.equal(Number(m[3]), i + 1);
@@ -113,8 +113,8 @@ test('töredék: a nagy új-fájl hunk sorhatáron, összefüggő @@ fejlécekke
   // review #588: a töredéktörzsek összefűzve pontosan, sorrendben adják vissza a bemenetet (nincs ismétlés / kiesés).
   const bodies = parts.flatMap((c) => c.text.split('\n').slice(c.text.split('\n').findIndex((l) => l.startsWith('@@ ')) + 1).filter(Boolean));
   assert.deepEqual(bodies, body);
-  assert.match(parts[0].text, /töredék 1\/\d+; eleje: hunk eleje; vége: vágott/);
-  assert.match(parts.at(-1).text, /eleje: vágott; vége: hunk vége/);
+  assert.match(parts[0].text, /slice 1\/\d+; start: hunk start; end: cut/);
+  assert.match(parts.at(-1).text, /start: cut; end: hunk end/);
   const prompt = buildPrompt(parts[0]);
   assert.match(prompt, /never report truncation, unterminated expressions or syntax errors caused by that cut edge/i);
   assert.match(prompt, /genuine syntax errors and unterminated constructs MUST be reported/i);
@@ -139,12 +139,12 @@ test('töredék (review #588): vegyes hunk nulla oldala a megelőző sorhoz horg
 test('töredék (review #588): a középső töredék újradarabolása megtartja a vágott éleket, a régi jelölés nem duplázódik', () => {
   const body = Array.from({ length: 30 }, (_, i) => `+s${i + 1}`.padEnd(30, 'q'));
   const mid = splitHunk(['@@ -0,0 +1,30 @@', ...body].join('\n') + '\n', 120 + 340)[1];
-  assert.match(mid, /eleje: vágott; vége: vágott/);
+  assert.match(mid, /start: cut; end: cut/);
   const again = splitHunk(mid, 120 + 160);
   assert.ok(again.length >= 2);
-  assert.match(again[0], /töredék 1\/\d+; eleje: vágott; vége: vágott/, 'az örökölt vágott eleje megmarad');
-  assert.match(again.at(-1), /eleje: vágott; vége: vágott/, 'az örökölt vágott vége megmarad');
-  assert.ok(again.every((x) => (x.split('\n')[0].match(/töredék/g) || []).length === 1), 'egy jelölés fejlécenként');
+  assert.match(again[0], /slice 1\/\d+; start: cut; end: cut/, 'az örökölt vágott eleje megmarad');
+  assert.match(again.at(-1), /start: cut; end: cut/, 'az örökölt vágott vége megmarad');
+  assert.ok(again.every((x) => (x.split('\n')[0].match(/slice \d/g) || []).length === 1), 'egy jelölés fejlécenként');
 });
 
 test('classifyModelResponse: a token repeat limit 500 értelmezhetetlen válasz (felezés), a többi hiba változatlan', () => {

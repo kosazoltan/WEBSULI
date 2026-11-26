@@ -46,7 +46,7 @@ export const RISK = [/migrations?\//i, /schema\.ts$/, /auth|session|csrf|passwor
  * A darabméretnél nagyobb hunk SORHATÁRON bomlik (docs/specs/2026-11-25-helyi-ellenor-toredek.md) — a karakterpozíciós vágás
  * „csonka fájl” hamis leleteket szült (#587). Minden töredék saját, számolt `@@ -régi,db +új,db @@` fejlécet kap (a nulla hosszú
  * oldal a megelőző sorhoz horgonyoz, az eredetileg üres oldal megtartja a 0-t), és a fejléc élenként jelzi, hol VÁGOTT:
- * `töredék i/n; eleje: vágott|hunk eleje; vége: vágott|hunk vége`. A keretnél hosszabb sor sem törik szét: egyedül alkot töredéket
+ * `slice i/n; start: cut|hunk start; end: cut|hunk end` (angolul: a helyi modellnek minden utasítás és jelölés angol — tulajdonosi döntés 2026-11-26). A keretnél hosszabb sor sem törik szét: egyedül alkot töredéket
  * (a darab ilyenkor a keretnél nagyobb lehet, de minden sor pontosan egyszer, típusjelével együtt szerepel).
  */
 export function splitHunk(hunk, max) {
@@ -56,8 +56,8 @@ export function splitHunk(hunk, max) {
   if (!m) return [hunk];
   // Review #588: egy már töredékként vágott darab újradarabolásakor (értelmezhetetlen modellválasz után) az örökölt vágott él
   // vágott marad — a régi jelölés lekerül, az új töredékek külső élei az örökölt állapotot viszik tovább.
-  const prev = /^ töredék \d+\/\d+; eleje: (vágott|hunk eleje); vége: (vágott|hunk vége)(.*)$/.exec(m[3]);
-  const startCut = prev?.[1] === 'vágott'; const endCut = prev?.[2] === 'vágott';
+  const prev = /^ slice \d+\/\d+; start: (cut|hunk start); end: (cut|hunk end)(.*)$/.exec(m[3]);
+  const startCut = prev?.[1] === 'cut'; const endCut = prev?.[2] === 'cut';
   const tail = prev ? prev[3] : m[3];
   const oldEmpty = Number(m[1]) === 0; const newEmpty = Number(m[2]) === 0;
   let oldLn = oldEmpty ? 1 : Number(m[1]); let newLn = newEmpty ? 1 : Number(m[2]);
@@ -79,8 +79,8 @@ export function splitHunk(hunk, max) {
   const n = pieces.length;
   const side = (empty, start, count) => (count === 0 ? (empty ? '0,0' : `${start - 1},0`) : `${start},${count}`);
   return pieces.map((p, i) => {
-    const edges = `eleje: ${i === 0 && !startCut ? 'hunk eleje' : 'vágott'}; vége: ${i === n - 1 && !endCut ? 'hunk vége' : 'vágott'}`;
-    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ töredék ${i + 1}/${n}; ${edges}${tail}\n${p.body.join('\n')}\n`;
+    const edges = `start: ${i === 0 && !startCut ? 'hunk start' : 'cut'}; end: ${i === n - 1 && !endCut ? 'hunk end' : 'cut'}`;
+    return `@@ -${side(oldEmpty, p.oStart, p.oCount)} +${side(newEmpty, p.nStart, p.nCount)} @@ slice ${i + 1}/${n}; ${edges}${tail}\n${p.body.join('\n')}\n`;
   });
 }
 
@@ -123,9 +123,10 @@ export function buildPrompt(chunk) {
     'security issues (secrets, injection, auth bypass, personal data in logs/URLs), broken data contracts, timezone/date bugs,',
     'tests that were weakened or became tautological. Ignore style, naming, formatting, comments and Hungarian text content.',
     'Do NOT invent code that is not shown. If unsure, use severity "low". Use "high" only for a concrete, likely bug.',
-    'If the hunk header says "töredék i/n", this is a line-aligned slice of a larger hunk; the header states for each edge whether it is "vágott" (cut) or the real hunk start/end.',
-    'At an edge marked "vágott" the code continues in the neighbouring slice: never report truncation, unterminated expressions or syntax errors caused by that cut edge.',
-    'At an edge marked "hunk eleje" / "hunk vége", and anywhere inside the slice, genuine syntax errors and unterminated constructs MUST be reported.',
+    'If the hunk header says "slice i/n", this is a line-aligned slice of a larger hunk; the header states for each edge whether it is "cut" or the real "hunk start" / "hunk end".',
+    'At an edge marked "cut" the code continues in the neighbouring slice: never report truncation, unterminated expressions or syntax errors caused by that cut edge.',
+    'At an edge marked "hunk start" / "hunk end", and anywhere inside the slice, genuine syntax errors and unterminated constructs MUST be reported.',
+    'Write every "issue" in English; quote Hungarian identifiers or strings from the diff verbatim.',
     'Reply with JSON only: {"verdict":"PASS|CONCERNS|BLOCK","findings":[{"line":<new-file line or 0>,"severity":"high|medium|low","issue":"<one sentence: scenario and effect>"}]}',
     '',
     `FILE: ${chunk.file}`,
