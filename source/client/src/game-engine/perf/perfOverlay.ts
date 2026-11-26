@@ -235,7 +235,10 @@ export function createPerfOverlay(opts: PerfOverlayOptions): PerfOverlay {
   bCollapse.textContent = "–";
   bCollapse.setAttribute("aria-label", "A mérőpanel összecsukása");
   const toggleButtons = [bShadow, bRes, bMat, bFog, bProbe, bCopy];
-  row.append(bView, ...toggleButtons, bCollapse);
+  // CI #484 (betűkészlet-függés): keskeny fekvő nézetben (568×320) a gombsor több sorba törik — szélesebb tartalék
+  // betűkészlettel (Linux DejaVu Sans) az utolsó sor már a nézet alá lógna. Az összecsukó ezért az ELSŐ helyen áll: mindig
+  // az első sorban, a nézetben marad, a betűszélességtől függetlenül.
+  row.append(bCollapse, bView, ...toggleButtons);
   let reading = false;
   const syncView = () => {
     root.classList.toggle("bc-perf-reading", reading);

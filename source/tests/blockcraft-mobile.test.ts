@@ -61,15 +61,19 @@ test("érintés-észlelés: useTouchCapable (a régi useCoarsePointer helyett)",
 
 test("szünet: a render-ciklus, a játékóra és a vezérlés szünetben áll", () => {
   const code = pageCode();
-  has(code, /const shouldRun = \(phase === "play" \|\| phase === "quiz"\) && !paused;/, "a shouldRun feltételből hiányzik a paused");
+  // SPEC-VÁLTOZÁS 2026-11-17 (docs/specs/2026-11-16-jatekok-jatekelmeny.md 5.3 „Megszűnik”, 9.; végrehajtás J3a 3.): a
+  // „quiz” fázis megszűnt — a kérdés a „play” al-állapota (Rúna-zár). A szigor marad: a render-ciklus feltételében a
+  // szünet (és a „Miért?” kártya) is benne van.
+  has(code, /const shouldRun = phase === "play" && !paused && !why\b[^;]*;/, "a shouldRun feltételből hiányzik a paused / a „Miért?”");
   has(code, /if \(phase !== "play" \|\| paused\) return;\s*const id = setInterval/, "a játékóra szünetben is jár");
-  has(code, /<PauseMenu\b[\s\S]{0,80}open=\{paused && inRun\}/, "nincs PauseMenu a szünethez");
+  // Review #484: a WebGL-helyreállító réteg idejére a menü rejtve (a játék ettől még szünetben áll) — különben eltakarná a gombot.
+  has(code, /<PauseMenu\b[\s\S]{0,80}open=\{paused && inRun && !glLost\}/, "nincs PauseMenu a szünethez");
   has(code, /<GameShell\b[\s\S]{0,120}onAutoPause=\{pauseGame\}/, "nincs automatikus szünet (GameShell onAutoPause)");
   has(code, /exitPointerLock/, "szünetkor nem enged el a pointer lock");
   // A kvízréteg eltakarja a HUD szünetgombját — a kvízen is kell egy (#426 review-lelet).
   has(code, /data-testid="bc-quiz-pause"[\s\S]{0,120}onClick=\{pauseGame\}/, "a kvízrétegen nincs szünetgomb");
-  // A kvíz alatt a fizika nem lép (a játékos áll).
-  has(code, /if \(phaseRef\.current === "play"\) \{[\s\S]{0,900}stepPlayerPhysics\(/, "a kvíz alatt is lép a fizika");
+  // A játékos mozgása a „play” ágban, a fix lépésű hurokban (a kérdés alatt lassítva fut — terv 4.1/3).
+  has(code, /if \(phaseRef\.current === "play"\) \{[\s\S]{0,900}stepPlayerPhysics\(/, "a fizika nem a play ágban lép");
 });
 
 test("késleltetett írás: az elismerő felirat időzítője feliratonként él, nem törli a későbbit", () => {

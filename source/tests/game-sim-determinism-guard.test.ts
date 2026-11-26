@@ -134,6 +134,9 @@ const GAME_PAGE_ALLOW: Record<string, ReadonlyArray<{ re: RegExp; why: string }>
   ],
   // J2a: a Szólétra lapján nincs kivétel (a kapaszkodó-tétel sorsolása a menet seedelt RNG-jéből: `pickRngRef`).
   "WordLadderHuEn.tsx": [],
+  // J3a: a Kockavadász lapján nincs kivétel (világ, rúnaérc, kérdés-sorsolás a menet seedelt RNG-jéből; a felhő / por /
+  // időjárás kozmetikája a seedelt `fxRng`-ből).
+  "BlockCraftQuiz.tsx": [],
   // J1a: a Szökőár kérdés-választása a menet seedelt RNG-jéből (`pickRngRef`), a pálya a mag seedjéből.
   "TsunamiEscapeEnglish.tsx": [
     {

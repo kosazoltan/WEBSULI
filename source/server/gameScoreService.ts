@@ -8,6 +8,7 @@ import {
 } from "@shared/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { toLeaderboardEntries } from "./lib/leaderboard-entries";
+import { lobbyCatalog } from "@shared/game-score-keys";
 
 const ALLOWED_DIFFICULTIES = ["easy", "normal", "hard"] as const;
 export type GameDifficulty = (typeof ALLOWED_DIFFICULTIES)[number];
@@ -54,7 +55,8 @@ export async function getGameSyncEligibility(user: User | null | undefined): Pro
 }
 
 export async function listGamesCatalog() {
-  return await db.select().from(gamesCatalog).orderBy(gamesCatalog.sortOrder, gamesCatalog.id);
+  // D-04: a csak pontkulcs-sorok (pl. block-craft-quiz-v2) nem önálló játékok — a lobbiban nem jelennek meg.
+  return lobbyCatalog(await db.select().from(gamesCatalog).orderBy(gamesCatalog.sortOrder, gamesCatalog.id));
 }
 
 export async function getLeaderboard(gameId: string, difficulty: string, limit: number) {
