@@ -30,6 +30,8 @@ test("300 magon minden gyakorlófajta előfordul (számtárgyban); nem számtár
 test("számtárgy a tantárgynévből", () => {
   for (const s of ["Matematika", "matek", "Fizika", "Kémia", "Földrajz", "Természettudomány", "Informatika"]) assert.equal(numericSubject(s), true, s);
   for (const s of ["Magyar nyelv", "Történelem", "Angol", "Ének-zene"]) assert.equal(numericSubject(s), false, s);
+  // review #624: a támogatott tantárgynév-változatok (subjects.ts, catalog-taxonomy.ts) is számtárgyak.
+  for (const s of ["Digitális kultúra", "digitalis kultura", "Természetismeret", "termeszetismeret"]) assert.equal(numericSubject(s), true, s);
 });
 
 test("a szerző és a vázlat az öt új gyakorlófajtát ismeri, pontos spec-alakkal; a kártyák (V3) még nem", async () => {
@@ -44,4 +46,11 @@ test("a szerző és a vázlat az öt új gyakorlófajtát ismeri, pontos spec-al
   for (const [k, field] of [["trueFalseSeries", "statements"], ["highlight", "targets"], ["categorize", "categories"], ["numberLine", "tolerance"], ["estimate", "answer"]]) {
     assert.ok(catalog.includes(`"${k}"`) && catalog.includes(`"${field}"`), `${k}: ${field}`);
   }
+});
+
+test("review #624: a kiosztott tryKind-utasítás nem szűkít a régi három fajtára (highlight / estimate kiosztásnál ellentmondana)", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../server/studio/step-io.ts", import.meta.url), "utf8");
+  assert.ok(!src.includes("pontosan ezt a fajtát használja (dragSort, fillBlank vagy match)"));
+  assert.match(src, /pontosan ezt a fajtát használja/);
 });

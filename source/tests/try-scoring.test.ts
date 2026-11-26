@@ -100,8 +100,12 @@ test("review #609/#615/#617: a séma elutasítja a megoldhatatlan csúszkát —
   ];
   for (const [k, s] of solvable) assert.deepEqual(trySpecProblems(k, s), [], `${k} ${JSON.stringify(s)}: megoldható`);
 });
-test("review #612: a becslés leírás (prompt) nélkül nem érvényes — különben csak „Becsüld meg:” és egy csúszka látszik", () => {
-  assert.ok(trySpecProblems("estimate", { min: 0, max: 1000, answer: 400, unit: "m" }).some((m) => /leírás/.test(m)));
-  assert.ok(trySpecProblems("estimate", { prompt: "   ", min: 0, max: 1000, answer: 400 }).some((m) => /leírás/.test(m)));
-  assert.deepEqual(trySpecProblems("estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }), []);
+// SPEC-VÁLTOZÁS (review #624): a leírás-követelmény a GYÁRTÁS határára került (`generatedTryProblems`) — a korábban mentett,
+// leírás nélküli becslésblokkos lecke olvasható marad (a séma nem utasítja el), az új gyártás viszont nem adhat ilyet.
+test("review #612/#624: a becslés leírás (prompt) nélkül a gyártásban hibás, olvasáskor (mentett lecke) érvényes", async () => {
+  const { generatedTryProblems } = await import("../shared/try-scoring");
+  assert.ok(generatedTryProblems("estimate", { min: 0, max: 1000, answer: 400, unit: "m" }).some((m) => /leírás/.test(m)));
+  assert.ok(generatedTryProblems("estimate", { prompt: "   ", min: 0, max: 1000, answer: 400 }).some((m) => /leírás/.test(m)));
+  assert.deepEqual(generatedTryProblems("estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }), []);
+  assert.deepEqual(trySpecProblems("estimate", { min: 0, max: 1000, step: 10, answer: 400, unit: "m" }), [], "a mentett, leírás nélküli becslés olvasható");
 });
