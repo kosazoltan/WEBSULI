@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Lightbulb, RefreshCw, RotateCcw } from "lucide-react";
 
 import { readDecision, readDidYouKnow, readFlashcards, readFlipCard, readStepReveal, scoreDecision } from "@shared/try-scoring";
@@ -34,6 +34,10 @@ export function FlipCard({ spec, persisted, onPersist }: TryProps) {
 export function StepReveal({ spec, persisted, onPersist }: TryProps) {
   const s = readStepReveal(spec);
   const [shown, setShown] = useState(() => Math.max(1, persisted?.kind === "stepReveal" ? persisted.shown : 1));
+  // Review #619: az utolsó lépés felfedésekor a „Következő lépés” gomb eltűnik — a fókusz az Újrakezdésre kerül, nem vész el.
+  const restartRef = useRef<HTMLButtonElement>(null);
+  const [focusRestart, setFocusRestart] = useState(false);
+  useEffect(() => { if (focusRestart) { restartRef.current?.focus(); setFocusRestart(false); } }, [focusRestart]);
   if (s.steps.length < 2) return <Empty kind="stepReveal" />;
   const set = (n: number) => { setShown(n); onPersist?.({ kind: "stepReveal", shown: n }); };
   return (
@@ -43,8 +47,8 @@ export function StepReveal({ spec, persisted, onPersist }: TryProps) {
         {s.steps.slice(0, shown).map((step, i) => <li key={i} className="text-sm">{step}</li>)}
       </ol>
       <div className="flex gap-2">
-        {shown < s.steps.length && <Button className="min-h-11" onClick={() => set(shown + 1)}>Következő lépés ({shown}/{s.steps.length})</Button>}
-        {shown > 1 && <Button variant="ghost" className="min-h-11" onClick={() => set(1)} aria-label="Újrakezdés"><RotateCcw className="w-4 h-4" /></Button>}
+        {shown < s.steps.length && <Button className="min-h-11" onClick={() => { set(shown + 1); if (shown + 1 >= s.steps.length) setFocusRestart(true); }}>Következő lépés ({shown}/{s.steps.length})</Button>}
+        {shown > 1 && <Button ref={restartRef} variant="ghost" className="min-h-11" onClick={() => set(1)} aria-label="Újrakezdés"><RotateCcw className="w-4 h-4" /></Button>}
       </div>
     </div>
   );
@@ -54,9 +58,10 @@ export function DidYouKnow({ spec }: TryProps) {
   const d = readDidYouKnow(spec);
   if (!d.fact) return <Empty kind="didYouKnow" />;
   return (
-    <div className="border rounded-lg bg-amber-50 dark:bg-amber-950/30 p-4 flex gap-3" data-try="didYouKnow" role="note" aria-label="Tudtad?">
-      <Lightbulb className="w-5 h-5 text-amber-500 shrink-0" aria-hidden />
-      <div><p className="text-sm font-semibold">Tudtad?</p><p className="text-sm">{d.fact}</p>{d.source && <p className="text-xs text-muted-foreground mt-1">Forrás: {d.source}</p>}</div>
+    // Review #619: a háttér és a szöveg ugyanabból a (lecke-témás) tokenpárból jön — a sötét témában sem marad világos szöveg világos háttéren.
+    <div className="border rounded-lg bg-[var(--lesson-warn-bg,#FFF3CF)] text-[var(--lesson-warn-ink,#6D4800)] p-4 flex gap-3" data-try="didYouKnow" role="note" aria-label="Tudtad?">
+      <Lightbulb className="w-5 h-5 shrink-0" aria-hidden />
+      <div><p className="text-sm font-semibold">Tudtad?</p><p className="text-sm">{d.fact}</p>{d.source && <p className="text-xs opacity-90 mt-1">Forrás: {d.source}</p>}</div>
     </div>
   );
 }
@@ -64,6 +69,14 @@ export function DidYouKnow({ spec }: TryProps) {
 export function Decision({ spec, persisted, onPersist }: TryProps) {
   const d = readDecision(spec);
   const [choice, setChoice] = useState<number | null>(() => (persisted?.kind === "decision" ? persisted.choice : null));
+  // Review #619: az „Újra” gomb a visszajelzéssel együtt eltűnik — a fókusz a rádiócsoport Tab-megállójára tér vissza.
+  const groupRef = useRef<HTMLDivElement>(null);
+  const [focusGroup, setFocusGroup] = useState(false);
+  useEffect(() => {
+    if (!focusGroup) return;
+    groupRef.current?.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus();
+    setFocusGroup(false);
+  }, [focusGroup]);
   if (!d.situation || d.options.length < 2) return <Empty kind="decision" />;
   const pick = (i: number | null) => { setChoice(i); onPersist?.({ kind: "decision", choice: i }); };
   const result = choice === null ? null : scoreDecision(spec, choice);
@@ -71,15 +84,17 @@ export function Decision({ spec, persisted, onPersist }: TryProps) {
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="decision" role="group" aria-label={`Döntés: ${d.situation}`}>
       <p className="text-sm font-medium">{d.situation}</p>
       {/* Review #609: valódi rádiócsoport (egy Tab-megálló, a nyilak léptetnek és választanak) — a V2a közös RadioRow-ja. */}
-      <RadioRow label="Mit választasz?" options={d.options.map((_, i) => i)} value={choice} onSelect={pick}
-        optionLabel={(i) => d.options[i].text} className="flex-col" />
+      <div ref={groupRef}>
+        <RadioRow label="Mit választasz?" options={d.options.map((_, i) => i)} value={choice} onSelect={pick}
+          optionLabel={(i) => d.options[i].text} className="flex-col" />
+      </div>
       {choice !== null && d.options[choice] && (
         <div className="space-y-1" aria-live="polite">
           <p className="text-sm"><span className="font-medium">Következmény: </span>{d.options[choice].consequence}</p>
           <span role="status" data-testid="try-verdict" data-verdict={result!.verdict} className={result!.verdict === "teljes" ? "text-emerald-600 text-sm" : "text-red-500 text-sm"}>
             {result!.verdict === "teljes" ? "Helyes döntés!" : "Van jobb döntés — próbáld újra!"}
           </span>
-          <Button variant="ghost" className="min-h-11" onClick={() => pick(null)} aria-label="Újra"><RotateCcw className="w-4 h-4" /></Button>
+          <Button variant="ghost" className="min-h-11" onClick={() => { pick(null); setFocusGroup(true); }} aria-label="Újra"><RotateCcw className="w-4 h-4" /></Button>
         </div>
       )}
     </div>

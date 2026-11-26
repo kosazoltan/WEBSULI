@@ -171,18 +171,19 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     const f = readFlipCard(spec);
     if (!f.front || !f.back) p.push("A fordítókártyának eleje és hátoldala is kell.");
   } else if (kind === "stepReveal") {
+    // Review #619: a hiányos (üres / nem szöveges) lépés nem tűnhet el csendben — a nyers elemszám is egyezzen.
     const n = readStepReveal(spec).steps.length;
-    if (n < 2 || n > 8) p.push("A lépésenkénti felfedés 2–8 lépésből áll.");
+    if (n < 2 || n > 8 || n !== arr((spec as { steps?: unknown } | null)?.steps).length) p.push("A lépésenkénti felfedés 2–8 lépésből áll, mindegyik szöveggel.");
   } else if (kind === "didYouKnow") {
     if (!readDidYouKnow(spec).fact) p.push("A „Tudtad?” kártyának tény kell.");
   } else if (kind === "decision") {
     const d = readDecision(spec);
     if (!d.situation) p.push("A döntéshez helyzetleírás kell.");
-    if (d.options.length < 2 || d.options.length > 4) p.push("A döntés 2–4 lehetőséget kér, mindegyik következménnyel.");
+    if (d.options.length < 2 || d.options.length > 4 || d.options.length !== arr((spec as { options?: unknown } | null)?.options).length) p.push("A döntés 2–4 lehetőséget kér, mindegyik szöveggel és következménnyel.");
     if (d.options.filter((o) => o.best).length !== 1) p.push("A döntésnek pontosan egy legjobb lehetősége van.");
   } else if (kind === "flashcards") {
     const n = readFlashcards(spec).cards.length;
-    if (n < 2 || n > 12) p.push("A villámkártya-csomag 2–12 kártyából áll.");
+    if (n < 2 || n > 12 || n !== arr((spec as { cards?: unknown } | null)?.cards).length) p.push("A villámkártya-csomag 2–12 kártyából áll, mindegyiknek eleje és hátoldala van.");
   } else if (kind === "estimate") {
     const e = readEstimate(spec);
     const s = (spec ?? {}) as Record<string, unknown>;

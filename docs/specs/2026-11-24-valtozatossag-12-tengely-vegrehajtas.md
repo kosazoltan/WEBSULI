@@ -145,6 +145,11 @@ Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compare
 - A V2a squash-beolvadása (#615) után az ág egymásra épített volt: `feat/v3a-kartyak-v2` az `origin/main`-ről, a V3a saját változása három commitban (utasítás → RED → kód); a #609 lezárva, utódja ez a PR.
 - **Döntés rádiócsoport (review #609):** a döntés lehetőségei a V2a közös `RadioRow`-ját használják — egy Tab-megálló (kijelölt / első), a nyilak léptetnek és választanak. RED: `lesson-try-cards.spec.ts` „döntés: valódi rádiócsoport” (a javítás előtt a `tabindex` hiányzott).
 - A #609 többi szála (csúszka-megoldhatóság, célszám, bővült mentés) a V2a-ban (#615, `b01fa85e`) már javítva a mainen.
+- **Review #619:** (1) a hiányos lépés / lehetőség / kártya (üres, nem szöveges, következmény vagy hátoldal nélküli) érvénytelen — a séma a
+  nyers elemszámot is nézi, nem tűnhet el csendben a megjelenítőben; (2) az utolsó lépés felfedése után az Újrakezdés, a döntés Újra gombja
+  után a rádiócsoport kapja a fókuszt; (3) a „Tudtad?” kártya háttere és szövege ugyanabból a lecke-témás tokenpárból
+  (`--lesson-warn-bg` / `--lesson-warn-ink`) jön — a 11–12. évfolyam sötét témájában a kontraszt 1,04 volt. RED: `try-cards.test.ts`,
+  `lesson-try-cards.spec.ts` (+2).
 
 ### V2a — review #615 / #609 / #617 (2026-11-25)
 - **Megoldhatatlan csúszka:** a séma (`trySpecProblems`) a számegyenesnél és a becslésnél is ellenőrzi, hogy a `min + k·step` rácson (≤ max) van-e teljes pontot érő érték (`sliderHasFullScore`, a célhoz legközelebbi két rácspont); ha nincs, elutasít.
