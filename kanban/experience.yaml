@@ -75,3 +75,9 @@ cards:
     observed: "Hermes szerepprofilok (architect/implementer/reviewer/terv-ellenorzo) config.yaml skills.external_dirs egy nem letezo skillre (engineering-working-method) mutat; a SOUL.md-k minden korben ~2 KB kozos protokollt ismeteltek"
     fix: "kozos szabalyok az agent-result-protocol skillbe (external_dirs-en at mind a negy profilban), SOUL.md-k 3-3.9 KB-ra csokkentve"
     rule: "Szerep-SOUL.md csak identitas + szerep-specifikus szabaly; kozos eljaras skillbe; external_dirs bejegyzest hermes -p <profil> skills list-tel ellenorizni"
+  - id: 13
+    status: rule
+    date: "2026-11-26"
+    observed: "deploy megölte a tulajdonos élő gyártását (2026-11-26 17:11 és 17:18)"
+    fix: "gyartas-szunet.sh őr a merge-one.sh-ban"
+    rule: "élő gyártás alatt nincs merge/deploy"
