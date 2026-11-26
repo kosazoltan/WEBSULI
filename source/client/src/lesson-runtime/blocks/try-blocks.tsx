@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
 import { Categorize, Estimate, Highlight, NumberLine, TrueFalseSeries } from "./try-blocks-v2";
 import { Decision, DidYouKnow, Flashcards, FlipCard, StepReveal } from "./try-cards";
+import { CrosswordBlock, WordSearch } from "./try-word-grid";
 
 /**
  * LS-4 — the three planned hands-on kinds (master plan §4).
@@ -280,4 +281,7 @@ export const TRY_REGISTRY: Record<TryKind, ComponentType<TryProps>> = {
   didYouKnow: DidYouKnow,
   decision: Decision,
   flashcards: Flashcards,
+  // V5a
+  wordSearch: WordSearch,
+  crossword: CrosswordBlock,
 };

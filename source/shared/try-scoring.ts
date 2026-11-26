@@ -10,11 +10,14 @@
  * - estimate: relatív eltérés ≤ 5% → 2; ≤ 15% → 1; különben 0 (max 2).
  * Ítélet: pont = max → „teljes”; 0 < pont < max → „részleges”; 0 → „rossz”.
  */
+import { wordGridProblems } from "./word-grid";
 export const V2_TRY_KINDS = ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"] as const;
 export type V2TryKind = (typeof V2_TRY_KINDS)[number];
 /** V3a: kártyaformák és döntés–következmény (a `try` keretben; pontozás csak a döntésnél: legjobb = 1, más = 0). */
 export const V3_TRY_KINDS = ["flipCard", "stepReveal", "didYouKnow", "decision", "flashcards"] as const;
 export type V3TryKind = (typeof V3_TRY_KINDS)[number];
+/** V5a: szókereső és keresztrejtvény (rácsgenerátor: shared/word-grid.ts). */
+export const V5_TRY_KINDS = ["wordSearch", "crossword"] as const;
 
 export type Verdict = "teljes" | "részleges" | "rossz";
 export type TryScore = { points: number; max: number; verdict: Verdict };
@@ -167,6 +170,8 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     if (!(n.tolerance > 0) || n.tolerance > (n.max - n.min) / 4) p.push("A tűrés pozitív, és legfeljebb a tartomány negyede.");
     else if (p.length === 0 && !sliderHasFullScore(n.min, n.max, n.step, n.target, (v) => scoreNumberLine(spec, v).verdict === "teljes"))
       p.push("A csúszka lépésközével nem érhető el teljes pontot érő érték — a lépésköz legfeljebb a tűrés kétszerese legyen, és a cél essen rácspont közelébe.");
+  } else if (kind === "wordSearch" || kind === "crossword") {
+    p.push(...wordGridProblems(kind, spec));
   } else if (kind === "flipCard") {
     const f = readFlipCard(spec);
     if (!f.front || !f.back) p.push("A fordítókártyának eleje és hátoldala is kell.");
