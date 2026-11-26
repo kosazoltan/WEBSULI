@@ -194,6 +194,10 @@ Dokumentált spec-változás: a V2a tesztje a hirdetett fajtákat a régi hárma
 - **Szójáték:** nyelvi leckénél (a tantárgyból, `lessonLanguage`) új tengely `wordGame` (szókereső / keresztrejtvény, a magból,
   mentve); szerződés: egy nem első fejezetbe a lecke idegen szavaival; kapu (`wordGameProblems`, ≥ 3 fejezet).
 - A sorozatjelvény (több lecke egymás után) a jutalmazási rendszert érinti — külön szelet (V5c), tulajdonosi döntéssel.
+- **Újraépítés és a #612 tanulsága (2026-11-26):** a V3b és a V5a utódja fölé épült újra (`feat/v5b-szojatek-boss-v2`). A szójáték a kártyához
+  hasonlóan a program által kiosztott blokksorban kap helyet (`placeVarietyCards`: nem első fejezet, nem a kártya és nem a villámkártya
+  helye), a boss- és a szójáték-szerződés csak ≥ 3 fejezetnél (`WORD_GAME_MIN_SECTIONS`, a kapuval egyezően) kerül a promptba.
+  RED: `lesson-boss-wordgame.test.ts` (+2).
 1. RED: `source/tests/lesson-boss-wordgame.test.ts`, `source/tests/lesson-boss.spec.ts`. 2. GREEN: `shared/lesson-schema.ts`,
    `shared/lesson-variety-axes.ts`, `server/studio/single-run/engine.ts`, `server/studio/pipeline-store.ts`, `client/src/lesson-runtime/LessonRuntime.tsx`.
 
