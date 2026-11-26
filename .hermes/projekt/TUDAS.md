@@ -71,5 +71,5 @@ _Generált (helyi LLM retrókból, deduplikálva, legújabb elöl; max. 40)._
 - P-020: játékosfiók egyediség postafiók szerint — normalizált cím (Gmail-pont és +címke levágva) + egyedi index.
 - P-063: Kockavadász J3a verziózott új pontskála; a régi ranglista/rekord külön, verziózva marad.
 - P-007: a kompakt kabalasáv ÉS a maki prototípus is marad kísérletként.
-- JK (2026-11-26): a joystickos játékok kezessége KÖZÖS preferencia (`websuli.game.hand`, `game-engine/handedness.ts`), a tükrözés CSS-ből (`data-hand`); a Tornádó és a Brainrot régi saját kulcsa tartalék és tovább íródik.
+- JK (2026-11-26, TERVEZETT — a `feat/jatek-kezesseg` PR beolvadásáig NEM él): a joystickos játékok kezessége közös preferencia lesz (`websuli.game.hand`, `game-engine/handedness.ts`), a tükrözés CSS-ből (`data-hand`); a Tornádó (`progress.settings.leftHanded`) és a Brainrot (`websuli.brainrot.hand`) saját tárolója tartalék marad és tovább íródik. Addig a beállítás játékonként külön él.
 - 2026-11-26: a Kockavadász „vak K1/K2” E2E terhelésfüggő (FLAKE-BC-K1K2) — nem érintett PR-on mérés után `gh run rerun --failed`; a kupon-módú első kérdés versenye: FLAKE-BC-M5.

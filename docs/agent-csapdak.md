@@ -1331,8 +1331,10 @@ Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado
   repository”); a leállítottnak hitt régi láncok (futó másolat) tovább éltek, ugyanarra a PR-ra párhuzamos merge-one-nal.
 - **Gyökérok:** a futtató a másolat könyvtárából indít — a `cd <munkafa>` előtti `gh pr view/list` `-R` nélkül üres; a külső
   bash `taskkill /T` nem mindig viszi a `<x>-chain.futas.<n>` másolatot.
-- **Szabály:** minden `cd` előtti `gh`-ba `-R kosazoltan/WEBSULI`; leállítás + ellenőrzés a Hermes-agent
-  `scripts/websuli-lanc/lanc-leallit.ps1`-gyel (`-DryRun`). Új JSX-attribútum a meglévő sorozat VÉGÉRE (a forrás-őrök a sorrendet
+- **Szabály:** minden `cd` előtti `gh`-ba `-R kosazoltan/WEBSULI`. Leállítás: `lanc-leallit.ps1 [-Keep '<megtartandó>']` (KAPCSOLÓ
+  NÉLKÜL öl, fával); utána ellenőrzés `lanc-leallit.ps1 -DryRun -Keep 'NINCS'` (csak listáz — üres kimenet = nem fut régi lánc).
+  Láncot egyetlen operátor (az ügynök) indít, egymás után; a nehéz lépéseket a `nehez.sh` gépszintű zárja sorosítja, a merge-one
+  pedig `--match-head-commit`-tel fut, így egy esetleges kettős indítás sem olvaszt be más fejet. Új JSX-attribútum a meglévő sorozat VÉGÉRE (a forrás-őrök a sorrendet
   is rögzítik); lap-/játékforrás módosítása után a lánc előtt teljes `npm test`.
 
 ## C-102 — Terhelésfüggő E2E-n igazolatlan „javítás” (2026-11-26)
