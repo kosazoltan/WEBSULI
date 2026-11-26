@@ -90,7 +90,8 @@ const KIND_TRY_POOL: Record<Exclude<SectionKind, "any">, readonly TryKind[]> = {
 const TRY_ROTATION: readonly TryKind[] = ["dragSort", "fillBlank", "match", "trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"];
 /** Számtárgy a tantárgynévből (a számegyenes és a becslés csak itt). */
 export function numericSubject(subject: string): boolean {
-  return /mat|fizik|kémi|kemi|földrajz|foldrajz|természettud|termeszettud|informatik/i.test(subject.normalize("NFC"));
+  // Review #624: a támogatott névváltozatok (Digitális kultúra, Természetismeret) is számtárgyak.
+  return /mat|fizik|kémi|kemi|földrajz|foldrajz|természettud|termeszettud|természetismeret|termeszetismeret|informatik|digitális kultúra|digitalis kultura/i.test(subject.normalize("NFC"));
 }
 export type TryOptions = { numeric?: boolean };
 
