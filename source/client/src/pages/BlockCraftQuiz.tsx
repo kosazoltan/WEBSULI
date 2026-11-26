@@ -2403,9 +2403,22 @@ export default function BlockCraftQuiz() {
           perf = mod.createPerfOverlay({ renderer, host, tier, title: "Kockavadász", controls: perfControls, getReactRenders: () => renderCountRef.current,
             isRunning: () => runningRef.current,
             // A panel a teljes felső HUD alá kerül — a sort törő súgó és bányászjelzés alá is (2026-11-21 vak kör L4).
-            getTopInset: () => {
+            getTopInset: (reading) => {
               const hud = host.parentElement?.querySelector('[data-testid="bc-top-hud"]') ?? document.querySelector('[data-testid="bc-top-hud"]');
-              return hud ? hud.getBoundingClientRect().bottom - host.getBoundingClientRect().top + 6 : 4;
+              if (!hud) return 4;
+              const hostTop = host.getBoundingClientRect().top;
+              // KAPU-WIN: a „Számok” nézetben a sort törő, nem érinthető súgók (cél-, bányászjelzés) nem tolják le a panelt — csak a
+              // HUD többi elemének alja számít (a pályajelző sor felette marad).
+              if (reading) {
+                let bottom = 0;
+                for (const el of Array.from(hud.querySelectorAll<HTMLElement>("*"))) {
+                  if (el.children.length > 0 || el.closest('[data-testid="bc-goal-hint"], [data-testid="bc-mine-hint"]')) continue;
+                  const r = el.getBoundingClientRect();
+                  if (r.width > 0 && r.height > 0) bottom = Math.max(bottom, r.bottom);
+                }
+                if (bottom > 0) return bottom - hostTop + 6;
+              }
+              return hud.getBoundingClientRect().bottom - hostTop + 6;
             },
           });
         },
