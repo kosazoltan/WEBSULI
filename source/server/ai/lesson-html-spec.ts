@@ -4,6 +4,7 @@ import { LESSON_OPENER_HTML_CONTRACT, PLAYFUL_QUESTIONING_CONTRACT, lessonOpener
 import { lessonOpenerEnabled } from "../studio/lesson-opener-flag";
 import { HTML_LESSON_DATA_CONTRACT } from "../../shared/lesson-html-data";
 import { HTML_INTERACTION_CONTRACT } from "../../shared/lesson-interactions";
+import { PRACTICE_TEACHING_RULE } from "../../shared/practice-rules";
 /**
  * Tananyag Készítő v7.4 — a HTML-tananyagot gyártó AI-utak KÖZÖS specifikációja.
  *
@@ -253,7 +254,7 @@ export const LESSON_HTML_SPEC_V74 = `# TANANYAG KÉSZÍTŐ v7.4 — KÖTELEZŐ S
 ## 4 OLDALAS STRUKTÚRA (KÖTELEZŐ)
 | Tab | Cím | Tartalom |
 |-----|-----|----------|
-| 1 | 📖 Tananyag | Részletes lexikális tudás (+ szószedet idegen nyelvnél) |
+| 1 | 📖 Tananyag | A szükséges fogalmi tudás és annak alkalmazása konkrét példákon (+ szószedet idegen nyelvnél) |
 | 2 | 🧠 Módszerek | Mind a tíz módszertípus, legalább két kapukérdés |
 | 3 | ✏️ Feladatok | Fogalomfedő bank, korosztályhoz illő rövid kör |
 | 4 | 🎯 Kvíz | Felidézés és alkalmazás minden fogalomhoz; 3–4 válasz |
@@ -607,7 +608,8 @@ export function lessonHtmlSpecPrompt(opts: LessonSpecPromptOptions): string {
 export function lessonHtmlSpecParts(opts: LessonSpecPromptOptions): { theme: string; spec: string } {
   const theme = opts.theme ?? pickLessonTheme(opts.seed, opts.classroom, opts.subjectHint);
   const themeText = lessonThemePrompt(theme, opts.classroom);
-  const spec = `${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${HTML_LESSON_DATA_CONTRACT}`;
+  // TANANYAG-GYAKORLATI P3: a HTML-út is a gyakorlatiassági szabályt kapja (a bank-szabály a LESSON_METHOD_CONTRACT-ban).
+  const spec = `${LESSON_HTML_SPEC_V74}\n\n${LESSON_METHOD_CONTRACT}\n\n${PRACTICE_TEACHING_RULE}\n\n${HTML_LESSON_DATA_CONTRACT}`;
   // Spec 2026-11-08-nyitomese-jatekos-kerdezes (S2): a statikus spec évfolyamfüggetlen marad (KV-cache), a lépcső a téma-részbe kerül.
   return lessonOpenerEnabled()
     ? { theme: `${themeText}\n${lessonOpenerStageLine(opts.classroom)}`, spec: `${spec}\n\n${LESSON_OPENER_HTML_CONTRACT}\n\n${PLAYFUL_QUESTIONING_CONTRACT}` }

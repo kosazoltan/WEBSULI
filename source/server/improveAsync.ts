@@ -102,7 +102,7 @@ A cél: a tananyag 4-oldalas struktúrába alakítása, kognitív elemekkel, fel
 Minden javított tananyag 4 oldalt (tab-ot) KELL tartalmazzon:
 | Tab | Cím | Tartalom |
 |-----|------|----------|
-| 1 | 📖 Tananyag | Részletes lexikális tudás, fejezetek, info-boxok |
+| 1 | 📖 Tananyag | A szükséges fogalmi tudás és alkalmazása konkrét példákon, fejezetek, info-boxok |
 | 2 | 🧠 Módszerek | Min. 10 kognitív aktivációs elem |
 | 3 | ✏️ Feladatok | 45 feladat bankban, 15 véletlenszerűen megjelenítve |
 | 4 | 🎯 Kvíz | 75 kérdés bankban, 25 véletlenszerűen, 3 válasz (A/B/C) |
@@ -130,7 +130,7 @@ ${specBlock}
 ## TARTALOM MEGŐRZÉSE (NAGYON FONTOS!)
 1. Az eredeti tananyag TELJES szöveges tartalmát MARADÉKTALANUL őrizd meg
 2. NE hagyj ki semmilyen információt, bekezdést, listát vagy adatot
-3. A struktúrát javítsd, de a tartalom maradjon változatlan
+3. A struktúrát javítsd, de a tartalom maradjon változatlan — KIVÉVE a feladatlapra / felvételire vonatkozó meta-kérdést (pontozás, feladattípus, felépítés): ezt ne őrizd meg, hanem cseréld a tanított tartalomra vonatkozó gyakorlati tételre (TANANYAG-GYAKORLATI)
 4. BŐVÍTSD ki feladatokkal, kvízekkel, kognitív elemekkel
 5. A téma és stílus NE változzon
 
