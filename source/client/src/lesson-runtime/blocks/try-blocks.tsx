@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { TrySnapshot } from "../useLessonProgress";
 import { Categorize, Estimate, Highlight, NumberLine, TrueFalseSeries } from "./try-blocks-v2";
+import { Decision, DidYouKnow, Flashcards, FlipCard, StepReveal } from "./try-cards";
 
 /**
  * LS-4 — the three planned hands-on kinds (master plan §4).
@@ -273,4 +274,10 @@ export const TRY_REGISTRY: Record<TryKind, ComponentType<TryProps>> = {
   categorize: Categorize,
   numberLine: NumberLine,
   estimate: Estimate,
+  // V3a
+  flipCard: FlipCard,
+  stepReveal: StepReveal,
+  didYouKnow: DidYouKnow,
+  decision: Decision,
+  flashcards: Flashcards,
 };

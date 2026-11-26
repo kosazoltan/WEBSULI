@@ -18,7 +18,12 @@ export type TrySnapshot =
   | { kind: "highlight"; selected: number[]; checked: boolean }
   | { kind: "categorize"; picks: Array<string | null>; checked: boolean }
   | { kind: "numberLine"; value: number; checked: boolean }
-  | { kind: "estimate"; value: number; checked: boolean };
+  | { kind: "estimate"; value: number; checked: boolean }
+  // V3a: kártyák és döntés
+  | { kind: "flipCard"; flipped: boolean }
+  | { kind: "stepReveal"; shown: number }
+  | { kind: "decision"; choice: number | null }
+  | { kind: "flashcards"; index: number; flipped: boolean };
 
 export type LessonProgressSnapshot = {
   v: typeof LESSON_PROGRESS_VERSION;
