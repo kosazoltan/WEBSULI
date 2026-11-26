@@ -47,7 +47,7 @@ export function mentionsStem(text, stem) {
  * nevét említő spec-ek. A változott spec-fájlok mindig benne vannak.
  * @returns {{ runs: { label: string, specs: string[], grep?: string }[], warning?: string }}
  */
-export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed }) {
+export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed, full = false }) {
   const runs = [];
   const ids = classification.allGames ? Object.keys(cfg.games ?? {}) : classification.games;
   const changedSpecs = changed.filter((f) => /^source\/tests\/[^/]+\.spec\.ts$/.test(f)).map((f) => basename(f));
@@ -56,8 +56,19 @@ export function pickE2eSpecs({ classification, specFiles, readSpec, cfg, changed
     runs.push({ label: `mobil mérő (${classification.allGames ? 'minden játék' : ids.join(', ')})`, specs: [mobile], grep: classification.allGames ? undefined : ids.join('|') });
     const res = ids.map((id) => new RegExp(cfg.games[id], 'i'));
     const own = specFiles.filter((s) => s !== mobile && res.some((re) => re.test(s)));
-    const rest = [...new Set([...own, ...(cfg.alwaysGameSpecs ?? []), ...changedSpecs.filter((s) => s !== mobile)])].sort();
-    runs.push({ label: 'játék-spec-ek + meta-mérő + lejárt kupon', specs: rest });
+    if (full) {
+      const rest = [...new Set([...own, ...(cfg.alwaysGameSpecs ?? []), ...changedSpecs.filter((s) => s !== mobile)])].sort();
+      runs.push({ label: 'játék-spec-ek + meta-mérő + lejárt kupon', specs: rest });
+      return { runs };
+    }
+    // KAPU-SZUKITES (docs/specs/2026-11-26-kapu-szukites.md): a teljes kör a CI-ben fut minden PR-on. Helyben egy játéknál a játék
+    // saját spec-jei; közös motornál csak a változott tövet ÉMLÍTŐ játék-spec-ek — mindkét esetben a változott spec-ek is.
+    const stems = changed.filter((f) => /^source\/client\/src\/.+\.(?:tsx?|css)$/.test(f)).map(stemOf).filter((s) => s.length >= 4);
+    const picked = classification.allGames
+      ? specFiles.filter((s) => s !== mobile && res.some((re) => re.test(s)) && stems.some((st) => mentionsStem(readSpec(s), st)))
+      : own;
+    const rest = [...new Set([...picked, ...changedSpecs.filter((s) => s !== mobile)])].sort();
+    if (rest.length) runs.push({ label: 'játék-spec-ek (szűkített — teljes kör a CI-ben)', specs: rest });
     return { runs };
   }
   if (classification.ui || changedSpecs.length) {
@@ -176,7 +187,9 @@ async function main() {
   const cls = classifyChanges(changed, cfg);
   const dockerOk = () => exec('docker', ['version', '--format', '{{.Server.Version}}'], { cwd: root, timeoutMs: 30_000 }).code === 0;
   const specFiles = readdirSync(join(src, 'tests')).filter((f) => f.endsWith('.spec.ts')).sort();
-  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed });
+  const { runs, warning } = pickE2eSpecs({ classification: cls, specFiles, readSpec: (s) => { /* olvashatatlan spec → '' → legfeljebb kevesebb UI-spec + WARN (ártalmatlan) */ try { return readFileSync(join(src, 'tests', s), 'utf8'); } catch { return ''; } }, cfg, changed,
+    // KAPU-SZUKITES: GATE_E2E_FULL=1 vagy gates.config.json `e2eFull: true` → a régi, teljes helyi kiválasztás.
+    full: process.env.GATE_E2E_FULL === '1' || cfg.e2eFull === true });
 
   if (warning) gate.add('böngészős út (UI)', STATUS.WARN, warning);
   if (!runs.length && !warning) gate.add('böngészős út (CI-azonos)', STATUS.SKIP, 'nincs játék- / UI-változás');
