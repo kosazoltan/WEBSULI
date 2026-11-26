@@ -21,6 +21,12 @@ A JK (#kezesség) `gate:pr`-je kétszer ugyanazon bukott; a mainen (`31e4c316`) 
    (2 + 1) állnak, nem egyben — két sor, a jármű és az előtte lévő út szabad marad. Mérő-tétel: `forceState({ question: true,
    answers: "medium" })` a bukott esettel azonos címkékkel.
 
+3. **Mobil mérő M10, Tornádó 844×390** (a mainen is ~18-ból 1 bukás): a mozgó táblára adott EGÉR-koppintásnál (asztali
+   gép, és a teszt is egérrel kattint) a lenyomás és a felengedés között a tábla elmozdul, a `pointerup` már MÁS elemre esik —
+   egérnél nincs implicit pointer capture (érintésnél van, lásd `pointerTap.ts` 2. pont) —, a választás elvész. Javítás:
+   `pointerTapHandlers` lenyomáskor `setPointerCapture`-t kér, így a felengedés mindig a lenyomott célhoz jut (a „nem mozdult
+   ujj” szabály így egérrel is érvényesül). A tesztet nem lazítjuk (review #622: újrakattintás helyett valódi javítás).
+
 ## Elfogadás
 - A két spec a kapu beállításával (`playwright.gate.local.mts`) zöld; a Tornádó K3 a közepes címkés mérő-tétellel is.
 - A „Kapcsolók” nézet és a vak kör L4 (álló 360×640, a panel a teljes HUD alatt) tesztje változatlanul zöld.

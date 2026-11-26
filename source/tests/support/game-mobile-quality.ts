@@ -464,20 +464,10 @@ export function defineGameMobileQuality(c: GameMobileCase): void {
             await stubVibrate(page);
             await startPlaying(page, c);
             await openQuiz(page, c);
-            const vibrations = () => page.evaluate(() => (window as unknown as { __vibrateCalls?: unknown[] }).__vibrateCalls ?? []);
-            const target = page.locator(`${c.quizScope} [data-correct="true"]`).first();
-            if (c.quizMoving) {
-              // KAPU-WIN (mérve: Tornádó 844×390, SwiftShader — 18 futásból 1 bukás a mainen is): a kamerával együtt mozgó tábla a
-              // helyzet kiolvasása és a koppintás között a lassú szoftveres renderelésen elmozdulhat, a koppintás mellé megy. A mérés
-              // a rezgést nézi, nem a célzást: legfeljebb 4 koppintás, mindegyik a cél akkori közepére, amíg a jó válasz nem számít.
-              for (let k = 0; k < 4 && !(await vibrations()).includes(18); k++) {
-                await target.click({ force: true }).catch(() => undefined);
-                await expect.poll(vibrations, { timeout: 1_500 }).toContainEqual(18).catch(() => undefined);
-              }
-            } else {
-              await target.click();
-            }
-            await expect.poll(vibrations, { timeout: 5_000 }).toContainEqual(18);
+            await page.locator(`${c.quizScope} [data-correct="true"]`).first().click(c.quizMoving ? { force: true } : undefined);
+            await expect
+              .poll(() => page.evaluate(() => (window as unknown as { __vibrateCalls?: unknown[] }).__vibrateCalls ?? []), { timeout: 5_000 })
+              .toContainEqual(18);
           });
         }
 

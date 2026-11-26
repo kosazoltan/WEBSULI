@@ -68,3 +68,31 @@ test("pointerTapHandlers: felengedésre választ, `click` csak billentyűzetnél
   eaten.onPointerUp(ev(5, 140, 130));
   assert.equal(taps, 2, "az elnyelt lenyomás felengedése nem választ");
 });
+
+test("KAPU-WIN: lenyomáskor explicit pointer capture — egérrel is a lenyomott cél kapja a felengedést (a cél elmozdulhat)", () => {
+  const t = createPointerTapTracker();
+  const captured: number[] = [];
+  let picked = 0;
+  const h = pointerTapHandlers(t, 0, () => picked++);
+  const target = { getBoundingClientRect: () => RECT, setPointerCapture: (id: number) => captured.push(id) };
+  h.onPointerDown({ pointerId: 7, clientX: 140, clientY: 130, currentTarget: target, stopPropagation: () => undefined });
+  assert.deepEqual(captured, [7], "a lenyomás lefoglalja a mutatót");
+  const moved: TapRect = { left: 300, top: 300, right: 380, bottom: 360 };
+  h.onPointerUp({ pointerId: 7, clientX: 140, clientY: 130, currentTarget: { getBoundingClientRect: () => moved }, stopPropagation: () => undefined });
+  assert.equal(picked, 1);
+});
+
+test("KAPU-WIN: a pointer capture hibája (pl. már felengedett mutató) nem akasztja meg a koppintást", () => {
+  const t = createPointerTapTracker();
+  let picked = 0;
+  const h = pointerTapHandlers(t, 0, () => picked++);
+  const target = {
+    getBoundingClientRect: () => RECT,
+    setPointerCapture: () => {
+      throw new Error("InvalidPointerId");
+    },
+  };
+  h.onPointerDown({ pointerId: 3, clientX: 140, clientY: 130, currentTarget: target, stopPropagation: () => undefined });
+  h.onPointerUp({ pointerId: 3, clientX: 140, clientY: 130, currentTarget: target, stopPropagation: () => undefined });
+  assert.equal(picked, 1);
+});
