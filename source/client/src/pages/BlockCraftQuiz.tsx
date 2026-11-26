@@ -3433,6 +3433,8 @@ export default function BlockCraftQuiz() {
           oreRect: oreScreenRect(),
           questionKey: view?.presentation?.question.key ?? null,
           questionSource: view?.presentation?.question.source ?? null,
+          // FLAKE-BC-M5: 1 = a kupon-mód él (kupon aktív ÉS a lecke-tételek a bankban) — a kupon-szabály innen érvényes.
+          couponOnly: provider.couponOnly ? 1 : 0,
           freeLocks: freeLocksRef.current,
           renders: renderCountRef.current,
           lastTap: lastTapRef.current,
