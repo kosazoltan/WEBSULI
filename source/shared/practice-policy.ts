@@ -34,6 +34,8 @@ const SPORT = /(kosár|labd|foci|futball|meccs|mérkőzés|gól|büntető|tenisz
 /** A feladatlap szerkezetére kérdező erős alak — konkrét adat (szám, idézet) mellett is meta (review #625). */
 const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|felépítés|hányadik feladat)/;
 const POINT_OPTION = /^\d+(?:[,.]\d+)? ?pont/;
+/** Pontszerzésre kérdez (nem a geometriai pontra): „hány pontot kap / ér”, „pont jár”, „pontot szerez”. */
+const SCORE_ASK = /(pontot (?:kap|ér|szerez|kaphat)|pont jár|hány pontot\b|mennyit ér|(?<![\p{L}])ér(?![\p{L}]))/u;
 
 /** Erős fogalmi (felidéző) alakok — a konkrét anyag (idézet) jelenléte sem teszi alkalmazássá: a jelentés felidézése fogalmi. */
 const RECALL =
@@ -65,7 +67,8 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   const concrete = (t.match(/\d+/g) ?? []).length >= 2 && !/\bpont/.test(t);
   if (!concrete && !QUOTED.test(text) && META_CONTEXT.test(t) && META_ASK.test(t)) return v("meta", "a feladatlap / vizsga szerkezetére kérdez");
   if (!concrete && META_CONTEXT.test(t) && /\bpont/.test(t) && META_ASK.test(t)) return v("meta", "a feladatlap pontozására kérdez");
-  if (options.length >= 2 && options.every((o) => POINT_OPTION.test(o)) && !DIGIT.test(t) && !SPORT.test(t)) return v("meta", "pontérték-opciók konkrét adat nélkül");
+  // review #629: csak PONTSZERZÉSRE kérdezve (pontot kap / ér / jár / szerez) — a „Hány pont határoz meg egy egyenest?” geometria.
+  if (options.length >= 2 && options.every((o) => POINT_OPTION.test(o)) && !DIGIT.test(t) && !SPORT.test(t) && SCORE_ASK.test(t)) return v("meta", "pontérték-opciók konkrét adat nélkül");
 
   // Képlet / definíció hiányzó tagja: felidézés (review #625); egyéb hiányos szöveg kiegészítése alkalmazás.
   // review #625/2: az egyenlőségjel csak SZÁM NÉLKÜLI (szimbolikus) képletnél felidézés — a „12 + ___ = 20” konkrét számolás.
@@ -90,8 +93,26 @@ export function classifyQuizItem(item: { question: string; options?: string[]; f
   return classifyText(item.question, { options: item.options, format: item.format });
 }
 
+/**
+ * TG-P4a (docs/specs/2026-11-26-tananyag-gyakorlati-p4a-vegrehajtas.md): a bankcsomag elfogadásának meta-kapuja — a feladatlapra /
+ * felvételire kérdező tétel (pontozás, feladattípus, felépítés) javító fordulót kap. Csak a modell kimenetére (gyártás); a mentett
+ * leckék olvasását nem érinti.
+ */
+export function practiceMetaProblems(packet: { quiz?: Array<{ id?: string; question: string; options?: string[]; format?: string }>; tasks?: Array<{ id?: string; q: string; sample?: string }> }): string[] {
+  const fix = "a feladatlapra / pontozásra / feladattípusra kérdez — cseréld a tanított tartalomra vonatkozó gyakorlati tételre (pl. konkrét mondaton / adaton döntés, kiegészítés, javítás)";
+  return [
+    // review #629: `<tételazonosító>: …` — a `repairPermissions` (célzott csere) ÉS a `salvagePacket` (tartalékos kivétel) is a tételhez
+    // köti; azonosító nélkül a `quiz.N` / `tasks.N` útvonal (csak a célzott csere ismeri).
+    ...(packet.quiz ?? []).flatMap((it, i) => (classifyQuizItem(it).kind === "meta" ? [`${it.id ?? `quiz.${i}`}: ${fix}`] : [])),
+    ...(packet.tasks ?? []).flatMap((t, i) => (classifyOpenTask(t).kind === "meta" ? [`${t.id ?? `tasks.${i}`}: ${fix}`] : [])),
+  ];
+}
+
 export function classifyOpenTask(task: { q: string; sample?: string }): PracticeVerdict {
   const r = classifyText(task.q);
+  // review #629: a tanuló válaszának pontozása („… Hány pontot kap?”, minta: „1 pont”) nyílt feladatként is meta.
+  const qn = norm(task.q);
+  if (task.sample && POINT_OPTION.test(norm(task.sample)) && SCORE_ASK.test(qn) && !SPORT.test(qn)) return { ...r, kind: "meta", reason: "a tanuló válaszának pontozására kérdez" };
   if (r.kind !== "bizonytalan" || !task.sample) return r;
   // A minta konkrét alakot ad (pl. elválasztott szó, szám) — a kérés önmagában nem döntött.
   return DIGIT.test(task.sample) || /-/.test(task.sample) ? { ...r, kind: "alkalmazas", reason: "a minta konkrét alakot / adatot kér" } : r;
