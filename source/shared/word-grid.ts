@@ -52,6 +52,23 @@ export function buildWordSearch(words: readonly string[]): WordSearchGrid {
   }
 }
 
+/**
+ * Review #616: a kijelölés (két végcella) EGYENES betűsora — oda-vissza olvasva — melyik, még meg nem talált szóval egyezik. A rács
+ * tényleges tartalma dönt, nem a generátor nyilvántartott helye: ha egy szó máshol is kiolvasható, az is helyes találat.
+ */
+export function matchSelection(
+  grid: readonly string[][], words: readonly string[], a: { r: number; c: number }, b: { r: number; c: number }, found: readonly string[] = [],
+): string | null {
+  const dy = b.r - a.r, dx = b.c - a.c;
+  const len = Math.max(Math.abs(dy), Math.abs(dx));
+  if (len === 0 || (dy !== 0 && dx !== 0 && Math.abs(dy) !== Math.abs(dx))) return null;
+  const dr = Math.sign(dy), dc = Math.sign(dx);
+  const line = Array.from({ length: len + 1 }, (_, i) => grid[a.r + dr * i]?.[a.c + dc * i] ?? "").join("");
+  const back = [...line].reverse().join("");
+  const done = new Set(found.map(up));
+  return words.find((w) => !done.has(up(w)) && (up(w) === line || up(w) === back)) ?? null;
+}
+
 export type CrosswordEntry = { answer: string; clue: string };
 export type CrosswordPlacement = CrosswordEntry & { row: number; col: number; dir: "across" | "down"; number: number };
 export type Crossword = { rows: number; cols: number; placements: CrosswordPlacement[] };

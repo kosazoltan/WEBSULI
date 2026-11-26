@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Check, RotateCcw } from "lucide-react";
 
-import { buildCrossword, buildWordSearch, readCrossword, readWordSearch, scoreCrossword } from "@shared/word-grid";
+import { buildCrossword, buildWordSearch, matchSelection, readCrossword, readWordSearch, scoreCrossword } from "@shared/word-grid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -20,20 +20,37 @@ export function WordSearch({ spec, persisted, onPersist }: TryProps) {
   const [found, setFound] = useState<string[]>(() => (persisted?.kind === "wordSearch" ? persisted.found : []));
   const [start, setStart] = useState<{ r: number; c: number } | null>(null);
   const [focus, setFocus] = useState({ r: 0, c: 0 });
-  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Review #616: a ténylegesen kijelölt szakasz (ha a szó máshol is kiolvasható, azt jelöljük ki, amit a tanuló választott).
+  const [paths, setPaths] = useState<Record<string, { a: { r: number; c: number }; b: { r: number; c: number } }>>({});
+  const refs = useRef<Record<string, HTMLDivElement | null>>({});
   if (words.length < 3) return <div className="text-sm text-muted-foreground border rounded-lg p-4" data-try="wordSearch">Ehhez a szókeresőhöz nincs tartalom.</div>;
 
-  const inFound = (r: number, c: number) => ws.placements.some((p) => found.includes(p.word) && [...p.word].some((_, i) => p.row + p.dr * i === r && p.col + p.dc * i === c));
+  const onSegment = (s: { a: { r: number; c: number }; b: { r: number; c: number } }, r: number, c: number) => {
+    const n = Math.max(Math.abs(s.b.r - s.a.r), Math.abs(s.b.c - s.a.c));
+    const dr = Math.sign(s.b.r - s.a.r), dc = Math.sign(s.b.c - s.a.c);
+    return Array.from({ length: n + 1 }, (_, i) => i).some((i) => s.a.r + dr * i === r && s.a.c + dc * i === c);
+  };
+  const inFound = (r: number, c: number) => found.some((w) => {
+    const path = paths[w];
+    if (path) return onSegment(path, r, c);
+    const p = ws.placements.find((x) => x.word === w);
+    if (!p) return false;
+    const n = [...p.word].length - 1;
+    return onSegment({ a: { r: p.row, c: p.col }, b: { r: p.row + p.dr * n, c: p.col + p.dc * n } }, r, c);
+  });
   const pick = (r: number, c: number) => {
     if (!start) { setStart({ r, c }); return; }
-    const hit = ws.placements.find((p) => {
-      const n = [...p.word].length - 1, end = { r: p.row + p.dr * n, c: p.col + p.dc * n };
-      return (p.row === start.r && p.col === start.c && end.r === r && end.c === c) || (p.row === r && p.col === c && end.r === start.r && end.c === start.c);
-    });
+    const hit = matchSelection(ws.grid, words, start, { r, c }, found);
     setStart(null);
-    if (hit && !found.includes(hit.word)) { const next = [...found, hit.word]; setFound(next); onPersist?.({ kind: "wordSearch", found: next }); }
+    if (hit) {
+      const next = [...found, hit];
+      setFound(next);
+      setPaths((prev) => ({ ...prev, [hit]: { a: start, b: { r, c } } }));
+      onPersist?.({ kind: "wordSearch", found: next });
+    }
   };
   const move = (e: KeyboardEvent, r: number, c: number) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFocus({ r, c }); pick(r, c); return; }
     const d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key as "ArrowUp"];
     if (!d) return;
     e.preventDefault();
@@ -45,15 +62,17 @@ export function WordSearch({ spec, persisted, onPersist }: TryProps) {
   return (
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="wordSearch">
       <p className="text-sm text-muted-foreground">Keresd meg a szavakat! Válaszd ki a szó első, majd utolsó betűjét (nyilakkal mozoghatsz, Enterrel választasz).</p>
-      <div role="grid" aria-label="Szókereső" className="inline-grid gap-0.5" style={{ gridTemplateColumns: `repeat(${ws.size}, minmax(0, 2.25rem))` }}>
+      {/* Review #616: a cellák nem gombok (a lecke 44 px-es gomb-minimuma átfedést okozna) — a rács a rendelkezésre álló szélességhez
+          igazodik (legfeljebb 2,25 rem / cella), így 360 px-en is kifér. */}
+      <div role="grid" aria-label="Szókereső" className="grid gap-0.5 w-full" style={{ gridTemplateColumns: `repeat(${ws.size}, minmax(0, 1fr))`, maxWidth: `${ws.size * 2.25}rem` }}>
         {ws.grid.map((row, r) => (
           <div role="row" key={r} className="contents">
             {row.map((ch, c) => (
-              <button key={c} type="button" role="gridcell" ref={(el) => { refs.current[`${r},${c}`] = el; }}
+              <div key={c} role="gridcell" ref={(el) => { refs.current[`${r},${c}`] = el; }}
                 tabIndex={focus.r === r && focus.c === c ? 0 : -1} aria-label={`${r + 1}. sor, ${c + 1}. oszlop: ${ch}`}
                 aria-selected={start?.r === r && start?.c === c}
                 onClick={() => { setFocus({ r, c }); pick(r, c); }} onKeyDown={(e) => move(e, r, c)}
-                className={cn("w-9 h-9 rounded text-sm font-semibold border", inFound(r, c) ? "bg-emerald-200 dark:bg-emerald-900" : "bg-muted/40", start?.r === r && start?.c === c && "ring-2 ring-primary")}>{ch}</button>
+                className={cn("aspect-square min-w-0 flex items-center justify-center rounded border font-semibold cursor-pointer select-none text-[clamp(10px,3vw,14px)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary", inFound(r, c) ? "bg-emerald-200 dark:bg-emerald-900" : "bg-muted/40", start?.r === r && start?.c === c && "ring-2 ring-primary")}>{ch}</div>
             ))}
           </div>
         ))}
@@ -72,6 +91,8 @@ export function WordSearch({ spec, persisted, onPersist }: TryProps) {
 export function CrosswordBlock({ spec, persisted, onPersist }: TryProps) {
   const { entries } = readCrossword(spec);
   const cw = useMemo(() => buildCrossword(entries), [JSON.stringify(entries)]);
+  // Review #616: a lecke minden fejezete egyszerre mountolt — a mező-azonosító rejtvényenként egyedi.
+  const uid = useId();
   const restored = persisted?.kind === "crossword" ? persisted : null;
   const [answers, setAnswers] = useState<string[]>(() => entries.map((_, i) => restored?.answers[i] ?? ""));
   const [checked, setChecked] = useState(() => restored?.checked ?? false);
@@ -89,10 +110,11 @@ export function CrosswordBlock({ spec, persisted, onPersist }: TryProps) {
   const result = checked ? scoreCrossword(spec, answers) : null;
   return (
     <div className="border rounded-lg bg-card p-4 space-y-3" data-try="crossword">
-      <div aria-hidden className="inline-grid gap-0.5" style={{ gridTemplateColumns: `repeat(${cw.cols}, 2rem)` }}>
+      {/* Review #616: a rács a rendelkezésre álló szélességhez igazodik (legfeljebb 2 rem / cella) — a 15 betűs megfejtés 360 px-en is kifér. */}
+      <div aria-hidden className="grid gap-0.5 w-full" style={{ gridTemplateColumns: `repeat(${cw.cols}, minmax(0, 1fr))`, maxWidth: `${cw.cols * 2}rem` }}>
         {Array.from({ length: cw.rows * cw.cols }, (_, n) => {
           const cell = cells.get(`${Math.floor(n / cw.cols)},${n % cw.cols}`);
-          return <div key={n} className={cn("w-8 h-8 relative text-center leading-8 text-sm font-semibold", cell ? "border bg-background" : "")}>
+          return <div key={n} className={cn("aspect-square min-w-0 relative flex items-center justify-center font-semibold text-[clamp(9px,2.6vw,14px)]", cell ? "border bg-background" : "")}>
             {cell?.number && <span className="absolute left-0.5 top-0 text-[9px] leading-none text-muted-foreground">{cell.number}</span>}{cell?.ch}
           </div>;
         })}
@@ -103,8 +125,8 @@ export function CrosswordBlock({ spec, persisted, onPersist }: TryProps) {
           const ok = checked && up(answers[i] ?? "") === up(p.answer);
           return (
             <li key={i} className="flex flex-col gap-1">
-              <label className="text-sm" htmlFor={`cw-${i}`}>{label}</label>
-              <Input id={`cw-${i}`} aria-label={label} value={answers[i] ?? ""} maxLength={[...p.answer].length + 2}
+              <label className="text-sm" htmlFor={`${uid}-cw-${i}`}>{label}</label>
+              <Input id={`${uid}-cw-${i}`} aria-label={label} value={answers[i] ?? ""} maxLength={[...p.answer].length + 2}
                 onChange={(e) => save(answers.map((a, j) => (j === i ? e.target.value : a)), false)}
                 className={cn("max-w-xs uppercase", checked && (ok ? "border-emerald-500" : "border-red-400"))} />
             </li>

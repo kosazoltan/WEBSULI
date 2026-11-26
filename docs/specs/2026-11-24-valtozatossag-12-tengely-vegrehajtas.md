@@ -154,6 +154,13 @@ Pontozás (`shared/word-grid.ts`): szókereső — pont = megtalált szavak; ker
 2. GREEN: `shared/word-grid.ts`, `shared/try-scoring.ts` (fajták, séma), `client/src/lesson-runtime/blocks/try-word-grid.tsx`, regiszter,
    állapot, címke, grounding.
 3. A gyártás (szókincsleckénél kötelező kiosztás) és a fejezetvégi boss-kérdés a V5b.
+### V5a — újraépítés és review #616 (2026-11-26)
+- A V3a utódja (#619) fölé épült újra (`feat/v5a-szokereso-v2`, utasítás → RED → kód); a #616 lezárva, utódja ez a PR.
+- **Találat a rács tartalmából:** `matchSelection` (shared/word-grid.ts) — a kijelölt egyenes betűsora oda-vissza olvasva dönt, nem a generátor nyilvántartott helye; a kijelölt szakasz színeződik.
+- **Egyedi azonosítók:** a keresztrejtvény mezői `useId` előtagot kapnak (a lecke minden fejezete egyszerre mountolt).
+- **Méret 360 px-en:** a szókereső cellái nem gombok (a lecke 44 px-es gomb-minimuma átfedést okozott), a rácsok `minmax(0, 1fr)` oszlopokkal a rendelkezésre álló szélességhez igazodnak (legfeljebb 2,25 / 2 rem / cella).
+- **Grounding:** a keresztrejtvény rejtett megfejtése nem bizonyíték, csak a látható meghatározás.
+- Tesztek (RED a javítás előtt): `word-grid.test.ts`, `studio-grounding.test.ts`, `lesson-word-grid.spec.ts` (+2).
 
 ### V3a — újraépítés és review #609 (2026-11-26)
 - A V2a squash-beolvadása (#615) után az ág egymásra épített volt: `feat/v3a-kartyak-v2` az `origin/main`-ről, a V3a saját változása három commitban (utasítás → RED → kód); a #609 lezárva, utódja ez a PR.
