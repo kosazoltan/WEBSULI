@@ -173,3 +173,39 @@ describe("practice-policy: audit (csak olvas, determinisztikus)", () => {
     assert.deepEqual(a.quiz.items.filter((i) => i.kind === "meta").map((i) => i.id), [lesson.experience!.quiz[0]!.id]);
   });
 });
+
+describe("TG-P4a: meta-kapu a bankcsomag elfogadásán", () => {
+  it("a meta-kvíz és a meta-nyílt feladat hibát ad, a gyakorlati és a fogalmi nem", async () => {
+    const { practiceMetaProblems } = await import("../shared/practice-policy");
+    const p = practiceMetaProblems({
+      quiz: [q("Hány pontot ér a felvételi 2. feladata?", ["2 pont", "4 pont", "6 pont"]), q("Melyik mondatban helyes az elválasztás?", ["a-lma", "al-ma", "alm-a"]), q("Mit jelent a szólás?", ["a", "b", "c"])],
+      tasks: [{ q: "Mondd el, hány pontot ér a felvételin a szólásos feladat!", sample: "4" }, { q: "Egészítsd ki: Lassan járj, tovább ___!", sample: "érsz" }],
+    });
+    assert.equal(p.length, 2);
+    // review #629: a `bank-repair.ts` `repairPermissions` útvonal-formája (`quiz.0` / `tasks.0`) — célzott csere, nem teljes újraírás.
+    assert.match(p[0], /^quiz\.0: /);
+    assert.match(p[1], /^tasks\.0: /);
+    assert.match(p.join(" "), /tanított tartalom/);
+  });
+  it("review #629: a geometriai pont nem meta, a tanuló válaszának pontozása nyílt feladatként is meta", async () => {
+    const { practiceMetaProblems } = await import("../shared/practice-policy");
+    assert.notEqual(classifyQuizItem(q("Hány pont határoz meg egy egyenest?", ["1 pont", "2 pont", "3 pont"])).kind, "meta");
+    assert.equal(classifyOpenTask({ q: "Lili jól aláhúzta a szót, de csak az egyik jelentést írta le helyesen. Hány pontot kap?", sample: "1 pont" }).kind, "meta");
+    assert.equal(practiceMetaProblems({ tasks: [{ q: "Lili jól aláhúzta a szót, de csak az egyik jelentést írta le helyesen. Hány pontot kap?", sample: "1 pont" }] }).length, 1);
+  });
+  it("review #629/2: azonosítós tételnél `<id>: …` — a célzott javítás és a tartalékos kivétel (salvagePacket) is a tételhez köti", async () => {
+    const { practiceMetaProblems } = await import("../shared/practice-policy");
+    const { salvagePacket } = await import("../server/studio/experience-builder");
+    const meta = { id: "q-meta", ...q("Hány pontot ér a felvételi 2. feladata?", ["2 pont", "4 pont", "6 pont"]) };
+    const ok = { id: "q-ok", ...q("Melyik mondatban helyes az elválasztás?", ["a-lma", "al-ma", "alm-a"]) };
+    const p = practiceMetaProblems({ quiz: [meta, ok] });
+    assert.deepEqual(p.map((s) => s.split(":")[0]), ["q-meta"]);
+    const packet = { methods: [], tasks: [], quiz: [meta, ok] };
+    const saved = salvagePacket(packet, (pk) => practiceMetaProblems(pk), 3);
+    assert.deepEqual(saved?.removed, ["q-meta"]);
+  });
+  it("a bankcsomag-validátor hívja", async () => {
+    const { readFileSync } = await import("node:fs");
+    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /practiceMetaProblems\(/);
+  });
+});
