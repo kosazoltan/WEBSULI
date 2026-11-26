@@ -56,7 +56,8 @@ class Alap(unittest.TestCase):
     def run_cli(self, *argv):
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            rc = M.main(["--db", str(self.db), *argv])
+            # review #623: a jelentés ne a valódi munkakönyvtár git-naplóját olvassa (nem git-mappa → üres git-rész)
+            rc = M.main(["--db", str(self.db), "--repo", str(self.dir), *argv])
         return rc, out.getvalue()
 
 
@@ -123,8 +124,55 @@ class Folyamatok(Alap):
         fid = M.start_process(self.c, "e2e", "x")
         regi = (dt.datetime.now() - dt.timedelta(hours=25)).isoformat(timespec="seconds")
         self.c.execute("UPDATE folyamatok SET started_at=? WHERE id=?", (regi, fid))
-        rep = M.report(self.c, napok=7)
+        rep = M.report(self.c, napok=7, repo=None)
         self.assertEqual([f["id"] for f in rep["elakadt_folyamatok"]], [fid])
+
+
+class Review623(Alap):
+    def test_nap_pontos_forrasdatum_az_idoszak_elso_napjan_is_bent_van(self):
+        tegnap = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+        self.c.execute("INSERT INTO sources(kind,ref,date,title,extra) VALUES('commit','tegnap1',?,?,?)",
+                       (tegnap, "feat(y): tegnapi", json.dumps({"main": True})))
+        rep = M.report(self.c, napok=1, repo=None)
+        self.assertIn("tegnap1", [r["ref"] for r in rep["elvegzett_kodolas"]])
+
+    def test_beolvadt_feladat_hatralek_nem_lezart(self):
+        F.new_task(self.c, "MERGED", "Beolvadt, élesítésre vár", priority=2, status="beolvadt")
+        rep = M.report(self.c, napok=7, repo=None)
+        self.assertIn("MERGED", [r["code"] for r in rep["hatralek"]])
+        self.assertNotIn("MERGED", [r["code"] for r in rep["lezart_feladatok"]])
+
+    def test_json_kimenet_maszkolt(self):
+        self.c.execute("INSERT INTO sources(kind,ref,date,title,extra) VALUES('commit','m1',?,?,?)",
+                       (dt.datetime.now().isoformat(timespec="seconds"), "fix: levél a proba@example.invalid címre",
+                        json.dumps({"main": True})))
+        self.c.commit()
+        rc, out = self.run_cli("jelentes", "--json")
+        self.assertEqual(rc, 0)
+        self.assertNotIn("proba@example.invalid", out)
+
+    def test_dupla_lezaras_atomi(self):
+        fid = M.start_process(self.c, "unit", "x")
+        self.c.execute("UPDATE folyamatok SET eredmeny='ok', finished_at='2026-01-01' WHERE id=?", (fid,))
+        with self.assertRaises(F.AllapotHiba):
+            M.finish_process(self.c, fid, "bukott")
+
+    def test_erzekeny_azonosito_elutasitva(self):
+        with self.assertRaises(F.AllapotHiba):
+            M.add_instruction(self.c, "x", dedupe="proba@example.invalid")
+        with self.assertRaises(F.AllapotHiba):
+            M.add_instruction(self.c, "x", requirement_code="proba@example.invalid")
+        with self.assertRaises(F.AllapotHiba):
+            M.start_process(self.c, "unit", "x", task_code="proba@example.invalid")
+
+    def test_folyamat_ismeretlen_feladattal_elutasitva(self):
+        with self.assertRaises(F.AllapotHiba):
+            M.start_process(self.c, "unit", "x", task_code="NINCS-ILYEN")
+
+    def test_felulirja_nem_letezo_utasitast_beszuras_elott_utasitja_el(self):
+        with self.assertRaises(F.AllapotHiba):
+            M.add_instruction(self.c, "Új kérés", felulirja=1)
+        self.assertEqual(self.c.execute("SELECT count(*) FROM utasitasok").fetchone()[0], 0)
 
 
 class Jelentes(Alap):
