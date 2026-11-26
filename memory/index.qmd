@@ -64,3 +64,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 - #565: a PR előtti kapu ítélete csak helyi bizonyíték. #566: lesson-fusion ritka indexcsere-bukás javítva.
 - Tulajdonosi utasítás: zöld CI + pre-merge után merge/deploy engedély nélkül.
 <!-- zaro-hurok: 2026-11-26T05:05:37.199Z nincs-uj -->
+<!-- zaro-hurok: 2026-11-26T15:15:45.216Z nincs-uj -->
