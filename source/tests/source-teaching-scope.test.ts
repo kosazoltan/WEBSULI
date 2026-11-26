@@ -39,5 +39,5 @@ test("review #630: pontosabb határ — szakfogalom, sport, jelölés nélküli 
   assert.ok(adminConceptProblem(c("válasz", "A helyes válasz-ért 1 pont jár.")), "véletlen kötőjel nem menti meg");
   assert.ok(adminConceptProblem(c("sorszám", "3.")), "sorszám fogalomnév");
   // a hibaüzenet vezérlőkaraktert nem visz tovább
-  assert.doesNotMatch(adminConceptProblem(c("pontozás", "1 pont\u0007 jár\nösszesen"))!, /[\u0000-\u001f]/);
+  assert.ok(![...adminConceptProblem(c("pontozás", "1 pont\u0007 jár\nösszesen"))!].some((ch) => ch.charCodeAt(0) < 32));
 });

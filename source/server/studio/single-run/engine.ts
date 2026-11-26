@@ -62,7 +62,7 @@ import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opene
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
 import { cleanModelText, sanitizeSourceVisuals, sourceVisualsContract, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
-import { adminConceptProblem } from "../../../shared/source-teaching-scope";
+import { adminConceptProblem, dropAdminConcepts } from "../../../shared/source-teaching-scope";
 import { SOURCE_SCOPE_RULE } from "../../../shared/practice-rules";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
@@ -645,7 +645,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     mapId = await deps.saveMap({ ...read, title: input.title?.trim() || read.title }, input.files);
   }
   await workflowPhase("sourceCheck");
-  const map = await store.loadMap(mapId);
+  // review #630: a validátor előtt mentett / újrahasznált térkép adminisztratív fogalma kiesik (naplózva).
+  const loadedMap = await store.loadMap(mapId);
+  const map = loadedMap ? dropAdminConcepts(loadedMap, deps.log) : loadedMap;
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
   // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett) — S1b: a tervező, a szerző,
