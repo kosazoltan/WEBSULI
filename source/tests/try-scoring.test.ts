@@ -49,14 +49,15 @@ test("becslés: ≤ 5% eltérés 2, ≤ 15% 1, különben 0", () => {
 });
 
 test("séma: a helyes specifikáció átmegy, a hibás elutasítva; a modellnek hirdetett fajták a régi hármas", () => {
-  assert.deepEqual([...PROMPT_TRY_KINDS], ["dragSort", "fillBlank", "match"]);
+  // V2b (dokumentált spec-változás): a gyártás az öt új fajtát is hirdeti.
+  for (const k of ["dragSort", "fillBlank", "match"]) assert.ok((PROMPT_TRY_KINDS as readonly string[]).includes(k), k);
   for (const k of ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"]) assert.ok((TRY_KINDS as readonly string[]).includes(k), k);
   const good: Record<string, unknown> = {
     trueFalseSeries: { statements: [{ text: "A víz 100 °C-on forr.", answer: true }, { text: "A jég meleg.", answer: false }] },
     highlight: { text: "A macska gyorsan fut.", targets: ["gyorsan"] },
     categorize: { categories: ["páros", "páratlan"], items: [{ text: "2", category: "páros" }, { text: "3", category: "páratlan" }, { text: "4", category: "páros" }] },
     numberLine: { min: 0, max: 10, target: 7, tolerance: 0.5 },
-    estimate: { min: 0, max: 1000, answer: 400, unit: "m" },
+    estimate: { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" },
   };
   const bad: Record<string, unknown> = {
     trueFalseSeries: { statements: [{ text: "egy", answer: true }] },
@@ -92,9 +93,33 @@ test("review #609/#615/#617: a séma elutasítja a megoldhatatlan csúszkát —
     ["numberLine", { min: 0, max: 10, step: 1, target: 7, tolerance: 0.5 }],
     ["numberLine", { min: 0, max: 10, target: 7, tolerance: 0.5 }],
     ["numberLine", { min: 0, max: 10, step: 4, target: 8, tolerance: 0.1 }],
-    ["estimate", { min: 0, max: 1000, step: 10, answer: 400 }],
-    ["estimate", { min: 0, max: 1000, answer: 400, unit: "m" }],
-    ["estimate", { min: -1, max: 1, step: 0.5, answer: 0 }],
+    // SPEC-VÁLTOZÁS (review #612): a becslés leírása (prompt) kötelező.
+    ["estimate", { prompt: "Becsüld meg a távolságot!", min: 0, max: 1000, step: 10, answer: 400 }],
+    ["estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }],
+    ["estimate", { prompt: "Becsüld meg az értéket!", min: -1, max: 1, step: 0.5, answer: 0 }],
   ];
   for (const [k, s] of solvable) assert.deepEqual(trySpecProblems(k, s), [], `${k} ${JSON.stringify(s)}: megoldható`);
+});
+// SPEC-VÁLTOZÁS (review #624): a leírás-követelmény a GYÁRTÁS határára került (`generatedTryProblems`) — a korábban mentett,
+// leírás nélküli becslésblokkos lecke olvasható marad (a séma nem utasítja el), az új gyártás viszont nem adhat ilyet.
+test("review #612/#624: a becslés leírás (prompt) nélkül a gyártásban hibás, olvasáskor (mentett lecke) érvényes", async () => {
+  const { generatedTryProblems } = await import("../shared/try-scoring");
+  assert.ok(generatedTryProblems("estimate", { min: 0, max: 1000, answer: 400, unit: "m" }).some((m) => /leírás/.test(m)));
+  assert.ok(generatedTryProblems("estimate", { prompt: "   ", min: 0, max: 1000, answer: 400 }).some((m) => /leírás/.test(m)));
+  assert.deepEqual(generatedTryProblems("estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }), []);
+  assert.deepEqual(trySpecProblems("estimate", { min: 0, max: 1000, step: 10, answer: 400, unit: "m" }), [], "a mentett, leírás nélküli becslés olvasható");
+});
+
+test("review #624/2: a leckejavító és a fogalomjavító is csak ÚJ / változott try-blokkra kéri a gyártás-határ követelményt", async () => {
+  const { newTryProblems } = await import("../shared/try-scoring");
+  const old = { kind: "try", tryKind: "estimate", spec: { min: 0, max: 1000, step: 10, answer: 400, unit: "m" } };
+  const fresh = { kind: "try", tryKind: "estimate", spec: { min: 0, max: 50, answer: 20 } };
+  const before = { sections: [{ blocks: [old] }] };
+  assert.deepEqual(newTryProblems(before as never, { sections: [{ blocks: [old] }] } as never), [], "a mentett, változatlan blokk nem hiba");
+  assert.ok(newTryProblems(before as never, { sections: [{ blocks: [old, fresh] }] } as never).some((m) => /leírás/.test(m)), "az új blokk hibás");
+  assert.ok(newTryProblems(null, { sections: [{ blocks: [old] }] } as never).length > 0, "új gyártásnál minden blokk új");
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["../server/studio/single-run/concept-fix.ts", "../server/studio/structured-improvement.ts", "../server/studio/single-run/engine.ts"]) {
+    assert.match(readFileSync(new URL(f, import.meta.url), "utf8"), /newTryProblems\(/, f);
+  }
 });
