@@ -98,12 +98,13 @@ export function classifyQuizItem(item: { question: string; options?: string[]; f
  * felvételire kérdező tétel (pontozás, feladattípus, felépítés) javító fordulót kap. Csak a modell kimenetére (gyártás); a mentett
  * leckék olvasását nem érinti.
  */
-export function practiceMetaProblems(packet: { quiz?: Array<{ question: string; options?: string[]; format?: string }>; tasks?: Array<{ q: string; sample?: string }> }): string[] {
+export function practiceMetaProblems(packet: { quiz?: Array<{ id?: string; question: string; options?: string[]; format?: string }>; tasks?: Array<{ id?: string; q: string; sample?: string }> }): string[] {
   const fix = "a feladatlapra / pontozásra / feladattípusra kérdez — cseréld a tanított tartalomra vonatkozó gyakorlati tételre (pl. konkrét mondaton / adaton döntés, kiegészítés, javítás)";
   return [
-    // review #629: `quiz.N` / `tasks.N` — a `bank-repair.ts` `repairPermissions` ezt a tételhez köti (célzott csere, a tartalék is ment).
-    ...(packet.quiz ?? []).flatMap((it, i) => (classifyQuizItem(it).kind === "meta" ? [`quiz.${i}: ${fix}`] : [])),
-    ...(packet.tasks ?? []).flatMap((t, i) => (classifyOpenTask(t).kind === "meta" ? [`tasks.${i}: ${fix}`] : [])),
+    // review #629: `<tételazonosító>: …` — a `repairPermissions` (célzott csere) ÉS a `salvagePacket` (tartalékos kivétel) is a tételhez
+    // köti; azonosító nélkül a `quiz.N` / `tasks.N` útvonal (csak a célzott csere ismeri).
+    ...(packet.quiz ?? []).flatMap((it, i) => (classifyQuizItem(it).kind === "meta" ? [`${it.id ?? `quiz.${i}`}: ${fix}`] : [])),
+    ...(packet.tasks ?? []).flatMap((t, i) => (classifyOpenTask(t).kind === "meta" ? [`${t.id ?? `tasks.${i}`}: ${fix}`] : [])),
   ];
 }
 
