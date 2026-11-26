@@ -148,6 +148,12 @@ test("animate and try only accept the planned kinds", () => {
     categorize: { categories: ["x", "y"], items: [{ text: "a", category: "x" }, { text: "b", category: "y" }, { text: "c", category: "x" }] },
     numberLine: { min: 0, max: 10, target: 5, tolerance: 1 },
     estimate: { min: 0, max: 100, answer: 50 },
+    // V3a
+    flipCard: { front: "a", back: "b" },
+    stepReveal: { steps: ["a", "b"] },
+    didYouKnow: { fact: "f" },
+    decision: { situation: "s", options: [{ text: "a", consequence: "x", best: true }, { text: "b", consequence: "y", best: false }] },
+    flashcards: { cards: [{ front: "a", back: "b" }, { front: "c", back: "d" }] },
   };
   for (const tryKind of TRY_KINDS) {
     assert.throws(
