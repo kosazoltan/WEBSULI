@@ -30,7 +30,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import feladat as F  # noqa: E402
-from maszk import mask, safe  # noqa: E402
+from maszk import mask, mask_obj, safe  # noqa: E402
 
 SEMA_VERZIO = 1
 UTASITAS_ALLAPOT = ("kiadva", "folyamatban", "vegrehajtva", "reszben", "felulirva", "elvetve")
@@ -81,8 +81,13 @@ def add_instruction(c, text: str, *, forras: str = "tulajdonos", task_code=None,
         raise F.AllapotHiba(f"ismeretlen forrás: {forras}")
     if not str(text).strip():
         raise F.AllapotHiba("üres utasítás")
+    for name, val in (("feladat", task_code), ("kovetelmeny", requirement_code), ("dedupe", dedupe)):
+        F._ident(name, val)  # review #623: azonosító — érzékeny tartalomnál elutasítás (a maszkolás eltörné a kapcsolást)
     if task_code and not F.get_task(c, task_code):
         raise F.AllapotHiba(f"ismeretlen feladat: {task_code}")
+    # review #623: a felülírt utasítás létezését a beszúrás ELŐTT ellenőrizzük (különben az új sor önmagát írná felül)
+    if felulirja is not None and not c.execute("SELECT 1 FROM utasitasok WHERE id=?", (felulirja,)).fetchone():
+        raise F.AllapotHiba(f"ismeretlen felülírt utasítás: {felulirja}")
     if dedupe:
         row = c.execute("SELECT id FROM utasitasok WHERE dedupe=?", (dedupe,)).fetchone()
         if row:
@@ -92,9 +97,6 @@ def add_instruction(c, text: str, *, forras: str = "tulajdonos", task_code=None,
                     "VALUES(?,?,?,?,?,?,?)", (ts, forras, _m(text), task_code, requirement_code, dedupe, ts))
     uid = cur.lastrowid
     if felulirja is not None:
-        regi = c.execute("SELECT id FROM utasitasok WHERE id=?", (felulirja,)).fetchone()
-        if not regi:
-            raise F.AllapotHiba(f"ismeretlen felülírt utasítás: {felulirja}")
         c.execute("UPDATE utasitasok SET allapot='felulirva', felulirta=?, updated_at=? WHERE id=?", (uid, ts, felulirja))
     if task_code:
         F.add_event(c, task_code, "utasitas", f"utasítás #{uid}: {_m(text)}", actor=forras)
@@ -123,6 +125,9 @@ def set_instruction(c, uid: int, allapot: str, evidence=None):
 def start_process(c, fajta: str, ref, *, task_code=None, leiras=None) -> int:
     if fajta not in FOLYAMAT_FAJTA:
         raise F.AllapotHiba(f"ismeretlen folyamat-fajta: {fajta} ({', '.join(FOLYAMAT_FAJTA)})")
+    F._ident("feladat", task_code)
+    if task_code and not F.get_task(c, task_code):
+        raise F.AllapotHiba(f"ismeretlen feladat: {task_code}")
     cur = c.execute("INSERT INTO folyamatok(fajta, ref, task_code, leiras, started_at) VALUES(?,?,?,?,?)",
                     (fajta, _m(ref), task_code, _m(leiras), F.now()))
     return cur.lastrowid
@@ -134,10 +139,11 @@ def finish_process(c, fid: int, eredmeny: str, *, summary=None, evidence=None):
     row = c.execute("SELECT eredmeny, task_code, fajta, ref FROM folyamatok WHERE id=?", (fid,)).fetchone()
     if not row:
         raise F.AllapotHiba(f"ismeretlen folyamat: {fid}")
-    if row["eredmeny"] != "fut":
+    # review #623: atomi — csak a még futó sor zárható le (két párhuzamos lezárásból egy nyer)
+    cur = c.execute("UPDATE folyamatok SET eredmeny=?, finished_at=?, osszegzes=?, bizonyitek=? WHERE id=? AND eredmeny='fut'",
+                    (eredmeny, F.now(), _m(summary), _m(evidence), fid))
+    if cur.rowcount == 0:
         raise F.AllapotHiba(f"a folyamat már lezárult ({row['eredmeny']}): {fid}")
-    c.execute("UPDATE folyamatok SET eredmeny=?, finished_at=?, osszegzes=?, bizonyitek=? WHERE id=?",
-              (eredmeny, F.now(), _m(summary), _m(evidence), fid))
     if row["task_code"] and F.get_task(c, row["task_code"]):
         F.add_event(c, row["task_code"], "folyamat", f"{row['fajta']} {row['ref'] or ''} → {eredmeny}: {_m(summary) or ''}",
                     evidence=_m(evidence))
@@ -148,8 +154,9 @@ def _rows(cur) -> list[dict]:
     return [dict(r) for r in cur]
 
 
-NYITOTT_FELADAT = ("beadva", "tervezve", "folyamatban", "review", "blokkolt")
-LEZART_FELADAT = ("beolvadt", "elesitve", "elo_ellenorizve", "kesz")
+# review #623: a közös állapotgépből — csak a `kesz`, `elvetve`, `felulirva` lezárt (a beolvadt / élesített még élő ellenőrzésre vár).
+LEZART_FELADAT = F.LEZART
+NYITOTT_FELADAT = tuple(s for s in F.STATUSES if s not in F.LEZART)
 
 
 def _git_commits(repo: str | None, tol: str) -> list[dict]:
@@ -176,6 +183,7 @@ def _git_commits(repo: str | None, tol: str) -> list[dict]:
 
 def report(c, napok: int = 7, repo: str | None = None) -> dict:
     tol = (dt.datetime.now() - dt.timedelta(days=napok)).isoformat(timespec="seconds")
+    tol_nap = tol[:10]  # review #623: a gyűjtő a commit dátumát nap pontossággal tárolja (gyujt.py: date[:10])
     elakadt_hatar = (dt.datetime.now() - dt.timedelta(hours=ELAKADT_ORA)).isoformat(timespec="seconds")
     q = lambda sql, *p: _rows(c.execute(sql, p))  # noqa: E731
     nyitott = F._in(UTASITAS_NYITOTT)
@@ -194,7 +202,7 @@ def report(c, napok: int = 7, repo: str | None = None) -> dict:
         "elvegzett_kodolas": _merge_commits(
             [{"ref": r["ref"], "date": r["date"], "title": r["title"], "allapot": json.loads(r["extra"] or "{}").get("allapot")}
              for r in c.execute("SELECT ref, date, title, extra FROM sources WHERE kind='commit' AND date >= ? "
-                                "AND json_extract(coalesce(extra,'{}'), '$.main') = 1", (tol,))],
+                                "AND json_extract(coalesce(extra,'{}'), '$.main') = 1", (tol_nap,))],
             _git_commits(repo, tol)),
         "lezart_feladatok": q(f"SELECT code, title, status, updated_at FROM tasks WHERE status IN ({F._in(LEZART_FELADAT)}) "
                               "AND updated_at >= ? ORDER BY updated_at DESC", tol),
@@ -343,7 +351,8 @@ def main(argv=None) -> int:
             _out(a, {"id": a.id, "eredmeny": a.eredmeny}, lambda: print(f"folyamat #{a.id}: {a.eredmeny}"))
         elif a.cmd == "jelentes":
             rep = report(c, a.napok, a.repo)
-            _out(a, rep, lambda: print_report(rep, a.limit))
+            # review #623: a gépi kimenet is maszkolt (a git-napló nyers commitcímei / Állapot-sorai is)
+            _out(a, mask_obj(rep), lambda: print_report(rep, a.limit))
         c.commit()
         return 0
     except F.AllapotHiba as e:
