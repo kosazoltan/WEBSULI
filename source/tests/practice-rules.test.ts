@@ -43,6 +43,17 @@ test("a HTML-specifikáció nem „részletes lexikális tudást” kér, és a 
   assert.ok(spec.includes(PRACTICE_TEACHING_RULE));
 });
 
+test("review #626: a célzott fogalomjavítás és a HTML-javító is a szabályt követi; a puszta szókiegészítés fogalmi", async () => {
+  const { buildConceptFixPrompt } = await import("../server/studio/step-io");
+  const lesson = { title: "T", sections: [] } as never;
+  assert.ok(buildConceptFixPrompt(lesson, map, "c1").includes(PRACTICE_TEACHING_RULE), "célzott fogalomjavítás");
+  const { readFileSync } = await import("node:fs");
+  const improve = readFileSync(new URL("../server/improveAsync.ts", import.meta.url), "utf8");
+  assert.ok(!improve.includes("Részletes lexikális tudás"), "a HTML-javító sem kér lexikális tudást");
+  assert.match(improve, /meta-kérdés/, "a HTML-javító a feladatlapra kérdező tételt nem őrzi meg");
+  assert.match(PRACTICE_BANK_RULE, /emlékezetből[^.;]*fogalmi/);
+});
+
 test("a játékos kérdezés selfCheck-je új példán végzett önellenőrzés, nem „magyarázd el, miért”", () => {
   assert.ok(!PLAYFUL_QUESTIONING_CONTRACT.includes("selfCheck = „magyarázd el, miért”"));
   assert.match(PLAYFUL_QUESTIONING_CONTRACT, /selfCheck = [^;.]*új példán/);
