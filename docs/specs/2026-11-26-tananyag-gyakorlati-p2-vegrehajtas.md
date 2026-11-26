@@ -16,4 +16,4 @@ pontozási útmutató áll; a pontérték, időkeret, a lap felépítése nem ke
 3. Bukó teszt: `tests/source-teaching-scope.test.ts` (egységek + a forrásállomás: a pontozási fogalom javító fordulót kap,
    a térképbe nem kerül, a vegyes sor példája megmarad).
 
-Állapot: TG-P2a 1/3 egység kész — következő: bukó teszt
+Állapot: TG-P2a 3/3 egység kész — következő: kapulánc, PR
