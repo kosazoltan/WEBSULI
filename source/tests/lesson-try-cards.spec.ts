@@ -4,9 +4,10 @@ import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 /** V3a (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): kártyák — akadálymentes név, billentyűzet, állapot-visszaállás. */
 test.use({ serviceWorkers: "block" });
 
-async function mount(page: Page) {
+async function mount(page: Page, classroom = 7) {
   const lesson = structuredClone(fusionFixture()) as { sections: Array<{ blocks: Array<{ coversConceptIds?: string[] }> }> };
   const concept = lesson.sections[0].blocks.find(b => b.coversConceptIds?.length)!.coversConceptIds!.slice(0, 1);
+  (lesson as { classroom?: number }).classroom = classroom;
   const add = (tryKind: string, spec: unknown) => lesson.sections[0].blocks.unshift({ kind: "try", tryKind, spec, coversConceptIds: concept } as never);
   add("flashcards", { cards: [{ front: "kutya", back: "dog" }, { front: "macska", back: "cat" }] });
   add("decision", { situation: "Esik az eső, túrázni indulnál.", options: [{ text: "Esőkabátot viszek", consequence: "Száraz maradsz.", best: true }, { text: "Póló elég", consequence: "Megázol.", best: false }] });
@@ -17,7 +18,7 @@ async function mount(page: Page) {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/auth/user") return route.fulfill({ json: null });
     if (path === "/api/csrf-token") return route.fulfill({ json: { csrfToken: "test" } });
-    if (path === "/api/html-files/cards-fixture") return route.fulfill({ json: { id: "cards-fixture", title: "Lecke", contentType: "lesson", classroom: 7 } });
+    if (path === "/api/html-files/cards-fixture") return route.fulfill({ json: { id: "cards-fixture", title: "Lecke", contentType: "lesson", classroom } });
     if (path === "/api/lessons/by-file/cards-fixture") return route.fulfill({ json: { lessonId: "lesson-cards", version: 1, lesson } });
     if (path.startsWith("/api/design-assets/")) return route.fulfill({ status: 404, json: {} });
     return route.fulfill({ json: [] });
@@ -86,4 +87,40 @@ test("döntés: valódi rádiócsoport — egy Tab-megálló, a nyilak léptetne
   await page.keyboard.press("ArrowUp");
   await expect(radios.nth(0)).toBeFocused();
   await expect(decision).toContainText("Száraz maradsz.");
+});
+test("review #619: billentyűzetes fókusz — az utolsó lépés felfedése után az Újrakezdés, a döntés Újra gombja után a rádiócsoport kapja a fókuszt", async ({ page }) => {
+  await mount(page);
+  const steps = page.locator('[data-try="stepReveal"]');
+  const next = steps.getByRole("button", { name: /Következő lépés/ });
+  await next.focus();
+  await page.keyboard.press("Enter");
+  await expect(next).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(steps).toContainText("Számolj.");
+  await expect(steps.getByRole("button", { name: "Újrakezdés" })).toBeFocused();
+
+  const decision = page.locator('[data-try="decision"]');
+  await decision.getByRole("radio").first().focus();
+  await page.keyboard.press("Enter");
+  await expect(decision).toContainText("Száraz maradsz.");
+  await decision.getByRole("button", { name: "Újra" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(decision).not.toContainText("Száraz maradsz.");
+  await expect(decision.getByRole("radio").first()).toBeFocused();
+});
+
+test("review #619: a „Tudtad?” kártya szövege a 11–12. évfolyam sötét témájában is olvasható (kontraszt ≥ 4,5)", async ({ page }) => {
+  await mount(page, 12);
+  const fact = page.locator('[data-try="didYouKnow"] p').nth(1);
+  await expect(fact).toContainText("A méhek");
+  const ratio = await fact.evaluate((el) => {
+    const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 4).map(Number);
+    const lum = ([r, g, b]: number[]) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    let bgEl: Element | null = el; let bg = [255, 255, 255];
+    while (bgEl) { const c = rgb(getComputedStyle(bgEl).backgroundColor); if (c.length >= 3 && (c[3] === undefined || c[3] > 0.5)) { bg = c; break; } bgEl = bgEl.parentElement; }
+    const fg = rgb(getComputedStyle(el).color);
+    const [a, b] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+    return (a + 0.05) / (b + 0.05);
+  });
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
 });

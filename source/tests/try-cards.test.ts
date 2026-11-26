@@ -42,3 +42,10 @@ test("döntés–következmény pontozása: a legjobb lehetőség 1 pont (teljes
   assert.deepEqual(scoreDecision(GOOD.decision, 1), { points: 0, max: 1, verdict: "rossz" });
   assert.deepEqual(scoreDecision(GOOD.decision, null), { points: 0, max: 1, verdict: "rossz" });
 });
+test("review #619: a hiányos elemet tartalmazó lépéssor, döntés és villámkártya-csomag érvénytelen (nem tűnhet el csendben a megjelenítőben)", () => {
+  assert.ok(trySpecProblems("stepReveal", { steps: ["Első lépés", null, "Harmadik lépés"] }).length > 0, "üres lépés");
+  assert.ok(trySpecProblems("stepReveal", { steps: ["Első lépés", "  ", "Harmadik lépés"] }).length > 0, "üres szöveg");
+  assert.ok(trySpecProblems("decision", { situation: "Esik.", options: [{ text: "A", consequence: "a", best: true }, { text: "B", consequence: "b", best: false }, { text: "C", best: true }] }).length > 0, "következmény nélküli lehetőség");
+  assert.ok(trySpecProblems("flashcards", { cards: [{ front: "a", back: "b" }, { front: "c", back: "d" }, { front: "e" }] }).length > 0, "hátoldal nélküli kártya");
+  for (const k of ["stepReveal", "decision", "flashcards"]) assert.deepEqual(trySpecProblems(k, GOOD[k]), [], `${k}: helyes`);
+});
