@@ -437,6 +437,8 @@
   pointer-events: none;
 }
 .game-touch-layer > * { pointer-events: auto; }
+/* JK (docs/specs/2026-11-26-jatek-kezesseg.md): balkezesnél tükrözve — a joystick jobbra, az akciógombok balra. */
+.game-touch-layer[data-hand="left"] { flex-direction: row-reverse; }
 /* S13 / B7: a components rétegben áll, így a Tailwind text-* / leading-* / min-h-* segédosztálya (utilities
    réteg) felülírja — a játékoknak nem kell !text-… kerülőút. Rétegen kívül a később álló szabály nyerne. */
 @layer components {

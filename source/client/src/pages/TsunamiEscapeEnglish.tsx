@@ -2,6 +2,8 @@ import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { createAdaptiveSession } from "@/game-engine/adaptiveSession";
 import { tsunamiWaterPace } from "@/game-engine/tsunamiTiming";
+import { HandednessPicker } from "@/game-engine/HandednessPicker";
+import { useHandedness, type Hand } from "@/game-engine/handedness";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
@@ -624,10 +626,13 @@ function gateLayout(stageW: number, laneX: readonly number[]): { centers: [numbe
  */
 const TsunamiTouchControls = memo(function TsunamiTouchControls({
   joyReset,
+  hand,
   onJoystick,
   jumpStart,
   jumpEnd,
 }: {
+  /** JK (docs/specs/2026-11-26-jatek-kezesseg.md): balkezesnél a tárcsa jobbra, az Ugrás balra (`.game-touch-layer[data-hand]`). */
+  hand: Hand;
   joyReset: number;
   onJoystick: (v: JoystickVector) => void;
   jumpStart: () => void;
@@ -640,6 +645,7 @@ const TsunamiTouchControls = memo(function TsunamiTouchControls({
     <div
       className="tsunami-controls game-touch-layer"
       data-game-controls
+      data-hand={hand}
       data-testid="tsunami-touch-controls"
       style={{
         touchAction: "none",
@@ -675,6 +681,7 @@ export default function TsunamiEscapeEnglish() {
     setDifficulty(d);
   }, []);
   const [subject, setSubject] = useState<TsunamiSubject>("mixed");
+  const [hand, setHand] = useHandedness();
   const [phase, setPhase] = useState<Phase>("menu");
   /**
    * S9 / review #426: a fázis és a szünet SZINKRON tükre. A már ütemezett animációs képkocka és a késleltetett
@@ -1848,6 +1855,7 @@ export default function TsunamiEscapeEnglish() {
               }
               settings={
                 <div className="space-y-4 text-left">
+                  <HandednessPicker hand={hand} onChange={setHand} />
                   <div>
                     <p className="text-sm text-cyan-100/90 font-bold mb-2">Tantárgy mód</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -2077,7 +2085,7 @@ export default function TsunamiEscapeEnglish() {
           )}
 
           {phase === "play" && touch && (
-            <TsunamiTouchControls joyReset={joyReset} onJoystick={onJoystick} jumpStart={jumpStart} jumpEnd={jumpEnd} />
+            <TsunamiTouchControls joyReset={joyReset} hand={hand} onJoystick={onJoystick} jumpStart={jumpStart} jumpEnd={jumpEnd} />
           )}
           {phase === "play" && !touch && (
             <p

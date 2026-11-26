@@ -14,6 +14,8 @@ import {
 import { loadClassroomGrade, saveClassroomGrade } from "@/lib/classroomStore";
 import { useGradeLevel } from "@/game-engine/useGradeLevel";
 import { GradeLevelPicker } from "@/game-engine/GradeLevelPicker";
+import { HandednessPicker } from "@/game-engine/HandednessPicker";
+import { useHandedness } from "@/game-engine/handedness";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -940,6 +942,8 @@ type CrystalLook = "idle" | "correct" | "gone";
 
 export default function SpaceAsteroidQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // JK (docs/specs/2026-11-26-jatek-kezesseg.md): balkezesnél a joystick jobbra, a bomba és a tűz balra (közös preferencia).
+  const [hand, setHand] = useHandedness();
   const sceneBoxRef = useRef<HTMLDivElement>(null);
   // S10 / terv 4.5: közös érintés-észlelés (any-pointer: coarse + valódi érintés) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
@@ -3647,6 +3651,7 @@ export default function SpaceAsteroidQuiz() {
               <div className="flex flex-col gap-3">
                 <p className="text-sm font-semibold text-cyan-100">Osztály</p>
                 {gradeButtons}
+                <HandednessPicker hand={hand} onChange={setHand} />
                 {levels.active && levels.level != null ? (
                   <GradeLevelPicker
                     value={levels.level}
@@ -3899,6 +3904,7 @@ export default function SpaceAsteroidQuiz() {
                   className="sa-controls"
                   data-testid="sa-touch-controls"
                   data-game-controls
+                  data-hand={hand}
                   style={{
                     touchAction: "none",
                     userSelect: "none",
@@ -4059,6 +4065,8 @@ export default function SpaceAsteroidQuiz() {
         }
         .sa-controls > * { flex: 0 0 auto; }
         .sa-actions { display: flex; align-items: flex-end; gap: 14px; }
+        /* JK: balkezesnél tükrözve — a joystick jobbra, az akciócsoport balra, a tűz a képernyő szélén. */
+        .sa-controls[data-hand="left"], .sa-controls[data-hand="left"] .sa-actions { flex-direction: row-reverse; }
         .sa-actions .sa-bomb { margin-bottom: calc(var(--game-action-size) * 0.55); flex-direction: column; }
         .sa-fire-wrap { --game-action-size: clamp(64px, 21vmin, 104px); }
         .sa-fire-wrap .sa-fire { display: inline-flex; }

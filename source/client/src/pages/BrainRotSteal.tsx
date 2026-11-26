@@ -78,6 +78,7 @@ import { correctDataAttrs, installGameTestApi, readGameSeed, type GameForcePatch
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
 import { shapeJoystick } from "@/game-engine/joystick";
 import BrainRotArena3D, { type ArenaBurst, type ArenaRot } from "@/game-engine/scenes/BrainRotArena3D";
+import { useHandedness } from "@/game-engine/handedness";
 import {
   InlineQuestion,
   ResultReview,
@@ -603,21 +604,10 @@ export default function BrainRotSteal() {
   const [legendTop, setLegendTop] = useState<{ top: number; left: number; width: number } | null>(null);
   const legendRef = useRef<HTMLDivElement>(null);
   /** K.4/16: balkezes tükrözés — a joystick a jobb hüvelykujjhoz kerül (helyben tárolva, tárolóhiba esetén alapérték). */
-  const [leftHanded, setLeftHanded] = useState<boolean>(() => {
-    try {
-      return window.localStorage.getItem(HAND_KEY) === "left";
-    } catch {
-      return false;
-    }
-  });
-  const chooseHand = useCallback((left: boolean) => {
-    setLeftHanded(left);
-    try {
-      window.localStorage.setItem(HAND_KEY, left ? "left" : "right");
-    } catch {
-      /* privát mód / megtelt tároló: a választás a menetre érvényes marad */
-    }
-  }, []);
+  // JK (docs/specs/2026-11-26-jatek-kezesseg.md): a közös kezesség-preferencia; a régi játékkulcs tartalék, és tovább íródik.
+  const [hand, setHand] = useHandedness(HAND_KEY);
+  const leftHanded = hand === "left";
+  const chooseHand = useCallback((left: boolean) => setHand(left ? "left" : "right"), [setHand]);
 
   // Unmountkor az összes pending timeout törlése (beragadó state megelőzése)
   useEffect(() => () => { timeoutsRef.current.forEach(clearTimeout); }, []);

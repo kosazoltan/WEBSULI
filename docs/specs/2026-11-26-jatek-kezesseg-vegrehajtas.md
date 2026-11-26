@@ -13,4 +13,11 @@ Terv: `docs/specs/2026-11-26-jatek-kezesseg.md`
    (az akció-ív tükrözése, a kérdés-sáv a két vezérlő tényleges helyéből).
 3. Próbahiba, kapulánc, PR.
 
-Állapot: JK folyamatban.
+Megvalósítás (2026-11-26): a tükrözés CSS-ből a `data-hand` attribútummal (`.game-touch-layer[data-hand="left"]` közös szabály a
+Cunami és a Kockavadász rétegén, `.sa-controls[data-hand="left"]` az Aszteroidán — az akciócsoporton belül is fordítva, így a tűz a
+szélen marad); a Kockavadász akció-íve oszlopcserével, a kérdés-sáv szünetgombja balra, a `belowBand` a két vezérlő tényleges helyéből.
+A kérdés-állapot célpontjai balkezesnél sem fedik a vezérlőket (Kockavadász, Aszteroida, álló és fekvő — mérve).
+Mérés: `game-handedness.spec.ts` 23 passed; `brainrot-play.spec.ts` (benne a régi kezesség-teszt) zöld; `blockcraft-play.spec.ts`
+54 passed — a 2 „M5 kupon” bukás a mainen is ugyanígy bukik (`FLAKE-BC-M5`, nem ennek a szeletnek a hibája).
+
+Állapot: JK kész — kapulánc, PR.

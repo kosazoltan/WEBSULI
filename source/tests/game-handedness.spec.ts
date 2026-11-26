@@ -122,3 +122,42 @@ test.describe("közös preferencia a kezdőképernyő választójával", () => {
     await expectSides(page, tsunami, "left");
   });
 });
+/** A kérdés-állapot célpontjai (kövek / kristályok) balkezes elrendezésben sem fedik a joystickot és a látható akciógombokat. */
+function overlapsWithControls(page: Page, quizScope: string): Promise<string[]> {
+  return page.evaluate((scope) => {
+    const visible = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.visibility !== "hidden" && cs.display !== "none";
+    };
+    const targets = Array.from(document.querySelectorAll(`${scope} button`)).filter(visible);
+    const controls = Array.from(document.querySelectorAll('[data-game-controls] button, [data-game-controls] [data-testid="virtual-joystick"]')).filter(visible);
+    const out: string[] = [];
+    for (const t of targets) for (const c of controls) {
+      const a = t.getBoundingClientRect(), b = c.getBoundingClientRect();
+      const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (ix >= 1 && iy >= 1) out.push(`${t.textContent?.trim().slice(0, 20)} × ${(c.getAttribute("aria-label") ?? c.getAttribute("data-testid") ?? "").slice(0, 20)}`);
+    }
+    return out;
+  }, quizScope);
+}
+
+for (const c of [blockCraft, spaceAsteroid]) {
+  for (const v of VIEWS) {
+    test.describe(`${c.id} — balkezes kérdés-állapot ${v.width}×${v.height}`, () => {
+      test.use({ viewport: { width: v.width, height: v.height } });
+
+      test("a kérdés célpontjai nem fedik a tükrözött vezérlőket", async ({ page }, testInfo) => {
+        await page.addInitScript(() => localStorage.setItem("websuli.game.hand", "left"));
+        await startGame(page, c);
+        await page.waitForFunction(() => typeof (window as unknown as { __websuliGame?: { forceState?: unknown } }).__websuliGame?.forceState === "function", undefined, { timeout: 15_000 });
+        await page.evaluate((patch) => (window as unknown as { __websuliGame: { forceState: (p: unknown) => void } }).__websuliGame.forceState(patch), c.quizForce);
+        await expect(page.locator(`${c.quizScope} button:visible`).first()).toBeVisible({ timeout: 10_000 });
+        // A kérdés-sáv elrendezése (mért helyek) ~1 mp alatt áll be.
+        await expect.poll(() => overlapsWithControls(page, c.quizScope!), { timeout: 5_000, intervals: [250] }).toEqual([]);
+        await page.screenshot({ path: testInfo.outputPath(`${c.id}-${v.width}x${v.height}-balkezes-kerdes.jpg`), type: "jpeg", quality: 70 });
+      });
+    });
+  }
+}

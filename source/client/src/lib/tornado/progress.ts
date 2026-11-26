@@ -12,6 +12,7 @@
  * throw on mount would take down the whole page.
  */
 
+import { storedHand } from "../../game-engine/handedness";
 import { STARTER_VEHICLE_ID, vehicleById } from "./vehicles";
 import {
   MAX_UPGRADE_LEVEL,
@@ -397,7 +398,10 @@ export function parseProgress(raw: string | null | undefined): TornadoProgress {
 export function loadProgress(): TornadoProgress {
   try {
     if (typeof window === "undefined") return defaultProgress();
-    return parseProgress(window.localStorage.getItem(STORAGE_KEY));
+    const progress = parseProgress(window.localStorage.getItem(STORAGE_KEY));
+    // JK (docs/specs/2026-11-26-jatek-kezesseg.md): a játékok közös kezesség-preferenciája (ha be van állítva) az irányadó.
+    const hand = storedHand();
+    return hand ? { ...progress, settings: { ...progress.settings, leftHanded: hand === "left" } } : progress;
   } catch {
     return defaultProgress();
   }

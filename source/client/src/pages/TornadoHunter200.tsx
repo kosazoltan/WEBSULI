@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { saveHand } from "@/game-engine/handedness";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import { Card, CardContent } from "@/components/ui/card";
 import { correctDataAttrs, installGameTestApi, readGameSeed, GAME_TEST_HOOKS_ENABLED } from "@/game-engine/game-test-hooks";
@@ -1108,7 +1109,11 @@ function LevelsScreen(props: { progress: TornadoProgress; onBack: () => void; on
 function SettingsScreen(props: { progress: TornadoProgress; commit: (p: TornadoProgress) => void; onBack: () => void }) {
   const { progress, commit } = props;
   const s = progress.settings;
-  const set = (patch: Partial<TornadoProgress["settings"]>) => commit(updateSettings(progress, patch));
+  const set = (patch: Partial<TornadoProgress["settings"]>) => {
+    // JK: a kezesség-váltás a játékok közös preferenciáját is írja.
+    if (patch.leftHanded !== undefined) saveHand(patch.leftHanded ? "left" : "right");
+    commit(updateSettings(progress, patch));
+  };
 
   // Spec 2026-09-29: a teljes általános és középiskola (7–12: közös évfolyam-bank).
   const schoolOptions: SchoolLevel[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "auto"];
@@ -3303,10 +3308,10 @@ function PlayScreen(props: {
           <div>
             <p className="text-sm font-bold uppercase tracking-wide text-white/70 mb-1.5">Irányítás</p>
             <div className="grid grid-cols-2 gap-2">
-              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: false }))}>
+              <ToggleChip active={!props.progress.settings.leftHanded} onClick={() => { saveHand("right"); props.onProgress((latest) => updateSettings(latest, { leftHanded: false })); }}>
                 Jobbkezes
               </ToggleChip>
-              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => props.onProgress((latest) => updateSettings(latest, { leftHanded: true }))}>
+              <ToggleChip active={props.progress.settings.leftHanded} onClick={() => { saveHand("left"); props.onProgress((latest) => updateSettings(latest, { leftHanded: true })); }}>
                 Balkezes
               </ToggleChip>
             </div>

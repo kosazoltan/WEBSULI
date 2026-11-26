@@ -22,6 +22,8 @@ import { SUN_SHADE_TINT, sunShadeAt, type SunOccluder } from "@/lib/voxelSunShad
 import { useReducedMotion } from "@/game-engine/useReducedMotion";
 import { ArrowLeft, Pickaxe, Flame, ArrowBigUp, Blocks, Gem, Pause, RefreshCw } from "lucide-react";
 import VirtualJoystick from "@/game-engine/VirtualJoystick";
+import { HandednessPicker } from "@/game-engine/HandednessPicker";
+import { useHandedness } from "@/game-engine/handedness";
 import { countRender, registerInputProbe } from "@/game-engine/inputProbe";
 import HoldButton from "@/game-engine/HoldButton";
 import { shapeJoystick } from "@/game-engine/joystick";
@@ -1120,6 +1122,8 @@ export default function BlockCraftQuiz() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // S11: a közös érintés-észlelés (any-pointer: coarse + maxTouchPoints) — érintős laptop is kap vezérlőt.
   const touchCapable = useTouchCapable();
+  // JK (docs/specs/2026-11-26-jatek-kezesseg.md): balkezesnél a joystick jobbra, az akció-ív balra (közös preferencia).
+  const [hand, setHand] = useHandedness();
   const haptics = useHaptics();
   // D-04: a Rúnabánya pontskálája új kulcs alá ment; a régi „block-craft-quiz” helyi rekord archívként megmarad.
   const bestScore = useBestScore(BLOCK_CRAFT_SCORE_KEY);
@@ -3229,11 +3233,16 @@ export default function BlockCraftQuiz() {
         const joy = visibleRect('[data-testid="virtual-joystick"]');
         const jump = visibleRect(".bc-act-jump");
         const hotbar = visibleRect('[data-testid="bc-hotbar"]') ?? visibleRect(".bc-bottom");
+        // JK: a tárcsa és az Ugrás bármelyik oldalon állhat (kezesség) — a sáv a két vezérlő TÉNYLEGES helye közé esik.
+        const mid = (cr.left + cr.right) / 2;
+        const sides = [joy, jump].filter((r): r is DOMRect => r !== null);
+        const leftOf = sides.filter((r) => r.left + r.width / 2 < mid).map((r) => r.right + 6);
+        const rightOf = sides.filter((r) => r.left + r.width / 2 >= mid).map((r) => r.left - 6);
         belowBand = {
           top: Math.max(...rr.map((r) => r.bottom)) + 6,
           bottom: Math.min(cr.bottom, hotbar ? hotbar.top : cr.bottom) - 6,
-          left: joy ? joy.right + 6 : cr.left + 4,
-          right: jump ? jump.left - 6 : cr.right - 4,
+          left: Math.max(cr.left + 4, ...leftOf),
+          right: Math.min(cr.right - 4, ...rightOf),
           landscape: false,
         };
       }
@@ -3956,6 +3965,7 @@ export default function BlockCraftQuiz() {
             }
             settings={
               <div className="flex flex-col gap-3">
+                <HandednessPicker hand={hand} onChange={setHand} />
                 {levels.active && levels.level != null ? (
                   <GradeLevelPicker
                     value={levels.level}
@@ -4099,6 +4109,7 @@ export default function BlockCraftQuiz() {
               <div
                 className={`bc-runes ${wrongShake && !reducedMotion ? "animate-shake" : ""}`}
                 data-testid="bc-quiz"
+                data-hand={hand}
                 data-state={reveal ? "reveal" : "open"}
                 data-long={presentation.options.some((o) => o.label.length > 60) ? "xl" : presentation.options.some((o) => o.label.length > 22) ? "true" : "false"}
                 role="group"
@@ -4176,6 +4187,7 @@ export default function BlockCraftQuiz() {
               <div
                 className="game-touch-layer bc-touch-layer"
                 data-game-controls
+                data-hand={hand}
                 data-testid="bc-touch-controls"
                 style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
               >
@@ -4422,6 +4434,10 @@ export default function BlockCraftQuiz() {
         .bc-act-label { position: absolute; left: 50%; bottom: -10px; transform: translateX(-50%); white-space: nowrap; font-size: 14px; line-height: 1; font-weight: 800; padding: 3px 8px; border-radius: 9999px; background: rgba(2,6,23,.82); border: 1px solid rgba(255,255,255,.22); color: #fff; pointer-events: none; }
         /* J3a: nyitott Rúna-zárnál a Lerak / Bányász gomb láthatatlan (a rúnakövek helye), az Ugrás és a joystick marad. */
         .bc-actions[data-lock="true"] .bc-act-place, .bc-actions[data-lock="true"] .bc-act-mine { visibility: hidden; }
+        /* JK: balkezesnél az ív tükrözve — az Ugrás és a Lerak a képernyő bal szélén, a Bányász befelé. */
+        .bc-touch-layer[data-hand="left"] .bc-act-place { grid-column: 1; }
+        .bc-touch-layer[data-hand="left"] .bc-act-mine { grid-column: 2; }
+        .bc-touch-layer[data-hand="left"] .bc-act-jump.game-action-btn { grid-column: 1; }
         /* J3a — bányászás-gyűrű a célkereszt körül (a --p 0..1 a tartás / az ütések haladása). */
         .bc-mine-ring { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 9999px; --p: 0;
           background: conic-gradient(#fbbf24 calc(var(--p) * 360deg), transparent 0); -webkit-mask: radial-gradient(circle, transparent 15px, #000 16px); mask: radial-gradient(circle, transparent 15px, #000 16px); opacity: .95; }
@@ -4449,6 +4465,8 @@ export default function BlockCraftQuiz() {
           background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,0) 60%), rgba(30,27,46,.92); border: 2px solid var(--rune); box-shadow: 0 0 14px color-mix(in srgb, var(--rune) 45%, transparent), inset 0 -3px 0 rgba(0,0,0,.35); touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none; }
         .bc-rune:active:not([aria-disabled="true"]) { transform: scale(.97); }
         .bc-rune-pause[data-covered="true"] { visibility: hidden; pointer-events: none; }
+        /* JK: balkezesnél a kérdés-sáv szünetgombja is az akciógombok oldalára (balra) kerül. */
+        .bc-runes[data-hand="left"] .bc-rune-pause { right: auto; left: 0; }
         .bc-rune-pause { pointer-events: auto; position: absolute; right: 0; top: -62px; width: 52px; height: 52px; display: inline-flex; align-items: center; justify-content: center; border-radius: 16px; color: #fff; background: rgba(15,23,42,.82); border: 1px solid rgba(255,255,255,.3); touch-action: manipulation; }
         .bc-rune-letter { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: var(--rune); color: #0f0c1c; font-size: 20px; font-weight: 900; }
         .bc-rune-label { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
