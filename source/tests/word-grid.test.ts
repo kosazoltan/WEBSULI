@@ -58,3 +58,24 @@ test("séma: helyes / hibás szókereső és keresztrejtvény", () => {
   l.sections[0].blocks.push({ kind: "try", tryKind: "wordSearch", spec: { words: WORDS }, coversConceptIds: concept });
   assert.equal(lessonSchema.safeParse(l).success, true);
 });
+test("review #616: a kijelölt egyenes betűsora dönt — a szó minden tényleges előfordulása (oda-vissza) találat, a generátor helyétől függetlenül", async () => {
+  const { matchSelection } = await import("../shared/word-grid");
+  const grid = [
+    ["K", "Ö", "R", "T", "E"],
+    ["A", "L", "M", "A", "X"],
+    ["Z", "Y", "K", "Ö", "R"],
+    ["Q", "W", "E", "R", "T"],
+    ["P", "O", "I", "U", "Z"],
+  ];
+  const words = ["körte", "kör", "alma"];
+  // A „kör” a KÖRTE elején is olvasható: ez is helyes találat (a generátor a 3. sorba tette).
+  assert.equal(matchSelection(grid, words, { r: 0, c: 0 }, { r: 0, c: 2 }), "kör");
+  assert.equal(matchSelection(grid, words, { r: 0, c: 2 }, { r: 0, c: 0 }), "kör", "visszafelé kijelölve is");
+  assert.equal(matchSelection(grid, words, { r: 2, c: 2 }, { r: 2, c: 4 }), "kör");
+  assert.equal(matchSelection(grid, words, { r: 0, c: 0 }, { r: 0, c: 4 }), "körte");
+  assert.equal(matchSelection(grid, words, { r: 1, c: 0 }, { r: 1, c: 3 }), "alma");
+  // Már megtalált szó nem számít újra; nem egyenes / egycellás kijelölés nem találat.
+  assert.equal(matchSelection(grid, words, { r: 0, c: 0 }, { r: 0, c: 2 }, ["kör"]), null);
+  assert.equal(matchSelection(grid, words, { r: 0, c: 0 }, { r: 1, c: 2 }), null);
+  assert.equal(matchSelection(grid, words, { r: 0, c: 0 }, { r: 0, c: 0 }), null);
+});
