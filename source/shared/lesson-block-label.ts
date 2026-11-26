@@ -66,6 +66,8 @@ export const TRY_LABELS: Readonly<Record<string, string>> = {
   trueFalseSeries: "Igaz vagy hamis?", highlight: "Jelöld ki", categorize: "Csoportosítsd", numberLine: "Helyezd el a számegyenesen", estimate: "Becsüld meg",
   // V3a
   flipCard: "Fordítókártya", stepReveal: "Lépésről lépésre", didYouKnow: "Tudtad?", decision: "Döntés és következmény", flashcards: "Villámkártyák",
+  // V5a
+  wordSearch: "Szókereső", crossword: "Keresztrejtvény",
 };
 
 /** Spec 2026-11-08-tartalmi-fejlecek-2: az ellenőrző kérdés IQ-formája a kérdés szövegéből (az első egyező). */

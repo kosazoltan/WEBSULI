@@ -1,3 +1,4 @@
+import { readCrossword, readWordSearch } from "../../shared/word-grid";
 import { readCategorize, readDecision, readDidYouKnow, readFlashcards, readFlipCard, readHighlight, readStepReveal, readTrueFalse } from "../../shared/try-scoring";
 import type { MapConcept } from "./coverage";
 import { renderedVisualTexts } from "../../shared/lesson-visual-params";
@@ -301,6 +302,9 @@ export function blockText(block: Record<string, unknown>): string {
     if (block.tryKind === "didYouKnow") parts.push(readDidYouKnow(spec).fact);
     if (block.tryKind === "decision") { const d = readDecision(spec); parts.push(d.situation, ...d.options.flatMap((o) => [o.text, o.consequence])); }
     if (block.tryKind === "flashcards") parts.push(...readFlashcards(spec).cards.flatMap((c) => [c.front, c.back]));
+    // V5a: a szókereső (látható) szavai és a keresztrejtvény meghatározásai — review #616: a megfejtés rejtett válasz, nem bizonyíték.
+    if (block.tryKind === "wordSearch") parts.push(...readWordSearch(spec).words);
+    if (block.tryKind === "crossword") parts.push(...readCrossword(spec).entries.map((e) => e.clue));
     if (block.tryKind === "match" && Array.isArray(spec.pairs)) {
       for (const pair of spec.pairs) {
         if (pair && typeof pair.left === "string" && typeof pair.right === "string") parts.push(pair.left, pair.right);
