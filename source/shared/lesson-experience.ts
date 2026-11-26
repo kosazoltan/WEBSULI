@@ -4,6 +4,7 @@ import { isNumericOption } from "./single-choice-check";
 import { z } from "zod";
 import { LESSON_FLAIRS } from "./lesson-visuals";
 import { PRACTICE_BANK_RULE } from "./practice-rules";
+import { practiceQuotaEnabled, practiceQuotaLine } from "./practice-policy";
 import { LESSON_SCORING_VERSION, ORDER_SCORING_VERSION, PHRASE_SCORING_VERSION, POLYNOMIAL_SCORING_VERSION, TYPED_SCORING_VERSION, isValidReference } from "./answer-value";
 
 /** Pedagogy shared by the structured runtime and the standalone HTML author. */
@@ -361,6 +362,8 @@ export function bankPacketContract(c: { sectionIndex: number; conceptIds: readon
     `9. KIMENETI KERET (a túl hosszú válasz levágódik és elvész): ez a csomag ${c.taskTarget} nyílt feladat + ${c.quizTarget} kvízkérdés + legalább ${c.methodKinds.length} módszer — tömören: kérdés legfeljebb 2 mondat (≤ 300 karakter), sample legfeljebb 3 mondat (≤ 400 karakter), kvízopciónként legfeljebb 1 mondatos magyarázat (≤ 200 karakter), módszer prompt / answer legfeljebb 2 mondat (≤ 300 karakter); pontosan a kért darabszám, nem több. A gondolkodásban ne írd meg előre a csomagot (csak a számolásokat és a kulcsokat ellenőrizd); a JSON-t egyszer írd le.`,
     // TANANYAG-GYAKORLATI P3: alkalmazás–fogalmi egyensúly és meta-tilalom (tulajdonosi döntés 2026-11-26).
     PRACTICE_BANK_RULE,
+    // TG-P4b: a csomag számszerű gyakorlati sávja (a csomag-validátor ugyanezt méri).
+    ...(practiceQuotaEnabled() ? [practiceQuotaLine(c.quizTarget, c.conceptIds.length, c.taskTarget)] : []),
     // V4: kvízkérdés-típusok (csak változatosság BE).
     ...(c.quizFormats ? ['10. KVÍZTÍPUSOK: minden kvíztételnek format mezője van: "choice" (egyválasztós), "fillGap" (kiegészítés: a kérdésben PONTOSAN egy ___ hiány, az opciók a hiány kitöltései), "oddOneOut" (kakukktojás: „Melyik nem illik a sorba?”, PONTOSAN 4 opció, a helyes a kilógó), "number" (számolós: minden opció szám, mértékegységgel is). Ha a csomag kvíze legalább 6 kérdés, legalább 2 különböző format legyen; a number csak számítással megoldható kérdéshez.'] : []),
   ].join("\n");

@@ -29,7 +29,7 @@ import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-
 import { calibrateRubric, retainTightened, retainTightenedPhrases } from "../../shared/answer-key-calibrate";
 import type { QuizBlindItem } from "./quiz-blind-check";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { practiceMetaProblems } from "../../shared/practice-policy";
+import { practiceMetaProblems, practiceQuotaEnabled, practiceQuotaProblems } from "../../shared/practice-policy";
 
 /**
  * Spec 2026-10-19-eroforras-s3a: a bankkérés ÁLLANDÓ előtagja (szerepkészség + módszertan + válaszszabályok, ≈ 4 000 token). A bank
@@ -606,6 +606,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       problems.push(...arithmeticClaimProblems(packet));
       // TG-P4a: a feladatlapra / pontozásra kérdező tétel javító fordulót kap (tulajdonosi döntés 2026-11-26).
       problems.push(...practiceMetaProblems(packet));
+      // TG-P4b: 60–75% igazolt alkalmazás (korlátozott csomagnál a fogalompár-maximum), csomagszintű javító kör.
+      if (practiceQuotaEnabled()) problems.push(...practiceQuotaProblems(packet, unit.conceptIds.length));
       // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
       problems.push(...lessonSingleChoiceProblems({ experience: packet }).flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);

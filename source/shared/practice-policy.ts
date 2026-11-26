@@ -128,6 +128,37 @@ export function practiceTarget(n: number, pairs: number): { lower: number; upper
   return { lower, upper, goal: Math.min(Math.round((2 * n) / 3), max), max, limited: max < lower };
 }
 
+/**
+ * TG-P4b kapcsoló: `STUDIO_PRACTICE_QUOTA=on` mellett kéri és ellenőrzi a gyártás a csomagkvótát (alapból KI → a gyártás változatlan;
+ * élesítés a deploy után, a többi Stúdió-kapcsolóhoz hasonlóan).
+ */
+export const practiceQuotaEnabled = (env: NodeJS.ProcessEnv = process.env) => env.STUDIO_PRACTICE_QUOTA === "on";
+
+/** TG-P4b: a csomag (vagy bank) gyakorlati sávja — korlátozott kvízcsomagnál (N − C < 60%) a fogalompár-maximum a cél. */
+export function practiceQuota(quizN: number, pairs: number, taskN: number): { quiz: { min: number; max: number }; tasks: { min: number; max: number } } {
+  const q = practiceTarget(quizN, pairs), t = practiceTarget(taskN, 0);
+  return { quiz: q.limited ? { min: q.max, max: q.max } : { min: q.lower, max: q.upper }, tasks: { min: t.lower, max: t.upper } };
+}
+
+/** TG-P4b: a bankcsomag-szerződés számszerű gyakorlati sora (a program ugyanezt méri a `practiceQuotaProblems`-szel). */
+export function practiceQuotaLine(quizN: number, pairs: number, taskN: number): string {
+  const { quiz, tasks } = practiceQuota(quizN, pairs, taskN);
+  return `GYAKORLATI ARÁNY (a program méri; a nem egyértelmű tétel nem számít): quiz: legalább ${quiz.min}, legfeljebb ${quiz.max} igazolt alkalmazás (konkrét példán döntés, kiegészítés, számolás, javítás) a ${quizN} tételből, a többi a fejezet fogalmainak felidézése; tasks: legalább ${tasks.min}, legfeljebb ${tasks.max} alkalmazó feladat a ${taskN}-ból.`;
+}
+
+/** TG-P4b: csomagszintű kvóta-ellenőrzés a gyártáskor — kevés vagy a sávnál több igazolt alkalmazás javító kört kap. */
+export function practiceQuotaProblems(packet: { quiz?: Array<{ question: string; options?: string[]; format?: string }>; tasks?: Array<{ q: string; sample?: string }> }, pairs: number): string[] {
+  const quiz = packet.quiz ?? [], tasks = packet.tasks ?? [];
+  const quota = practiceQuota(quiz.length, pairs, tasks.length);
+  const check = (bank: "quiz" | "tasks", n: number, a: number, r: { min: number; max: number }): string[] =>
+    a < r.min ? [`${bank}: ${n} tételből ${a} igazolt alkalmazás; legalább ${r.min} kell — cserélj fogalmi felidézést konkrét példán végzett döntésre, kiegészítésre, számolásra vagy javításra (a fejezet fogalmait így is fedd le)`]
+    : a > r.max ? [`${bank}: ${n} tételből ${a} igazolt alkalmazás; legfeljebb ${r.max} lehet — a fejezet fogalmainak felidézésére is kell hely`] : [];
+  return [
+    ...check("quiz", quiz.length, quiz.filter((it) => classifyQuizItem(it).kind === "alkalmazas").length, quota.quiz),
+    ...check("tasks", tasks.length, tasks.filter((t) => classifyOpenTask(t).kind === "alkalmazas").length, quota.tasks),
+  ];
+}
+
 export type BankAudit = {
   total: number;
   counts: Record<PracticeKind, number>;
