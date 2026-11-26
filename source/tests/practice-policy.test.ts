@@ -209,3 +209,67 @@ describe("TG-P4a: meta-kapu a bankcsomag elfogadásán", () => {
     assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /practiceMetaProblems\(/);
   });
 });
+
+describe("TG-P4b: gyakorlati kvóta a bankcsomagon", () => {
+  const app = (i: number) => q(`Számold ki: ${i} + 7 = ?`, ["1", "2", "3"]);
+  const rec = (i: number) => q(`Mit jelent a(z) fogalom${i}?`, ["a", "b", "c"]);
+  it("10 kvízből 4 alkalmazás bukik, 6 átmegy (a feladatbankra is)", async () => {
+    const { practiceQuotaProblems } = await import("../shared/practice-policy");
+    const tasks = (k: number) => Array.from({ length: 5 }, (_, i) => (i < k ? { q: `Számold ki: ${i} · 3 = ?`, sample: "x" } : { q: `Mit jelent a fogalom${i}?`, sample: "x" }));
+    const bad = practiceQuotaProblems({ quiz: [...[0, 1, 2, 3].map(app), ...[4, 5, 6, 7, 8, 9].map(rec)], tasks: tasks(3) }, 2);
+    assert.equal(bad.length, 1);
+    assert.match(bad[0], /^quiz: 10 tételből 4 igazolt alkalmazás; legalább 6/);
+    assert.deepEqual(practiceQuotaProblems({ quiz: [...[0, 1, 2, 3, 4, 5].map(app), ...[6, 7, 8, 9].map(rec)], tasks: tasks(3) }, 2), []);
+    assert.match(practiceQuotaProblems({ quiz: [...[0, 1, 2, 3, 4, 5].map(app), ...[6, 7, 8, 9].map(rec)], tasks: tasks(1) }, 2).join(" "), /^tasks: 5 tételből 1/);
+  });
+  it("korlátozott csomag (12 tétel, 10 kötelező pár) a maximumot kéri, a bizonytalan nem számít", async () => {
+    const { practiceQuota, practiceQuotaProblems } = await import("../shared/practice-policy");
+    assert.deepEqual(practiceQuota(12, 10, 0).quiz, { min: 2, max: 2, goal: 2 });
+    const unsure = q("Melyik a legszebb?", ["a", "b", "c"]);
+    assert.equal(practiceQuotaProblems({ quiz: [unsure, unsure, ...Array.from({ length: 10 }, (_, i) => rec(i))], tasks: [] }, 10).length, 1);
+  });
+  it("a szerződés tartalmazza a számokat, és a csomag-validátor hívja", async () => {
+    const { bankPacketContract } = await import("../shared/lesson-experience");
+    const args = { sectionIndex: 0, conceptIds: ["a", "b"], methodKinds: ["guided"], taskCount: 4, taskTarget: 5, quizCount: 8, quizTarget: 10 };
+    const prev = process.env.STUDIO_PRACTICE_QUOTA;
+    try {
+      delete process.env.STUDIO_PRACTICE_QUOTA;
+      assert.doesNotMatch(bankPacketContract(args), /GYAKORLATI ARÁNY/, "kapcsoló KI: a szerződés változatlan");
+      process.env.STUDIO_PRACTICE_QUOTA = "on";
+      assert.match(bankPacketContract(args), /GYAKORLATI ARÁNY[^\n]*quiz: legalább 6, legfeljebb 7[^\n]*tasks: legalább 3/);
+    } finally {
+      if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+    }
+    const { readFileSync } = await import("node:fs");
+    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /if \(practiceQuotaEnabled\(\)\) problems\.push\(\.\.\.practiceQuotaProblems\(packet, unit\.conceptIds\.length\)\)/);
+  });
+});
+
+describe("review #631: kvóta-sáv és a csomag-validátor viselkedése", () => {
+  it("a felső határ a fogalompár-maximumnál nem lehet nagyobb, és min ≤ max; a cél is a sorban", async () => {
+    const { practiceQuota, practiceQuotaLine } = await import("../shared/practice-policy");
+    // N=10, C=4: alsó 6, felső 7, maximum 6 → a sáv 6–6 (nem 6–7).
+    assert.deepEqual(practiceQuota(10, 4, 0).quiz, { min: 6, max: 6, goal: 6 });
+    for (let n = 0; n <= 40; n++) for (let c = 0; c <= n; c++) { const q = practiceQuota(n, c, n).quiz; assert.ok(q.min <= q.max && q.max <= Math.max(0, n - c), `${n}/${c}`); }
+    assert.match(practiceQuotaLine(9, 2, 6), /cél: 6/);
+  });
+  it("kapcsoló BE: a valódi banképítő a kevés alkalmazású csomagot javító körre küldi (a hibaüzenet a kérésben), KI: nem", async () => {
+    const { buildLessonExperience } = await import("../server/studio/experience-builder");
+    const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+    const run = async (flag: string | undefined) => {
+      const prev = process.env.STUDIO_PRACTICE_QUOTA;
+      if (flag === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = flag;
+      const seen: string[] = [];
+      try {
+        const lesson = standardFusionFixture(); const e = lesson.experience!;
+        const recall = e.quiz.map((q, i) => ({ ...q, question: `Mit jelent a(z) ${i}. fogalom a fejezetben?` }));
+        await buildLessonExperience(lesson, [], { call: async (...args: unknown[]) => { seen.push(JSON.stringify(args)); return { methods: e.methods, tasks: e.tasks, quiz: recall, glossary: [] }; } }).catch(() => undefined);
+      } finally {
+        if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+      }
+      return seen.join("\n");
+    };
+    assert.match(await run("on"), /igazolt alkalmazás; legalább/);
+    assert.doesNotMatch(await run(undefined), /igazolt alkalmazás; legalább/);
+  });
+});

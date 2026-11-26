@@ -35,7 +35,8 @@ const SPORT = /(kosár|labd|foci|futball|meccs|mérkőzés|gól|büntető|tenisz
 const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|felépítés|hányadik feladat)/;
 const POINT_OPTION = /^\d+(?:[,.]\d+)? ?pont/;
 /** Pontszerzésre kérdez (nem a geometriai pontra): „hány pontot kap / ér”, „pont jár”, „pontot szerez”. */
-const SCORE_ASK = /(pontot (?:kap|ér|szerez|kaphat)|pont jár|hány pontot\b|mennyit ér|(?<![\p{L}])ér(?![\p{L}]))/u;
+// TG-P4b: lookbehind nélkül — a modul a P4b-vel a kliens csomagjába is bekerül (Safari < 16.4, tests/no-lookbehind-client.test.ts).
+const SCORE_ASK = /(pontot (?:kap|ér|szerez|kaphat)|pont jár|hány pontot\b|mennyit ér|(?:^|[^\p{L}])ér(?![\p{L}]))/u;
 
 /** Erős fogalmi (felidéző) alakok — a konkrét anyag (idézet) jelenléte sem teszi alkalmazássá: a jelentés felidézése fogalmi. */
 const RECALL =
@@ -80,7 +81,7 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   if (APPLY_VERB.test(t)) return v("alkalmazas", "konkrét anyagon végzett művelet");
   if (QUOTED.test(text) || (DIGIT.test(t) && /\?/.test(t))) return v("alkalmazas", "konkrét anyagra (idézet / adat) épülő kérdés");
   // Helyzet + kérdés: a kérdés előtt legalább egy teljes, 4+ szavas mondat írja le az esetet → a tanuló a tudását a helyzetre alkalmazza.
-  const sentences = t.split(/(?<=[.!?:])\s+/).filter(Boolean);
+  const sentences = t.replace(/([.!?:])\s+/g, "$1\n").split("\n").filter(Boolean);
   if (sentences.length >= 2 && sentences.slice(0, -1).some((s) => s.split(" ").length >= 4)) return v("alkalmazas", "leírt helyzetre alkalmazott tudás");
   const after = t.split(/:\s+/)[1];
   if (after && after.split(" ").length >= 3) return v("alkalmazas", "a kérdés konkrét szövegrészletre vonatkozik");
@@ -126,6 +127,42 @@ export function classifyOpenTask(task: { q: string; sample?: string }): Practice
 export function practiceTarget(n: number, pairs: number): { lower: number; upper: number; goal: number; max: number; limited: boolean } {
   const lower = Math.ceil(0.6 * n), upper = Math.floor(0.75 * n), max = Math.max(0, n - pairs);
   return { lower, upper, goal: Math.min(Math.round((2 * n) / 3), max), max, limited: max < lower };
+}
+
+/**
+ * TG-P4b kapcsoló: `STUDIO_PRACTICE_QUOTA=on` mellett kéri és ellenőrzi a gyártás a csomagkvótát (alapból KI → a gyártás változatlan;
+ * élesítés a deploy után, a többi Stúdió-kapcsolóhoz hasonlóan).
+ */
+export const practiceQuotaEnabled = (env: NodeJS.ProcessEnv = process.env) => env.STUDIO_PRACTICE_QUOTA === "on";
+
+/** TG-P4b: a csomag (vagy bank) gyakorlati sávja — korlátozott kvízcsomagnál (N − C < 60%) a fogalompár-maximum a cél. */
+type QuotaBand = { min: number; max: number; goal: number };
+export function practiceQuota(quizN: number, pairs: number, taskN: number): { quiz: QuotaBand; tasks: QuotaBand } {
+  // review #631: a felső határ a fogalompár-maximumnál (N − C) sem lehet nagyobb; min ≤ max; a cél (kétharmad) a sávba szorítva.
+  const band = (x: ReturnType<typeof practiceTarget>): QuotaBand => {
+    const max = Math.min(x.upper, x.max), min = Math.min(x.lower, max);
+    return { min, max, goal: Math.min(max, Math.max(min, x.goal)) };
+  };
+  return { quiz: band(practiceTarget(quizN, pairs)), tasks: band(practiceTarget(taskN, 0)) };
+}
+
+/** TG-P4b: a bankcsomag-szerződés számszerű gyakorlati sora (a program ugyanezt méri a `practiceQuotaProblems`-szel). */
+export function practiceQuotaLine(quizN: number, pairs: number, taskN: number): string {
+  const { quiz, tasks } = practiceQuota(quizN, pairs, taskN);
+  return `GYAKORLATI ARÁNY (a program méri; a nem egyértelmű tétel nem számít): quiz: legalább ${quiz.min}, legfeljebb ${quiz.max} igazolt alkalmazás (cél: ${quiz.goal}) (konkrét példán döntés, kiegészítés, számolás, javítás) a ${quizN} tételből, a többi a fejezet fogalmainak felidézése; tasks: legalább ${tasks.min}, legfeljebb ${tasks.max} alkalmazó feladat (cél: ${tasks.goal}) a ${taskN}-ból.`;
+}
+
+/** TG-P4b: csomagszintű kvóta-ellenőrzés a gyártáskor — kevés vagy a sávnál több igazolt alkalmazás javító kört kap. */
+export function practiceQuotaProblems(packet: { quiz?: Array<{ question: string; options?: string[]; format?: string }>; tasks?: Array<{ q: string; sample?: string }> }, pairs: number): string[] {
+  const quiz = packet.quiz ?? [], tasks = packet.tasks ?? [];
+  const quota = practiceQuota(quiz.length, pairs, tasks.length);
+  const check = (bank: "quiz" | "tasks", n: number, a: number, r: { min: number; max: number }): string[] =>
+    a < r.min ? [`${bank}: ${n} tételből ${a} igazolt alkalmazás; legalább ${r.min} kell — cserélj fogalmi felidézést konkrét példán végzett döntésre, kiegészítésre, számolásra vagy javításra (a fejezet fogalmait így is fedd le)`]
+    : a > r.max ? [`${bank}: ${n} tételből ${a} igazolt alkalmazás; legfeljebb ${r.max} lehet — a fejezet fogalmainak felidézésére is kell hely`] : [];
+  return [
+    ...check("quiz", quiz.length, quiz.filter((it) => classifyQuizItem(it).kind === "alkalmazas").length, quota.quiz),
+    ...check("tasks", tasks.length, tasks.filter((t) => classifyOpenTask(t).kind === "alkalmazas").length, quota.tasks),
+  ];
 }
 
 export type BankAudit = {
