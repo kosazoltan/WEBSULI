@@ -204,6 +204,18 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
  * Review #612/#624: a GYÁRTÁS határán (modell kimenete) érvényes további követelmények — a mentett leckék olvasását (séma) nem
  * érintik, így a korábban leírás nélkül mentett becslésblokk olvasható marad.
  */
+type TryHost = { sections: Array<{ blocks: Array<{ kind: string; tryKind?: string; spec?: unknown }> }> };
+/**
+ * Review #624/2: a gyártás-határ követelménye a MODELL által új / megváltoztatott try-blokkokra (egyfutásos gyártás: `before = null`,
+ * minden blokk új; lecke- és fogalomjavítás: a tárolt lecke a `before` — a változatlanul átvett régi blokk nem hiba).
+ */
+export function newTryProblems(before: TryHost | null, after: TryHost): string[] {
+  const key = (b: { tryKind?: string; spec?: unknown }) => `${b.tryKind}|${JSON.stringify(b.spec ?? null)}`;
+  const old = new Set((before?.sections ?? []).flatMap((s) => s.blocks.filter((b) => b.kind === "try").map(key)));
+  return after.sections.flatMap((s, si) => s.blocks.flatMap((b, bi) =>
+    b.kind === "try" && !old.has(key(b)) ? generatedTryProblems(b.tryKind ?? "", b.spec).map((m) => `sections.${si}.blocks.${bi}.spec: ${m}`) : []));
+}
+
 export function generatedTryProblems(kind: string, spec: unknown): string[] {
   // Review #612: leírás nélkül csak „Becsüld meg:” és egy csúszka látszana — nem derülne ki, mit kell megbecsülni.
   if (kind === "estimate" && !readEstimate(spec).prompt) return ["A becsléshez leírás (prompt) kell: mit kell megbecsülni."];

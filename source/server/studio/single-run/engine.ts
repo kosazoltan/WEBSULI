@@ -9,7 +9,7 @@
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
-import { generatedTryProblems } from "../../../shared/try-scoring";
+import { newTryProblems } from "../../../shared/try-scoring";
 import { seedFrom } from "../../../shared/seeded";
 import { applySectionShapes, numericSubject, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
 import { visualKindCounts, withKindShareNotes } from "../../../shared/visual-kind-plan";
@@ -880,8 +880,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     const unknown = lessonIdsSubsetOfMap(parsed.data, concepts);
     if (unknown.length) return { ok: false, problems: [...dropNotes, `A tudásbankban nem szereplő fogalomazonosítók: ${unknown.join(", ")}`] };
     // Review #612/#624: a gyártás-határ try-követelményei (pl. a becslés leírása) — a mentett leckék sémáját nem szigorítják.
-    const tryGen = parsed.data.sections.flatMap((s, si) => s.blocks.flatMap((b, bi) =>
-      b.kind === "try" ? generatedTryProblems(b.tryKind, b.spec).map((m) => `sections.${si}.blocks.${bi}.spec: ${m}`) : []));
+    const tryGen = newTryProblems(null, parsed.data);
     if (tryGen.length) return { ok: false, problems: [...dropNotes, ...tryGen] };
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
     const coverage = checkCoverageGate(parsed.data, concepts);

@@ -6,6 +6,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { htmlFiles, kmConcepts, knowledgeMaps, lessons } from "../../../shared/schema";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
+import { newTryProblems } from "../../../shared/try-scoring";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { adoptStoredOpeningForm, runWithLessonVariety } from "../lesson-variety-flag";
 import { carryVarietyMarker, storedVarietyMarker } from "../../../shared/lesson-feedback-openers";
@@ -62,6 +63,9 @@ async function fixConceptScoped(input: ConceptFixInput): Promise<ConceptFixOutco
     const candidate = await runStation(deps, "fogalomjavítás", withRoleRunbook([{ type: "text", text: `FOGALOMJAVÍTÁS (${conceptId}).\n${prompt}\nVálaszolj kizárólag a teljes lecke JSON-jával.` }], "author"), (json) => {
       const parsed = modelLessonSchema(input.sourceVisuals ?? sourceVisualsEnabled()).safeParse(json);
       if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 30).map((i) => `${i.path.join(".")}: ${i.message}`) };
+      // Review #624/2: a javítás által új / megváltoztatott try-blokk is teljesítse a gyártás-határ követelményét (pl. becslés-leírás).
+      const tryNew = newTryProblems(original, parsed.data);
+      if (tryNew.length) return { ok: false, problems: tryNew };
       // #515 review: a hibás paraméterű (kirajzolhatatlan) új fajtájú ábrablokk a jelölt elfogadása ELŐTT kimarad — a lejátszó
       // elrejtené, a javítás mégis „sikeres” lenne. Ha a kiesés után a jelölt bukik, a hiba a kiesés okát is megnevezi (a meglévő
       // javító fordulón; új kör ezen túl nem indul). KI állapotban nincs mit kivenni (a séma az új fajtát el sem fogadja).
