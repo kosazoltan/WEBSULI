@@ -24,7 +24,10 @@ async function fromDb() {
   const { withReadOnlyDb } = await import("../lib/read-only-db");
   return withReadOnlyDb(async (query) => {
     const lessons = await query<{ id: string; title: string | null; json: { title?: string; experience?: Exp } }>(
-      "SELECT l.id, h.title, l.json FROM lessons l LEFT JOIN html_files h ON h.id = l.html_file_id ORDER BY l.id");
+      // review #625: anyagonként csak a legutóbbi PUBLIKÁLT leckeváltozat (a régi / nem publikált verziók nem torzítják az arányt).
+      "SELECT DISTINCT ON (coalesce(l.html_file_id, l.id)) l.id, h.title, l.json FROM lessons l " +
+      "LEFT JOIN html_files h ON h.id = l.html_file_id WHERE l.published_at IS NOT NULL " +
+      "ORDER BY coalesce(l.html_file_id, l.id), l.version DESC, l.published_at DESC");
     const games = await query<{ id: string; prompt: string; options: string[]; source_material_id: string | null; lesson_id: string | null; title: string | null }>(
       "SELECT g.id, g.prompt, g.options, g.source_material_id, g.lesson_id, h.title FROM game_quiz_items g " +
       "LEFT JOIN html_files h ON h.id = g.source_material_id WHERE g.is_active ORDER BY g.source_material_id, g.id");

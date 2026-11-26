@@ -26,7 +26,13 @@ const META_CONTEXT =
 const META_ASK =
   /(hány pont|pontot ér|pontszám|pont jár|maximális pont|összesen \d* ?pont|pontoz|mennyit ér|milyen (?:két |három |négy )?(?:feladat)?(?:típus|fajt)|melyik feladatt[ií]pus|szerepel|\bvannak\b|található|hányadik feladat|sorrendje|felépítés|időkeret|hány perc|csoport)/;
 /** Közvetlen meta-alakok (környezet nélkül is). */
-const META_DIRECT = /(feladatt[ií]pus|feladatfajt)\w* .*(pont|ér\b)|hány pontot ér|javítási útmutató szerint/;
+const META_DIRECT = /(feladatt[ií]pus|feladatfajt)\w* .*(pont|ér\b)|javítási útmutató szerint/;
+/** Vizsga / feladatlap környezet — a „hány pontot ér” csak ezzel együtt meta (review #625: a sportpont tanítható tartalom). */
+const EXAM = /(feladatlap|feladatsor|felvételi|vizsg|dolgozat|\bteszt|\bitem|javítási|értékelési|pontozási|\ba feladat\b|feladatban|feladatt[ií]pus)/;
+/** Sport / játék pontszáma — tanítható tartalom, nem a feladatlap pontozása. */
+const SPORT = /(kosár|labd|foci|futball|meccs|mérkőzés|gól|büntető|tenisz|játszmá|verseny|sport|dobó|dobott)/;
+/** A feladatlap szerkezetére kérdező erős alak — konkrét adat (szám, idézet) mellett is meta (review #625). */
+const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|felépítés|hányadik feladat)/;
 const POINT_OPTION = /^\d+(?:[,.]\d+)? ?pont/;
 
 /** Erős fogalmi (felidéző) alakok — a konkrét anyag (idézet) jelenléte sem teszi alkalmazássá: a jelentés felidézése fogalmi. */
@@ -52,15 +58,20 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   // Leírt feladat típusának felismerése (pl. „… Melyik feladattípus ez?”): besorolás — fogalmi, nem a feladatlapra kérdez.
   if (/melyik (?:feladatt[ií]pus|ütközéstípus|típus) ez\??$/.test(t) && t.length > 60) return v("fogalmi", "leírt eset típusának besorolása");
   if (META_DIRECT.test(t)) return v("meta", "a feladatlap pontozására / feladattípusára kérdez");
+  const exam = EXAM.test(t) && !SPORT.test(t);
+  if (exam && /hány pontot ér/.test(t)) return v("meta", "a feladatlap pontozására kérdez");
+  if (exam && /(feladatlap|feladatsor|felvételi|vizsg|dolgozat)/.test(t) && META_STRUCT.test(t)) return v("meta", "a feladatlap / vizsga szerkezetére kérdez");
   // Konkrét adatos szöveges feladat („6 doboz… ebben a feladatban”) nem a feladatlapra kérdez.
   const concrete = (t.match(/\d+/g) ?? []).length >= 2 && !/\bpont/.test(t);
   if (!concrete && !QUOTED.test(text) && META_CONTEXT.test(t) && META_ASK.test(t)) return v("meta", "a feladatlap / vizsga szerkezetére kérdez");
   if (!concrete && META_CONTEXT.test(t) && /\bpont/.test(t) && META_ASK.test(t)) return v("meta", "a feladatlap pontozására kérdez");
-  if (options.length >= 2 && options.every((o) => POINT_OPTION.test(o)) && !DIGIT.test(t)) return v("meta", "pontérték-opciók konkrét adat nélkül");
+  if (options.length >= 2 && options.every((o) => POINT_OPTION.test(o)) && !DIGIT.test(t) && !SPORT.test(t)) return v("meta", "pontérték-opciók konkrét adat nélkül");
 
+  // Képlet / definíció hiányzó tagja: felidézés (review #625); egyéb hiányos szöveg kiegészítése alkalmazás.
+  if ((opts.format === "fillGap" || GAP.test(t)) && /=|képlet|nevezzük|jelent|definíció|meghatároz/.test(t)) return v("fogalmi", "képlet / definíció hiányzó tagjának felidézése");
   if (opts.format === "fillGap" || GAP.test(t)) return v("alkalmazas", "kiegészítés konkrét szövegben");
   if (RECALL.test(t)) return v("fogalmi", "jelentés / név / szabály felidézése");
-  if (opts.format === "number" || opts.format === "oddOneOut") return v("alkalmazas", `${opts.format} formátum konkrét példányokon`);
+  // review #625: a formátum (number / oddOneOut) önmagában nem bizonyíték — a szöveg dönt.
   if (APPLY_VERB.test(t)) return v("alkalmazas", "konkrét anyagon végzett művelet");
   if (QUOTED.test(text) || (DIGIT.test(t) && /\?/.test(t))) return v("alkalmazas", "konkrét anyagra (idézet / adat) épülő kérdés");
   // Helyzet + kérdés: a kérdés előtt legalább egy teljes, 4+ szavas mondat írja le az esetet → a tanuló a tudását a helyzetre alkalmazza.
@@ -99,8 +110,9 @@ export type BankAudit = {
   counts: Record<PracticeKind, number>;
   ratio: number;
   target: ReturnType<typeof practiceTarget>;
-  /** `meta` — van meta-tétel; `teljesul` — az alkalmazás az alsó határ (vagy korlátnál a maximum) felett; `alacsony` — alatta. */
-  status: "meta" | "teljesul" | "alacsony" | "ures";
+  /** `meta` — van meta-tétel; `teljesul` — az alkalmazás a [alsó, felső] sávban (korlátnál a maximum); `alacsony` — alatta;
+   *  `magas` — a felső (75%) határ fölött: a szükséges fogalmi tudás hiányzik (review #625). */
+  status: "meta" | "teljesul" | "alacsony" | "magas" | "ures";
   items: Array<{ id: string; kind: PracticeKind; reason: string }>;
 };
 
@@ -115,7 +127,8 @@ function bank(items: Array<{ id: string; verdict: PracticeVerdict }>, pairs: num
   for (const it of items) counts[it.verdict.kind]++;
   const total = items.length, target = practiceTarget(total, pairs);
   const need = target.limited ? target.max : target.lower;
-  const status = total === 0 ? "ures" : counts.meta > 0 ? "meta" : counts.alkalmazas >= need ? "teljesul" : "alacsony";
+  const status = total === 0 ? "ures" : counts.meta > 0 ? "meta" : counts.alkalmazas < need ? "alacsony"
+    : !target.limited && counts.alkalmazas > target.upper ? "magas" : "teljesul";
   return {
     total, counts, ratio: total ? Math.round((1000 * counts.alkalmazas) / total) / 1000 : 0, target, status,
     items: items.map((i) => ({ id: i.id, kind: i.verdict.kind, reason: i.verdict.reason })),

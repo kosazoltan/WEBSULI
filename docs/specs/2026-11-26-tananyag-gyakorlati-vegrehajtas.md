@@ -31,4 +31,10 @@ Szeletenként önálló PR, háromfázisú renddel (utasítás → bukó teszt �
   kérdőszavas kérdés fogalmi, a leírt helyzet + kérdés alkalmazás); a kötelező 120 tételes, ember által besorolt ellenőrzőkészlet a
   P4 (aránykapu) előfeltétele.
 
+Review #625 (10 szál): a formátum (number / oddOneOut) önmagában nem alkalmazás; képlet / definíció hiányzó tagja fogalmi;
+sport-pontérték nem meta (a „hány pontot ér” csak vizsga-környezettel az); a feladatlap szerkezetére kérdező erős alak (feladattípus,
+hány feladat, időkeret) idézet / szám mellett is meta; a `teljesul` a [60%, 75%] sávot jelenti, fölötte `magas`; a DB-mérés anyagonként
+csak a legutóbbi publikált leckeváltozatot számolja. Újramérés: 257 lecke — kvíz 53,0%, nyílt 60,9%; teljesül 66, alacsony 168,
+magas 13, meta 10 lecke (17 kvíz + 8 nyílt meta-tétel).
+
 Állapot: P1 3/3 egység kész — következő: kapulánc, PR
