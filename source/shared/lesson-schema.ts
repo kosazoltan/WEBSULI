@@ -1,4 +1,4 @@
-import { V2_TRY_KINDS, V3_TRY_KINDS, trySpecProblems } from "./try-scoring";
+import { V2_TRY_KINDS, V3_TRY_KINDS, V5_TRY_KINDS, trySpecProblems } from "./try-scoring";
 import { z } from "zod";
 import { experienceSchema } from "./lesson-experience";
 import { parseReferenceExpression } from "./answer-value";
@@ -71,7 +71,7 @@ export const PROMPT_ANIM_KINDS = [
 ] as const satisfies ReadonlyArray<(typeof ANIM_KINDS)[number]>;
 
 /** Hands-on interactions (LS-4 implements them). */
-export const TRY_KINDS = ["dragSort", "fillBlank", "match", ...V2_TRY_KINDS, ...V3_TRY_KINDS] as const;
+export const TRY_KINDS = ["dragSort", "fillBlank", "match", ...V2_TRY_KINDS, ...V3_TRY_KINDS, ...V5_TRY_KINDS] as const;
 /** V2a: a modellnek hirdetett feladatfajták (a szerzői katalógus és a vázlat `tryKind`-ja) — az új öt a V2b-ben kerül ide. */
 export const PROMPT_TRY_KINDS = ["dragSort", "fillBlank", "match"] as const;
 
@@ -282,7 +282,7 @@ function refineBlock(block: z.infer<typeof blockUnion>, ctx: z.RefinementCtx): v
       Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
 
     // V2a: az öt új feladatfajta szabályai egy helyen (`shared/try-scoring.ts`).
-    if ((V2_TRY_KINDS as readonly string[]).includes(block.tryKind) || (V3_TRY_KINDS as readonly string[]).includes(block.tryKind)) {
+    if ([...V2_TRY_KINDS, ...V3_TRY_KINDS, ...V5_TRY_KINDS].includes(block.tryKind as never)) {
       for (const message of trySpecProblems(block.tryKind, spec)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["spec"], message });
       return;
     }
