@@ -18,4 +18,6 @@ látja a rálógó gombot.
 2. Javítás: a mérő függvény ref-ben elérhető; a megoldás-kijelzés váltásakor (`q.bind.reveal`) `useLayoutEffect` azonnal,
    festés előtt újramér — a takarásállapot ugyanabban a képkockában frissül, amelyben a kártya megnő.
 
-Állapot: FLAKE-BC-K1K2 1/3 egység kész — következő: bukó teszt
+Mérés: a javítás előtt a szigorított teszt 3/3 bukás (1973 px²), utána 6/6 zöld (`D:/tmp/bck2-red2.log`, `D:/tmp/bck2-fix.log`).
+
+Állapot: FLAKE-BC-K1K2 3/3 egység kész — következő: kapulánc, PR
