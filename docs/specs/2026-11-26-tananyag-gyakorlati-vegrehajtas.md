@@ -19,4 +19,16 @@ Szeletenként önálló PR, háromfázisú renddel (utasítás → bukó teszt �
    `intent: apply` címkéjű meta-kérdés is meta; a szabványos tesztlecke (`fusionFixture`) auditja determinisztikus és mutatja a
    túl lexikális bankot.
 
-Állapot: P1 1/3 egység kész — következő: bukó tesztek
+### P1 — kiinduló mérés (élő DB, csak olvasva, 2026-11-26, szabály `2026-11-26.1`)
+
+- 259 Stúdió-lecke. Kvízbank: 27 536 tétel — alkalmazás 14 662 (53,2%), fogalmi 11 558, meta 16, bizonytalan 1 300.
+  Nyílt bank: 15 186 tétel — alkalmazás 9 270 (61,0%), fogalmi 2 360, meta 7, bizonytalan 3 549.
+- Kvízbank-állapot leckénként: 81 teljesíti a 60%-os alsó határt (vagy a fogalompár-korlátot), 169 alatta, 9 leckében van meta-tétel.
+- A 16 meta-kvíz mind a felvételi / feladatlap pontozására vagy feladattípusaira kérdez (pl. „Hány pontot ér a felvételi 2. feladata?”,
+  „Lili … csak az egyik jelentést írta le helyesen. Hány pontot kap?”); a tulajdonos észrevételét igazolja.
+- Aktív játékkvíz-sor: 33 (alkalmazás 18, fogalmi 10, bizonytalan 5, meta 0).
+- A besorolás pontosságát a szabály fejlesztése közben az élő bank véletlen mintáin ellenőriztem (meta: 16/16 valódi; a helyzet nélküli
+  kérdőszavas kérdés fogalmi, a leírt helyzet + kérdés alkalmazás); a kötelező 120 tételes, ember által besorolt ellenőrzőkészlet a
+  P4 (aránykapu) előfeltétele.
+
+Állapot: P1 3/3 egység kész — következő: kapulánc, PR

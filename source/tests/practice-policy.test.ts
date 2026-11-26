@@ -72,6 +72,26 @@ describe("practice-policy: fogalmi tudás (felidézés)", () => {
   }
 });
 
+describe("practice-policy: helyzet vs. helyzet nélküli kérdés (élő bankból vett minták)", () => {
+  for (const [text, options, kind] of [
+    ["Kiránduláskor a Mátrában feljutsz a Kékesre. Milyen magasra érsz a tenger szintje fölé?", ["500 m-re", "1014 m-re", "1500 m-re"], "alkalmazas"],
+    ["Egy gyerek szerint a Nap azért kel fel, mert valóban végigvonul az égen. Mi a helyes magyarázat?", ["Látszat: a Föld forog.", "Igaza van.", "A Hold miatt."], "alkalmazas"],
+    ["Melyik kivonásnál kell kölcsönözni az egyesek helyén?", ["48 − 25", "63 − 27", "79 − 34"], "alkalmazas"],
+    ["Melyik angol mondat jelenti ezt: Ő egy művész.", ["He is a chef.", "He is an artist.", "He is a pilot."], "alkalmazas"],
+    ["Melyik növénycsoport hódította meg elsőként a szárazföldeket?", ["Harasztok", "Mohák", "Zöldmoszatok"], "fogalmi"],
+    ["Hogy mondod angolul: kedvel?", ["hate", "be fond of", "don't mind"], "fogalmi"],
+    ["Két mozgó ugyanonnan indul, az egyik később, mégis ugyanoda ér. Melyik feladattípus ez?", ["utolérés", "árral evezés", "ár ellen evezés"], "fogalmi"],
+  ] as const) {
+    it(`${kind}: ${text}`, () => assert.equal(classifyQuizItem(q(text, [...options])).kind, kind));
+  }
+  it("konkrét adatos szöveges feladat a „feladatban” szóval sem meta", () => {
+    assert.notEqual(classifyOpenTask({ q: "6 doboz van, mindegyikben 4 ceruza. Mi a csoportszám ebben a feladatban, és miért?", sample: "4" }).kind, "meta");
+  });
+  it("a felvételi pontozására kérdező tétel opciói pontértékek — meta", () => {
+    assert.equal(classifyQuizItem(q("Lili jól aláhúzta a szót, de csak az egyik jelentést írta le helyesen. Hány pontot kap?", ["1 pont", "2 pont", "0 pont"])).kind, "meta");
+  });
+});
+
 describe("practice-policy: nyílt feladat", () => {
   it("konkrét mondat javítása — alkalmazás", () => {
     assert.equal(classifyOpenTask({ q: "Javítsd ki az elválasztást ebben a sorban: „oszt-ály”.", sample: "osz-tály" }).kind, "alkalmazas");
@@ -99,7 +119,10 @@ describe("practice-policy: audit (csak olvas, determinisztikus)", () => {
     assert.equal(JSON.stringify(lesson), before, "az audit nem ír");
     assert.equal(a.quiz.total, lesson.experience!.quiz.length);
     assert.equal(a.quiz.counts.meta, 0);
-    assert.equal(a.quiz.counts.alkalmazas, a.quiz.total);
+    // Egyetlen felidéző tétel van: „Melyik műveletsor adja a háromszög területét?” (képlet); a többi konkrét adaton számol vagy
+    // változást következtet ki — a „recall” címke ellenére alkalmazás.
+    assert.deepEqual(a.quiz.items.filter((i) => i.kind !== "alkalmazas").map((i) => [i.id, i.kind]), [["q1", "fogalmi"]]);
+    assert.equal(a.quiz.counts.alkalmazas, a.quiz.total - 1);
     for (const bank of [a.quiz, a.tasks]) assert.equal(bank.counts.alkalmazas + bank.counts.fogalmi + bank.counts.meta + bank.counts.bizonytalan, bank.total);
   });
 
