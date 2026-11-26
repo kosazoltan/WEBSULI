@@ -69,3 +69,21 @@ test("fordítókártya, lépésenkénti felfedés, döntés és villámkártya: 
   await expect(block("decision")).toContainText("Száraz maradsz.");
   await expect(block("flashcards")).toContainText("macska");
 });
+test("döntés: valódi rádiócsoport — egy Tab-megálló, a nyilak léptetnek és választanak (review #609)", async ({ page }) => {
+  await mount(page);
+  const decision = page.locator('[data-try="decision"]');
+  const radios = decision.getByRole("radio");
+  await expect(radios).toHaveCount(2);
+  await expect(radios.nth(0)).toHaveAttribute("tabindex", "0");
+  await expect(radios.nth(1)).toHaveAttribute("tabindex", "-1");
+  await radios.nth(0).focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(radios.nth(1)).toBeFocused();
+  await expect(radios.nth(1)).toHaveAttribute("aria-checked", "true");
+  await expect(decision).toContainText("Megázol.");
+  await expect(radios.nth(1)).toHaveAttribute("tabindex", "0");
+  await expect(radios.nth(0)).toHaveAttribute("tabindex", "-1");
+  await page.keyboard.press("ArrowUp");
+  await expect(radios.nth(0)).toBeFocused();
+  await expect(decision).toContainText("Száraz maradsz.");
+});
