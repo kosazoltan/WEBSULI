@@ -68,7 +68,9 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   if (options.length >= 2 && options.every((o) => POINT_OPTION.test(o)) && !DIGIT.test(t) && !SPORT.test(t)) return v("meta", "pontérték-opciók konkrét adat nélkül");
 
   // Képlet / definíció hiányzó tagja: felidézés (review #625); egyéb hiányos szöveg kiegészítése alkalmazás.
-  if ((opts.format === "fillGap" || GAP.test(t)) && /=|képlet|nevezzük|jelent|definíció|meghatároz/.test(t)) return v("fogalmi", "képlet / definíció hiányzó tagjának felidézése");
+  // review #625/2: az egyenlőségjel csak SZÁM NÉLKÜLI (szimbolikus) képletnél felidézés — a „12 + ___ = 20” konkrét számolás.
+  const symbolicFormula = /=/.test(t) && !DIGIT.test(t.replace(/_{3,}/g, ""));
+  if ((opts.format === "fillGap" || GAP.test(t)) && (symbolicFormula || /képlet|nevezzük|jelent|definíció|meghatároz/.test(t))) return v("fogalmi", "képlet / definíció hiányzó tagjának felidézése");
   if (opts.format === "fillGap" || GAP.test(t)) return v("alkalmazas", "kiegészítés konkrét szövegben");
   if (RECALL.test(t)) return v("fogalmi", "jelentés / név / szabály felidézése");
   // review #625: a formátum (number / oddOneOut) önmagában nem bizonyíték — a szöveg dönt.
@@ -128,7 +130,8 @@ function bank(items: Array<{ id: string; verdict: PracticeVerdict }>, pairs: num
   const total = items.length, target = practiceTarget(total, pairs);
   const need = target.limited ? target.max : target.lower;
   const status = total === 0 ? "ures" : counts.meta > 0 ? "meta" : counts.alkalmazas < need ? "alacsony"
-    : !target.limited && counts.alkalmazas > target.upper ? "magas" : "teljesul";
+    // review #625/2: korlátozott banknál a fogalompár-maximum, egyébként a felső (75%) határ fölött `magas`.
+    : counts.alkalmazas > (target.limited ? target.max : target.upper) ? "magas" : "teljesul";
   return {
     total, counts, ratio: total ? Math.round((1000 * counts.alkalmazas) / total) / 1000 : 0, target, status,
     items: items.map((i) => ({ id: i.id, kind: i.verdict.kind, reason: i.verdict.reason })),
