@@ -35,7 +35,8 @@ const SPORT = /(kosár|labd|foci|futball|meccs|mérkőzés|gól|büntető|tenisz
 const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|felépítés|hányadik feladat)/;
 const POINT_OPTION = /^\d+(?:[,.]\d+)? ?pont/;
 /** Pontszerzésre kérdez (nem a geometriai pontra): „hány pontot kap / ér”, „pont jár”, „pontot szerez”. */
-const SCORE_ASK = /(pontot (?:kap|ér|szerez|kaphat)|pont jár|hány pontot\b|mennyit ér|(?<![\p{L}])ér(?![\p{L}]))/u;
+// TG-P4b: lookbehind nélkül — a modul a P4b-vel a kliens csomagjába is bekerül (Safari < 16.4, tests/no-lookbehind-client.test.ts).
+const SCORE_ASK = /(pontot (?:kap|ér|szerez|kaphat)|pont jár|hány pontot\b|mennyit ér|(?:^|[^\p{L}])ér(?![\p{L}]))/u;
 
 /** Erős fogalmi (felidéző) alakok — a konkrét anyag (idézet) jelenléte sem teszi alkalmazássá: a jelentés felidézése fogalmi. */
 const RECALL =
@@ -80,7 +81,7 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   if (APPLY_VERB.test(t)) return v("alkalmazas", "konkrét anyagon végzett művelet");
   if (QUOTED.test(text) || (DIGIT.test(t) && /\?/.test(t))) return v("alkalmazas", "konkrét anyagra (idézet / adat) épülő kérdés");
   // Helyzet + kérdés: a kérdés előtt legalább egy teljes, 4+ szavas mondat írja le az esetet → a tanuló a tudását a helyzetre alkalmazza.
-  const sentences = t.split(/(?<=[.!?:])\s+/).filter(Boolean);
+  const sentences = t.replace(/([.!?:])\s+/g, "$1\n").split("\n").filter(Boolean);
   if (sentences.length >= 2 && sentences.slice(0, -1).some((s) => s.split(" ").length >= 4)) return v("alkalmazas", "leírt helyzetre alkalmazott tudás");
   const after = t.split(/:\s+/)[1];
   if (after && after.split(" ").length >= 3) return v("alkalmazas", "a kérdés konkrét szövegrészletre vonatkozik");
