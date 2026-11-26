@@ -12,10 +12,12 @@ import { FINGERPRINT_FILES, FINGERPRINT_TABLE, productionPromptRun, type Fingerp
 
    A FŐÁG ÉRTÉKEI (origin/main, 21c81998) — nem ebből a fából számolva, hanem a főág kódján lefuttatott ugyanazon mintafutásból;
    az előállítás lépései a `tests/helpers/production-prompt-fingerprint.ts` fejlécében (git archive origin/main:source … → parancssori mód).
-   Ha a főágon a gyártó promptjai SZÁNDÉKOSAN változnak, a három érték ugyanazzal a paranccsal frissítendő. */
+   Ha a főágon a gyártó promptjai SZÁNDÉKOSAN változnak, a három érték ugyanazzal a paranccsal frissítendő.
+   Utolsó szándékos változás: TANANYAG-GYAKORLATI P3 (gyakorlatiassági szabály a szerző / tervező / bankcsomag promptjában) — csak a
+   kérés-lenyomatok változtak; a kérések száma, a napló-, lecke- és séma-lenyomatok a főágéval azonosak. */
 const MAIN = {
-  source: "aa0647647b45d862b39226078e04538a7c475dc3975f3ba4b6f39316da59887d",
-  map: "cecf327e9c72bcda15276ded17c6e030dab2279113a235695a3b3c46166970ee",
+  source: "85652b7c6b483a34ca81e514aff45ce216350aac1344fbbdb723c13253038b30",
+  map: "fa02fba3cd9328010a898295475b5bcbf617bc9bef13384a767a8e528fbe9e10",
   mapHash: "c7d260ebb64bc71781e1243a6fef0870474499fe82ba20cc34fca4daf3d45789",
 } as const;
 
@@ -105,7 +107,7 @@ test("BE: a tárolt leltár a promptokba és a kapuhoz jut (ellenpróba), a kapu
 /* S2a (a lánc 4. ága) — vak ellenőr B1: a séma OLVASÁSRA ismeri a `table` / `ruleBox` / `compareCards` fajtát, de a GYÁRTÁS a modell
    kimenetének határán (szerzői lecke, ábrafolt) csak BE állapotban fogadja el. A főág értékei ugyanabból a parancsból, mint fent. */
 const MAIN_NEW_KINDS = {
-  prompts: "29b6a6ec545374c7602b88c5cbefb9791c8c4815385923076cb419f21868f50f",
+  prompts: "5a39f8e2a069710c184fda8720ca20e4e379888fbc9a8953d3542788b26b14c6",
   logs: "ebcebb5eb834d322c70cc929798301519d0383584d4f0107fa26e842fa7eccf8",
   lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b",
 } as const;
@@ -179,9 +181,9 @@ test("az ábrafolt határa a motoron KÍVÜLI hívóknál is a kapcsolót követ
    A főág értékei ugyanabból a parancsból (origin/main dc76ba52), mint fent. A lecke lenyomata a közzétételre mentett TELJES lecke-JSON-é:
    benne a tanítás, a fejezet-lenyomatból képzett gyakorlóbank és annak minden feladat- / módszer-azonosítója. */
 const MAIN_STRAY = {
-  strayId: { prompts: "5b4465963997ef53131dd657d182aa65450265d7d004f49e40f75ba8bbc98e64", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "165b66ef44cb0f8d3c237870b8f62637b298afb3376e12c54048e36dc3acf9f0" },
-  strayIdMap: { prompts: "430cf1274226c5cbab5557d605ad5b52ad3255cfa9ef3a3653bb2f02ea5867b6", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "28f1df554e27f5a7bcef51287b5f7d3acba5a3ed32877418cd47088141bb8eb4" },
-  mixed: { prompts: "8a777f526d5ff5769ba852a7773c644a00f28325e44bbc5be9c09cd90e3e8acf", logs: "7156009ab60960a0a4b4f1025d6986f94410cc3d60428e9ff74a288aba063123", lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b" },
+  strayId: { prompts: "3f01b85919d75e4c22423dc41445559064038efec523d0f3f6d4b75cdd9fad5c", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "165b66ef44cb0f8d3c237870b8f62637b298afb3376e12c54048e36dc3acf9f0" },
+  strayIdMap: { prompts: "fd654c8670fa60c3f4b9b181fc895369fb246f3bb240ae3badddbf6522d50225", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "28f1df554e27f5a7bcef51287b5f7d3acba5a3ed32877418cd47088141bb8eb4" },
+  mixed: { prompts: "884e62d8b3462b2817eec727bc716a627c04c85608b356f801ff94e240a8a96b", logs: "7156009ab60960a0a4b4f1025d6986f94410cc3d60428e9ff74a288aba063123", lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b" },
   schema: { stray: "9d6a4544e9f399b5aa82a85744ef3402cd8e99f57520723d0f5340660780e22f", mixed: "323283f910e7e7c81c7f0ba29a3d8f6111efde5d622ac73cf42a6e1c03efd78e" },
 } as const;
 
