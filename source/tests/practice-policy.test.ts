@@ -108,6 +108,20 @@ describe("practice-policy: review #625", () => {
     assert.equal(classifyQuizItem(q("Milyen feladattípus szerepel a „Szólások” feladatlapon?", ["párosítás", "esszé", "teszt"])).kind, "meta");
     assert.equal(classifyQuizItem(q("Hány feladat szerepel a 2026-os felvételi 1. lapján?", ["8", "10", "12"])).kind, "meta");
   });
+  it("review #625/2: konkrét számolás hiánnyal (12 + ___ = 20) alkalmazás, a szimbolikus képlet fogalmi", () => {
+    assert.equal(classifyQuizItem(q("12 + ___ = 20", ["6", "8", "10"], { format: "fillGap" })).kind, "alkalmazas");
+    assert.equal(classifyQuizItem(q("A háromszög területe = alap × magasság / ___", ["2", "3", "4"], { format: "fillGap" })).kind, "fogalmi");
+  });
+  it("review #625/2: fogalompár-korlátos banknál a maximum fölötti alkalmazás sem teljesül", async () => {
+    const { practiceTarget } = await import("../shared/practice-policy");
+    const t = practiceTarget(12, 10);
+    assert.equal(t.limited, true);
+    const units = [{ sectionIndex: 0, conceptIds: Array.from({ length: 10 }, (_, i) => `c${i}`) }];
+    const exp = { quiz: Array.from({ length: 12 }, (_, i) => ({ id: `q${i}`, question: i < 5 ? `Számold ki: ${i} + 7 = ?` : `Mi a(z) c${i} jelentése?`, options: ["1", "2", "3"], sectionIndex: 0 })), tasks: [], bankPlan: { units } };
+    const a = auditExperience(exp as never);
+    assert.ok(a.quiz.counts.alkalmazas > a.quiz.target.max, `alkalmazás ${a.quiz.counts.alkalmazas} > max ${a.quiz.target.max}`);
+    assert.equal(a.quiz.status, "magas");
+  });
   it("a felső határ (75%) fölött nem teljesül", () => {
     const exp = { quiz: Array.from({ length: 12 }, (_, i) => ({ id: `q${i}`, question: `Számold ki: ${i} + 7 = ?`, options: ["1", "2", "3"] })), tasks: [] };
     const a = auditExperience(exp as never);
