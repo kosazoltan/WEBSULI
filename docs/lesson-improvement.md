@@ -24,6 +24,15 @@ Terv: [`docs/specs/2026-09-30-utasitasrendszer-rendbetetel.md`](specs/2026-09-30
 
 **Futásnapló (B8).** Az „unknown” hibaosztály redaktált szövegmintája a futás nézetében (`unknownFindingSamples`, lenyomatonként egy, legfeljebb 20); a tanult skillbe továbbra is csak a lenyomat kerül.
 
+## Gyakorlatiasság — alkalmazás és fogalmi tudás egyensúlya (2026-11-26)
+
+Tulajdonosi utasítás (minden tantárgyra; a nyelvtani példák csak illusztrációk): a tananyag kevésbé lexikális és metodikus. Tanítás:
+konkrét példa → a megoldáshoz szükséges fogalom röviden → a tanuló a következő példán választ, kiegészít, javít, számol vagy dönt;
+indoklást csak ott kér, ahol az ok felismerése a tanulási cél. Bank: a kvíz- és a nyílt bank KÜLÖN-KÜLÖN 60–75%-a (célérték
+kétharmad) igazolt alkalmazás. A feladatlapra / felvételire vonatkozó kérdés (pontozás, pontszám, feladattípus, felépítés) tilos.
+Közös szabályszöveg minden gyártási útnak: `source/shared/practice-rules.ts`; mérce és csak olvasó audit: `source/shared/practice-policy.ts`,
+`source/scripts/measure/practice-audit.mts`; terv és szeletek: `docs/specs/2026-11-26-tananyag-gyakorlati.md`.
+
 ## Kötelező közös módszer
 
 | Lap | Kötelező tartalom és működés |

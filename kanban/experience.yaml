@@ -69,3 +69,9 @@ cards:
     observed: "Időkorlátos teszt abszolút ms-küszöbbel gépenként/terhelésenként eltérő eredményt adott (#557)"
     fix: "Gépfüggetlen arány-teszt a főági referenciához mérve; REDACT_CAP 8 KB"
     rule: "Teljesítménytesztben ugyanazon a gépen mért arány, ne abszolút ms-küszöb"
+  - id: 12
+    status: fixed
+    date: "2026-11-26"
+    observed: "Hermes szerepprofilok (architect/implementer/reviewer/terv-ellenorzo) config.yaml skills.external_dirs egy nem letezo skillre (engineering-working-method) mutat; a SOUL.md-k minden korben ~2 KB kozos protokollt ismeteltek"
+    fix: "kozos szabalyok az agent-result-protocol skillbe (external_dirs-en at mind a negy profilban), SOUL.md-k 3-3.9 KB-ra csokkentve"
+    rule: "Szerep-SOUL.md csak identitas + szerep-specifikus szabaly; kozos eljaras skillbe; external_dirs bejegyzest hermes -p <profil> skills list-tel ellenorizni"
