@@ -1,4 +1,4 @@
-import { readCategorize, readHighlight, readTrueFalse } from "../../shared/try-scoring";
+import { readCategorize, readDecision, readDidYouKnow, readFlashcards, readFlipCard, readHighlight, readStepReveal, readTrueFalse } from "../../shared/try-scoring";
 import type { MapConcept } from "./coverage";
 import { renderedVisualTexts } from "../../shared/lesson-visual-params";
 import { containsFormula, formulaKey } from "../../shared/formula-text";
@@ -295,6 +295,12 @@ export function blockText(block: Record<string, unknown>): string {
     if (block.tryKind === "highlight") { const h = readHighlight(spec); parts.push(h.text, ...(h.prompt ? [h.prompt] : [])); }
     if (block.tryKind === "categorize") { const c = readCategorize(spec); parts.push(...c.categories, ...c.items.map((i) => i.text)); }
     if ((block.tryKind === "numberLine" || block.tryKind === "estimate") && typeof spec.prompt === "string") parts.push(spec.prompt);
+    // V3a: a kártyák látható szövege.
+    if (block.tryKind === "flipCard") { const f = readFlipCard(spec); parts.push(f.front, f.back); }
+    if (block.tryKind === "stepReveal") { const s = readStepReveal(spec); parts.push(...(s.title ? [s.title] : []), ...s.steps); }
+    if (block.tryKind === "didYouKnow") parts.push(readDidYouKnow(spec).fact);
+    if (block.tryKind === "decision") { const d = readDecision(spec); parts.push(d.situation, ...d.options.flatMap((o) => [o.text, o.consequence])); }
+    if (block.tryKind === "flashcards") parts.push(...readFlashcards(spec).cards.flatMap((c) => [c.front, c.back]));
     if (block.tryKind === "match" && Array.isArray(spec.pairs)) {
       for (const pair of spec.pairs) {
         if (pair && typeof pair.left === "string" && typeof pair.right === "string") parts.push(pair.left, pair.right);

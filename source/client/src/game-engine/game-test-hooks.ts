@@ -21,6 +21,8 @@ export type GameForcePatch = {
    * A `phase: "quiz"` minden átírt játékban ennek kompatibilis álneve.
    */
   question?: boolean;
+  /** KAPU-WIN (Tornádó): a turbó-kérdés a közepes címkés mérő-tétel legyen (álló gomb-mód túlcsordulás mérése). */
+  answers?: "medium";
 };
 
 /**
