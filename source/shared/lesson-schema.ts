@@ -72,8 +72,8 @@ export const PROMPT_ANIM_KINDS = [
 
 /** Hands-on interactions (LS-4 implements them). */
 export const TRY_KINDS = ["dragSort", "fillBlank", "match", ...V2_TRY_KINDS, ...V3_TRY_KINDS, ...V5_TRY_KINDS] as const;
-/** V2a: a modellnek hirdetett feladatfajták (a szerzői katalógus és a vázlat `tryKind`-ja) — az új öt a V2b-ben kerül ide. */
-export const PROMPT_TRY_KINDS = ["dragSort", "fillBlank", "match"] as const;
+/** A modellnek hirdetett feladatfajták (a szerzői katalógus és a vázlat `tryKind`-ja): V2b óta az öt új gyakorlófajta is; a kártyák (V3) a V3b-ben. */
+export const PROMPT_TRY_KINDS = ["dragSort", "fillBlank", "match", ...V2_TRY_KINDS] as const;
 
 /** A hat érvényes blokk-kind — a blockSchema discriminated unionjával szinkronban. */
 export const BLOCK_KINDS = ["explain", "example", "animate", "check", "try", "recap"] as const;
