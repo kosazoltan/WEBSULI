@@ -147,7 +147,8 @@ test("animate and try only accept the planned kinds", () => {
     highlight: { text: "A macska fut.", targets: ["macska"] },
     categorize: { categories: ["x", "y"], items: [{ text: "a", category: "x" }, { text: "b", category: "y" }, { text: "c", category: "x" }] },
     numberLine: { min: 0, max: 10, target: 5, tolerance: 1 },
-    estimate: { min: 0, max: 100, answer: 50 },
+    // SPEC-VÁLTOZÁS (review #612): a becslés leírása (prompt) kötelező.
+    estimate: { prompt: "Becsüld meg!", min: 0, max: 100, answer: 50 },
     // V3a
     flipCard: { front: "a", back: "b" },
     stepReveal: { steps: ["a", "b"] },
