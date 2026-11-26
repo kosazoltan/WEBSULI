@@ -62,6 +62,8 @@ import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opene
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
 import { cleanModelText, sanitizeSourceVisuals, sourceVisualsContract, splitPageTexts, type SourceVisual, type SourceVisualsResult } from "../../../shared/source-visuals";
+import { adminConceptProblem, dropAdminConcepts } from "../../../shared/source-teaching-scope";
+import { SOURCE_SCOPE_RULE } from "../../../shared/practice-rules";
 
 export const SINGLE_RUN_VERSION = "single-run-1";
 /** Állomásonként ennyi javító forduló jár a determinisztikus visszajelzés után. */
@@ -406,6 +408,8 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
       ' "concepts": [{"id": string (rövid, egyedi), "term": string, "definition": string (a forrás alapján), "quote": string (SZÓ SZERINT az átiratból),',
       '  "type": string, "examWeight": "core" | "supporting" | "extra", "relatedIds": string[]}]}',
       "A forrás minden tanítandó fogalma szerepeljen; a quote betűre egyezzen az átirat egy részével.",
+      // TG-P2a: a pontozási / adminisztratív szöveg nem fogalom (a validátor `adminConceptProblem`-mel méri).
+      SOURCE_SCOPE_RULE,
       files.some((f) => realSourceText(f)) ? "A szöveges (vagy már kinyert szövegű) forrásfájlnál a program a VALÓDI szöveget használja mércének: az idézet abból legyen, betűre." : "",
       files.length > 1 ? [
         `TÖBB FORRÁSFÁJL (${files.map((f) => f.name).join(", ")}): adj meg fájlonkénti átiratot is: "fileTranscripts": [{"name": fájlnév, "text": a fájl betűhű átirata}]`,
@@ -450,6 +454,8 @@ export async function readSourceStation(deps: StationDeps, files: ExtractorFile[
       if (!sourceFile) { problems.push(`${c.id}: a sourceFile a forrásfájlok egyike legyen (${names.join(", ")}).`); continue; }
       const verbatim = perFile[sourceFile] !== undefined ? checkVerbatim(c.quote, perFile[sourceFile]) : { ok: false };
       if (!verbatim.ok) problems.push(`${c.id}: a quote nem szó szerint szerepel a(z) ${sourceFile} átiratában: „${c.quote.slice(0, 120)}”.`);
+      const admin = adminConceptProblem({ id: c.id, term: c.term, definition: c.definition, quote: c.quote });
+      if (admin) { problems.push(admin); continue; }
       checked.push({ sourceFile, id: c.id, term: c.term, definition: c.definition, quote: c.quote, type: typeof c.type === "string" ? c.type : "concept", examWeight: weight,
         relatedIds: Array.isArray(c.relatedIds) ? c.relatedIds.filter((r): r is string => typeof r === "string") : [], verbatimOk: verbatim.ok });
     }
@@ -639,7 +645,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     mapId = await deps.saveMap({ ...read, title: input.title?.trim() || read.title }, input.files);
   }
   await workflowPhase("sourceCheck");
-  const map = await store.loadMap(mapId);
+  // review #630: a validátor előtt mentett / újrahasznált térkép adminisztratív fogalma kiesik (naplózva).
+  const loadedMap = await store.loadMap(mapId);
+  const map = loadedMap ? dropAdminConcepts(loadedMap, deps.log) : loadedMap;
   if (!map || !map.concepts.length) throw new SingleRunError("tudásbank", ["A tudásbankban nincs tanítható fogalom."]);
   const sourceText = map.meta.sourceText?.trim() ?? "";
   // S1a: a leltár a térképről jön (új forrásnál a most mentett, térképről indításnál a korábban mentett) — S1b: a tervező, a szerző,

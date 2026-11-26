@@ -13,6 +13,10 @@ export const PRACTICE_TEACHING_RULE =
   "tanulótól, ha az ok felismerése maga a tanulási cél; a legtöbb zárt feladat után elég a helyes megoldáshoz adott rövid magyarázat.";
 
 /** Bank (kvíz + nyílt feladat): kétharmad alkalmazó tétel, meta-tilalom, tantárgyfüggetlen mintapéldák. */
+/** TG-P2a: a forrásállomás hatóköre — a pontozási / adminisztratív szöveg nem fogalom (a program `adminConceptProblem`-mel méri). */
+export const SOURCE_SCOPE_RULE =
+  "FORRÁS-HATÓKÖR: a példamondatot, adatot, műveletet és tanított szabályt emeld ki fogalomként; a javítókulcs helyes alakja a megoldás ellenőrzésére szolgál. A pontérték, sorszám, időkeret és a lap felépítése NEM tanítandó fogalom (a program elutasítja). A vegyes sor (pl. „Elfogadható: osz-tály — 1 pont”) érdemi részét (osz-tály) őrizd meg.";
+
 export const PRACTICE_BANK_RULE =
   "GYAKORLATIASSÁG (bank): a kvízbank és a nyílt feladatbank külön-külön kb. kétharmada (60–75%) ALKALMAZÓ tétel legyen — a tanuló " +
   "konkrét mondaton, adaton, helyzeten vagy példányon dönt, kiegészít, javít, számol vagy a tanultat egy leírt helyzetre alkalmazza; " +

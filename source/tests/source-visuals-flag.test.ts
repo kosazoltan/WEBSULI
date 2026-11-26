@@ -16,7 +16,7 @@ import { FINGERPRINT_FILES, FINGERPRINT_TABLE, productionPromptRun, type Fingerp
    Utolsó szándékos változás: TANANYAG-GYAKORLATI P3 (gyakorlatiassági szabály a szerző / tervező / bankcsomag promptjában) — csak a
    kérés-lenyomatok változtak; a kérések száma, a napló-, lecke- és séma-lenyomatok a főágéval azonosak. */
 const MAIN = {
-  source: "85652b7c6b483a34ca81e514aff45ce216350aac1344fbbdb723c13253038b30",
+  source: "6fb2eea202d70f06a195ce42c94b62fad96d9e2620ab3fbf362772753cccd8df",
   map: "fa02fba3cd9328010a898295475b5bcbf617bc9bef13384a767a8e528fbe9e10",
   mapHash: "c7d260ebb64bc71781e1243a6fef0870474499fe82ba20cc34fca4daf3d45789",
 } as const;
@@ -107,7 +107,7 @@ test("BE: a tárolt leltár a promptokba és a kapuhoz jut (ellenpróba), a kapu
 /* S2a (a lánc 4. ága) — vak ellenőr B1: a séma OLVASÁSRA ismeri a `table` / `ruleBox` / `compareCards` fajtát, de a GYÁRTÁS a modell
    kimenetének határán (szerzői lecke, ábrafolt) csak BE állapotban fogadja el. A főág értékei ugyanabból a parancsból, mint fent. */
 const MAIN_NEW_KINDS = {
-  prompts: "5a39f8e2a069710c184fda8720ca20e4e379888fbc9a8953d3542788b26b14c6",
+  prompts: "6ac1a3ef44bb458c1e079f9985207bccdd0f6fed49d0a0e0e3f6ee7925b5f890",
   logs: "ebcebb5eb834d322c70cc929798301519d0383584d4f0107fa26e842fa7eccf8",
   lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b",
 } as const;
@@ -181,9 +181,9 @@ test("az ábrafolt határa a motoron KÍVÜLI hívóknál is a kapcsolót követ
    A főág értékei ugyanabból a parancsból (origin/main dc76ba52), mint fent. A lecke lenyomata a közzétételre mentett TELJES lecke-JSON-é:
    benne a tanítás, a fejezet-lenyomatból képzett gyakorlóbank és annak minden feladat- / módszer-azonosítója. */
 const MAIN_STRAY = {
-  strayId: { prompts: "3f01b85919d75e4c22423dc41445559064038efec523d0f3f6d4b75cdd9fad5c", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "165b66ef44cb0f8d3c237870b8f62637b298afb3376e12c54048e36dc3acf9f0" },
+  strayId: { prompts: "dfee940740d7e79e497de0677ce0a2ec800cacc87c2d30e682f725bc18556433", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "165b66ef44cb0f8d3c237870b8f62637b298afb3376e12c54048e36dc3acf9f0" },
   strayIdMap: { prompts: "fd654c8670fa60c3f4b9b181fc895369fb246f3bb240ae3badddbf6522d50225", logs: "8255249f175e6fb3a69e98ff5577900c55c4f4c00158ed7822b596373569ffc2", lesson: "28f1df554e27f5a7bcef51287b5f7d3acba5a3ed32877418cd47088141bb8eb4" },
-  mixed: { prompts: "884e62d8b3462b2817eec727bc716a627c04c85608b356f801ff94e240a8a96b", logs: "7156009ab60960a0a4b4f1025d6986f94410cc3d60428e9ff74a288aba063123", lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b" },
+  mixed: { prompts: "804c329e944c8bb3ee545a075c6f330cb19456988632467706dd8107275fe1ca", logs: "7156009ab60960a0a4b4f1025d6986f94410cc3d60428e9ff74a288aba063123", lesson: "e7f5627fc6cb6f8ec50452d662f07550919c3b28e0ee090297bf6a2cbbbe1e4b" },
   schema: { stray: "9d6a4544e9f399b5aa82a85744ef3402cd8e99f57520723d0f5340660780e22f", mixed: "323283f910e7e7c81c7f0ba29a3d8f6111efde5d622ac73cf42a6e1c03efd78e" },
 } as const;
 
