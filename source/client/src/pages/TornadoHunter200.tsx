@@ -337,7 +337,7 @@ export default function TornadoHunter200() {
         // K.2: a `question: true` azonnal kérdést nyit; a `phase: "quiz"` ennek kompatibilis álneve (terv 9.).
         if (patch.phase === "quiz" || patch.question === true) {
           setScreen("play");
-          setForceQuiz((cur) => ({ n: cur.n + 1, medium: (patch as { answers?: unknown }).answers === "medium" }));
+          setForceQuiz((cur) => ({ n: cur.n + 1, medium: patch.answers === "medium" }));
         }
         const junction = (patch as { junction?: unknown }).junction;
         if (junction === true || junction === "long") {
@@ -1583,6 +1583,8 @@ function PlayScreen(props: {
   const sizeRef = useRef({ w: 640, h: 480, top: 0 });
   /** A kérdés-sáv kártyájának alja (képernyő-px, 10 Hz-en mérve): a táblafeliratok ez alá kerülnek, nem a kártya mögé. */
   const cardBottomRef = useRef(0);
+  /** KAPU-WIN: hány képkockája vár a táblák elhelyezése a még nem renderelt kérdés-kártyára. */
+  const cardWaitRef = useRef(0);
 
   const rafRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
@@ -2678,6 +2680,17 @@ function PlayScreen(props: {
     const w = sizeRef.current.w;
     const h = sizeRef.current.h;
     const compact = answersRef.current !== null;
+    // KAPU-WIN: a táblák és a válaszlista a kártya aljához igazodnak, de azt a HUD-ütem csak ~0,1 s-onként méri — a nyitás utáni
+    // első képkockákban a régi 0 érték miatt a tábla a kártya ALÁ került, és a koppintást a kártya nyelte el. Amíg nincs mérve,
+    // itt mérjük (egyszeri layout-olvasás); ha a kártya még nincs a DOM-ban, a táblák legfeljebb ~30 képkockáig rejtve maradnak.
+    let cardPending = false;
+    if (j && cardBottomRef.current <= 0) {
+      const card = document.querySelector('[data-testid="tornado-quiz"] .play-question-card');
+      if (card) cardBottomRef.current = card.getBoundingClientRect().bottom;
+      else cardPending = cardWaitRef.current++ < 30;
+    } else {
+      cardWaitRef.current = 0;
+    }
     const labelW = compact ? 48 : Math.min(w * 0.26, 180);
     // A teljes válaszok listája (hosszú válasznál): állón a kérdés-kártya alatt, alacsony fekvőn a bal oldalon (R4). A lista
     // magasságát kérdésenként egyszer mérjük (`answersHRef`, layout-effektben) — itt csak írunk, nem olvasunk layoutot (K5).
@@ -2742,6 +2755,10 @@ function PlayScreen(props: {
     for (const i of signOrder) {
       const el = signRefs.current[i];
       if (!el) continue;
+      if (cardPending) {
+        el.style.visibility = "hidden";
+        continue;
+      }
       const x = signX[i]!;
       // A3: a felirat alja a vezérlősáv (tárcsa) fölött marad; K2 / KICSI 1: a kérdés-alatti tájékozódó sáv (és benne a kérdés
       // fajtája) fölött is.
