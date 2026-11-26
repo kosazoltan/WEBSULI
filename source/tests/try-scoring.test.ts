@@ -109,3 +109,17 @@ test("review #612/#624: a becslés leírás (prompt) nélkül a gyártásban hib
   assert.deepEqual(generatedTryProblems("estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }), []);
   assert.deepEqual(trySpecProblems("estimate", { min: 0, max: 1000, step: 10, answer: 400, unit: "m" }), [], "a mentett, leírás nélküli becslés olvasható");
 });
+
+test("review #624/2: a leckejavító és a fogalomjavító is csak ÚJ / változott try-blokkra kéri a gyártás-határ követelményt", async () => {
+  const { newTryProblems } = await import("../shared/try-scoring");
+  const old = { kind: "try", tryKind: "estimate", spec: { min: 0, max: 1000, step: 10, answer: 400, unit: "m" } };
+  const fresh = { kind: "try", tryKind: "estimate", spec: { min: 0, max: 50, answer: 20 } };
+  const before = { sections: [{ blocks: [old] }] };
+  assert.deepEqual(newTryProblems(before as never, { sections: [{ blocks: [old] }] } as never), [], "a mentett, változatlan blokk nem hiba");
+  assert.ok(newTryProblems(before as never, { sections: [{ blocks: [old, fresh] }] } as never).some((m) => /leírás/.test(m)), "az új blokk hibás");
+  assert.ok(newTryProblems(null, { sections: [{ blocks: [old] }] } as never).length > 0, "új gyártásnál minden blokk új");
+  const { readFileSync } = await import("node:fs");
+  for (const f of ["../server/studio/single-run/concept-fix.ts", "../server/studio/structured-improvement.ts", "../server/studio/single-run/engine.ts"]) {
+    assert.match(readFileSync(new URL(f, import.meta.url), "utf8"), /newTryProblems\(/, f);
+  }
+});
