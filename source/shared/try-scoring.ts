@@ -191,6 +191,8 @@ export function trySpecProblems(kind: string, spec: unknown): string[] {
     if (!Number.isFinite(e.answer) || e.answer < e.min || e.answer > e.max) p.push("A helyes érték a csúszka tartományán belül legyen.");
     else if (p.length === 0 && !sliderHasFullScore(e.min, e.max, e.step, e.answer, (v) => scoreEstimate(spec, v).verdict === "teljes"))
       p.push("A csúszka lépésközével nem érhető el teljes pontot érő becslés (±5%) — kisebb lépésköz vagy más helyes érték kell.");
+    // Review #612: leírás nélkül csak „Becsüld meg:” és egy csúszka látszana — nem derülne ki, mit kell megbecsülni.
+    if (!e.prompt) p.push("A becsléshez leírás (prompt) kell: mit kell megbecsülni.");
   }
   return p;
 }

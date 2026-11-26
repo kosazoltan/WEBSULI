@@ -155,6 +155,11 @@ Dokumentált spec-változás: a V2a tesztje a hirdetett fajtákat a régi hárma
 2. GREEN: `shared/lesson-section-shapes.ts`, `shared/lesson-schema.ts` (`PROMPT_TRY_KINDS`), `server/studio/step-io.ts` (katalógus),
    `server/studio/single-run/engine.ts` (tantárgy → számos jelző).
 3. Próbahiba, kapulánc, PR (a V3a után).
+### V2b — újraépítés és review #612 / #617 (2026-11-26)
+- A V3a utódja (#619) fölé épült újra (`feat/v2b-gyartas-v2`, utasítás → RED → kód); a #617 lezárva, utódja ez a PR. A kiosztás a mainen
+  azóta bővült sorozatszabály (#611 `seriesShapeSalt`) minden `applySectionShapes`-hívásán megkapja a számtárgy-jelzőt.
+- **Becslés leírása (review #612):** a V2b a modellnek hirdeti a becslést, ezért a séma leírást (`prompt`) követel — nélküle csak „Becsüld meg:”
+  és egy csúszka látszana. RED: `try-scoring.test.ts` „review #612”. A #617 többi szála (csúszka, célszám, bővült mentés, V-kompat) a V2a-ban (#615) javítva.
 
 ### V3a — újraépítés és review #609 (2026-11-26)
 - A V2a squash-beolvadása (#615) után az ág egymásra épített volt: `feat/v3a-kartyak-v2` az `origin/main`-ről, a V3a saját változása három commitban (utasítás → RED → kód); a #609 lezárva, utódja ez a PR.
