@@ -182,9 +182,16 @@ describe("TG-P4a: meta-kapu a bankcsomag elfogadásán", () => {
       tasks: [{ q: "Mondd el, hány pontot ér a felvételin a szólásos feladat!", sample: "4" }, { q: "Egészítsd ki: Lassan járj, tovább ___!", sample: "érsz" }],
     });
     assert.equal(p.length, 2);
-    assert.match(p[0], /^quiz\[0\]/);
-    assert.match(p[1], /^tasks\[0\]/);
+    // review #629: a `bank-repair.ts` `repairPermissions` útvonal-formája (`quiz.0` / `tasks.0`) — célzott csere, nem teljes újraírás.
+    assert.match(p[0], /^quiz\.0: /);
+    assert.match(p[1], /^tasks\.0: /);
     assert.match(p.join(" "), /tanított tartalom/);
+  });
+  it("review #629: a geometriai pont nem meta, a tanuló válaszának pontozása nyílt feladatként is meta", async () => {
+    const { practiceMetaProblems } = await import("../shared/practice-policy");
+    assert.notEqual(classifyQuizItem(q("Hány pont határoz meg egy egyenest?", ["1 pont", "2 pont", "3 pont"])).kind, "meta");
+    assert.equal(classifyOpenTask({ q: "Lili jól aláhúzta a szót, de csak az egyik jelentést írta le helyesen. Hány pontot kap?", sample: "1 pont" }).kind, "meta");
+    assert.equal(practiceMetaProblems({ tasks: [{ q: "Lili jól aláhúzta a szót, de csak az egyik jelentést írta le helyesen. Hány pontot kap?", sample: "1 pont" }] }).length, 1);
   });
   it("a bankcsomag-validátor hívja", async () => {
     const { readFileSync } = await import("node:fs");
