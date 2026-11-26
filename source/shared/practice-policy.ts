@@ -90,6 +90,19 @@ export function classifyQuizItem(item: { question: string; options?: string[]; f
   return classifyText(item.question, { options: item.options, format: item.format });
 }
 
+/**
+ * TG-P4a (docs/specs/2026-11-26-tananyag-gyakorlati-p4a-vegrehajtas.md): a bankcsomag elfogadásának meta-kapuja — a feladatlapra /
+ * felvételire kérdező tétel (pontozás, feladattípus, felépítés) javító fordulót kap. Csak a modell kimenetére (gyártás); a mentett
+ * leckék olvasását nem érinti.
+ */
+export function practiceMetaProblems(packet: { quiz?: Array<{ question: string; options?: string[]; format?: string }>; tasks?: Array<{ q: string; sample?: string }> }): string[] {
+  const fix = "a feladatlapra / pontozásra / feladattípusra kérdez — cseréld a tanított tartalomra vonatkozó gyakorlati tételre (pl. konkrét mondaton / adaton döntés, kiegészítés, javítás)";
+  return [
+    ...(packet.quiz ?? []).flatMap((it, i) => (classifyQuizItem(it).kind === "meta" ? [`quiz[${i}]: ${fix}`] : [])),
+    ...(packet.tasks ?? []).flatMap((t, i) => (classifyOpenTask(t).kind === "meta" ? [`tasks[${i}]: ${fix}`] : [])),
+  ];
+}
+
 export function classifyOpenTask(task: { q: string; sample?: string }): PracticeVerdict {
   const r = classifyText(task.q);
   if (r.kind !== "bizonytalan" || !task.sample) return r;

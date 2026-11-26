@@ -12,4 +12,4 @@ utasítja el: a bankcsomag `validate`-je (`experience-builder.ts`) a meta-tétel
    a validátor a `practiceMetaProblems`-t hívja.
 4. Az arány (60–75%) kapuja a P4b (bank-kvóta és kiadási kapu).
 
-Állapot: TG-P4a 1/3 egység kész — következő: bukó teszt
+Állapot: TG-P4a 3/3 egység kész — következő: kapulánc, PR
