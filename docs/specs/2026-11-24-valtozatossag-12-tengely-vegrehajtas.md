@@ -141,6 +141,21 @@ Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compare
 2. GREEN: `shared/try-scoring.ts`, `client/src/lesson-runtime/blocks/try-cards.tsx`, `try-blocks.tsx`, `useLessonProgress.ts`,
    `shared/lesson-block-label.ts`, `server/studio/grounding.ts`.
 3. Próbahiba, kapulánc, PR (a V2a beolvadása után).
+
+## V2b — végrehajtás (2026-11-25): az öt új feladatfajta GYÁRTÁSA
+Előfeltétel: a V-kompat, a V2a és a V3a élesben (a megjelenítők a kliensen). A szerző és a vázlat innentől az öt új gyakorlófajtát is
+ismeri (`PROMPT_TRY_KINDS`), a kiosztás (S6b) fajtakészlete bővül:
+- `procedure` → `dragSort` (számtárgyban `numberLine` is); `comparison` → `match`, `categorize`; `description` → `fillBlank`,
+  `trueFalseSeries`, `highlight`; `any` → mind a gyakorlófajta, a két számos (`numberLine`, `estimate`) csak számtárgyban
+  (matematika, fizika, kémia, földrajz, természettudomány, informatika — a tantárgynévből);
+- a szomszédos try-fajta továbbra sem egyezik (`any` fejezetnél), a kiosztás determinisztikus.
+Dokumentált spec-változás: a V2a tesztje a hirdetett fajtákat a régi hármasra rögzítette — a V2b ezt szándékosan bővíti.
+1. RED: `source/tests/lesson-try-assignment.test.ts` — 300 magon minden gyakorlófajta előfordul; nem számtárgyban nincs `numberLine` /
+   `estimate`; a szerzői katalógus minden új fajta pontos spec-alakját közli; a vázlat `tryKind`-ja az újakat elfogadja.
+2. GREEN: `shared/lesson-section-shapes.ts`, `shared/lesson-schema.ts` (`PROMPT_TRY_KINDS`), `server/studio/step-io.ts` (katalógus),
+   `server/studio/single-run/engine.ts` (tantárgy → számos jelző).
+3. Próbahiba, kapulánc, PR (a V3a után).
+
 ### V3a — újraépítés és review #609 (2026-11-26)
 - A V2a squash-beolvadása (#615) után az ág egymásra épített volt: `feat/v3a-kartyak-v2` az `origin/main`-ről, a V3a saját változása három commitban (utasítás → RED → kód); a #609 lezárva, utódja ez a PR.
 - **Döntés rádiócsoport (review #609):** a döntés lehetőségei a V2a közös `RadioRow`-ját használják — egy Tab-megálló (kijelölt / első), a nyilak léptetnek és választanak. RED: `lesson-try-cards.spec.ts` „döntés: valódi rádiócsoport” (a javítás előtt a `tabindex` hiányzott).
