@@ -662,16 +662,33 @@ test.describe("vak K2 360x640", () => {
         return { visible, overlap: visible && w > 0 && h > 0 ? Math.round(w * h) : 0 };
       });
     expect((await overlap()).visible, "kérdés közben a szünetgomb látszik").toBe(true);
+    // FLAKE-BC-K1K2 (review #627): a mintavétel a böngészőben, MINDEN képkockán (requestAnimationFrame), a koppintás ELŐTT indul és
+    // kerekítés nélkül a legnagyobb átfedést tartja — a reveal első képkockái és a mintavételek közti rövid rálógás sem csúszik át.
+    await page.evaluate(() => {
+      const w = window as unknown as { __k2Max: number; __k2Stop: boolean };
+      w.__k2Max = 0;
+      w.__k2Stop = false;
+      const tick = () => {
+        const pause = document.querySelector<HTMLElement>('[data-testid="bc-quiz-pause"]');
+        const card = document.querySelector<HTMLElement>(".play-question-card");
+        if (pause && card) {
+          const cs = getComputedStyle(pause);
+          if (cs.display !== "none" && cs.visibility !== "hidden") {
+            const a = pause.getBoundingClientRect(), b = card.getBoundingClientRect();
+            const ow = Math.min(a.right, b.right) - Math.max(a.left, b.left), oh = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+            if (ow > 0 && oh > 0) w.__k2Max = Math.max(w.__k2Max, ow * oh);
+          }
+        }
+        if (!w.__k2Stop) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
     const wb = (await wrong.boundingBox())!;
     await tapAt(page, wb.x + wb.width / 2, wb.y + wb.height / 2);
     await expect(page.locator('[data-testid="bc-quiz"][data-state="reveal"]')).toBeVisible({ timeout: 10_000 });
-    // FLAKE-BC-K1K2: a kijelzés ELSŐ képkockájától sűrűn mintázunk (azonnal, majd 50 ms-onként 1,5 s-ig) — az 5 Hz-es mérő
-    // ütemei közötti rálógást is el kell kapni (korábban 250 ms-os mintavétel csak terhelt gépen akadt bele).
-    for (let k = 0; k < 30; k++) {
-      if (k > 0) await page.waitForTimeout(50);
-      const o = await overlap();
-      expect(o.overlap, `a kártya ${o.overlap} px²-en lóg a látható szünetgombra`).toBe(0);
-    }
+    await page.waitForTimeout(1_500);
+    const maxOverlap = await page.evaluate(() => { const w = window as unknown as { __k2Max: number; __k2Stop: boolean }; w.__k2Stop = true; return w.__k2Max; });
+    expect(maxOverlap, `a kártya ${maxOverlap.toFixed(3)} px²-en lógott a látható szünetgombra (képkockánkénti mérés)`).toBe(0);
     await expect(page.getByTestId("bc-quiz")).toHaveCount(0, { timeout: 20_000 });
     await page.evaluate((quiz) => (window as unknown as GameTestWindow).__websuliGame!.forceState({ question: true, quiz }), LONGEST_RUNE_QUIZ);
     await expect.poll(async () => { const pr = await probe(page); return pr.lockOpen === 1 && pr.armed === 1; }, { timeout: 30_000 }).toBe(true);
