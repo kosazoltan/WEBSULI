@@ -1325,3 +1325,20 @@ Forrás: J7b Tornádó útelágazás, vak ellenőrzés K1 (`source/tests/tornado
   csővezetéknek, a szóközös argumentumot több argumentumnak veszi — a böngészős kör azonnal EXIT 255-tel állt le, és elveszett egy
   gép-zár-sáv. Szűrős / szóközös argumentumnál a harnesst közvetlenül hívd: `node --import tsx scripts/run-e2e-tests.ts <spec> -g "…"`.
   A futó várakozó-szkript fájlját se írd felül (a bash menet közben olvassa) — mindig új fájlnév.
+
+## C-101 — Lánc-várakozás `-R` nélkül, félig leállított láncok, attribútum-sorrend őr (2026-11-26)
+- **Tünet:** a `lanc-futtat.sh`-val indított, PR-beolvadásra váró láncok órákig vártak („failed to run git: not a git
+  repository”); a leállítottnak hitt régi láncok (futó másolat) tovább éltek, ugyanarra a PR-ra párhuzamos merge-one-nal.
+- **Gyökérok:** a futtató a másolat könyvtárából indít — a `cd <munkafa>` előtti `gh pr view/list` `-R` nélkül üres; a külső
+  bash `taskkill /T` nem mindig viszi a `<x>-chain.futas.<n>` másolatot.
+- **Szabály:** minden `cd` előtti `gh`-ba `-R kosazoltan/WEBSULI`; leállítás + ellenőrzés a Hermes-agent
+  `scripts/websuli-lanc/lanc-leallit.ps1`-gyel (`-DryRun`). Új JSX-attribútum a meglévő sorozat VÉGÉRE (a forrás-őrök a sorrendet
+  is rögzítik); lap-/játékforrás módosítása után a lánc előtt teljes `npm test`.
+
+## C-102 — Terhelésfüggő E2E-n igazolatlan „javítás” (2026-11-26)
+- **Tünet:** Kockavadász „vak K1/K2” a CI egy futásában 3/3 bukott egy játékot nem érintő PR-on (#619); helyben default workerrel
+  11/12 bukott a mainen is.
+- **Gyökérok:** terhelésfüggő teszt; `--workers=1` és `3` mellett zöld. Az első hipotézis (kősáv-billegés) A/B-n (3 worker,
+  DejaVu-betű) nem igazolódott.
+- **Szabály:** előbb A/B a mainen azonos terheléssel és betűvel; igazolatlan javítást nem szállítunk (az ágat töröltük). A nem
+  érintett PR bukó jobja mérés után újrafuttatható (`gh run rerun --failed`); a teszt önálló feladat (`FLAKE-BC-K1K2`).
