@@ -21,11 +21,14 @@ A JK (#kezesség) `gate:pr`-je kétszer ugyanazon bukott; a mainen (`31e4c316`) 
    (2 + 1) állnak, nem egyben — két sor, a jármű és az előtte lévő út szabad marad. Mérő-tétel: `forceState({ question: true,
    answers: "medium" })` a bukott esettel azonos címkékkel.
 
-3. **Mobil mérő M10, Tornádó 844×390** (a mainen is ~18-ból 1 bukás): a mozgó táblára adott EGÉR-koppintásnál (asztali
-   gép, és a teszt is egérrel kattint) a lenyomás és a felengedés között a tábla elmozdul, a `pointerup` már MÁS elemre esik —
-   egérnél nincs implicit pointer capture (érintésnél van, lásd `pointerTap.ts` 2. pont) —, a választás elvész. Javítás:
-   `pointerTapHandlers` lenyomáskor `setPointerCapture`-t kér, így a felengedés mindig a lenyomott célhoz jut (a „nem mozdult
-   ujj” szabály így egérrel is érvényesül). A tesztet nem lazítjuk (review #622: újrakattintás helyett valódi javítás).
+3. **Mobil mérő M10, Tornádó 844×390** (a mainen is ~18-ból 1, célzott ismétlésnél 20-ból 7 bukás): eseménynaplóval mérve a
+   koppintás a kérdés-kártya fejlécére (`play-question-head`, 83–131 px) esett, a jó tábla ALATTA volt (74–122 px). Ok: a táblák
+   helye a kártya aljához igazodik (`cardBottomRef`), de azt a játék csak a ~0,1 s-os HUD-ütemben méri — a kereszteződés nyitása
+   utáni első képkockákban a régi 0 érték miatt a tábla a kártya alá kerül, és a gyerek koppintását a kártya nyeli el.
+   Javítás: amíg a kártya alja nincs megmérve, a táblák elhelyezése azonnal megméri (egyszeri layout-olvasás); ha a kártya még
+   nincs a DOM-ban, a táblák legfeljebb ~0,5 s-ig rejtve maradnak. A tesztet nem lazítjuk (review #622). Mérő: képkockánkénti
+   `elementFromPoint` a tábla közepén a nyitás pillanatától (fekvő 844×390, 640×360, álló 390×844). Az előbb próbált explicit
+   pointer capture nem javított (20-ból 3 bukás maradt) — elvetve.
 
 ## Elfogadás
 - A két spec a kapu beállításával (`playwright.gate.local.mts`) zöld; a Tornádó K3 a közepes címkés mérő-tétellel is.
