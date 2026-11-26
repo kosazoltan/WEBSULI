@@ -124,3 +124,15 @@ test("review #619: a „Tudtad?” kártya szövege a 11–12. évfolyam sötét
   });
   expect(ratio).toBeGreaterThanOrEqual(4.5);
 });
+test("review #619 (2. kör): az Újrakezdés billentyűzetes aktiválása után a fókusz a „Következő lépés” gombra kerül", async ({ page }) => {
+  await mount(page);
+  const steps = page.locator('[data-try="stepReveal"]');
+  await steps.getByRole("button", { name: /Következő lépés/ }).focus();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  const restart = steps.getByRole("button", { name: "Újrakezdés" });
+  await expect(restart).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(steps).not.toContainText("Válaszd ki a képletet.");
+  await expect(steps.getByRole("button", { name: /Következő lépés/ })).toBeFocused();
+});
