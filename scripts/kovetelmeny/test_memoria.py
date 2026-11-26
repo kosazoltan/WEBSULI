@@ -47,6 +47,7 @@ class Alap(unittest.TestCase):
         k.close()
         self.c = M.connect(str(self.db))
         F.new_task(self.c, "PROBA", "Próba-feladat", priority=1, status="folyamatban", next_step="a következő lépés")
+        self.c.commit()  # a CLI-s tesztek külön kapcsolattal írnak
 
     def tearDown(self):
         self.c.close()
