@@ -8,4 +8,6 @@ Terv: `docs/specs/2026-11-26-kapu-windows-betu.md`
    HUD-alj), `TornadoHunter200.tsx` (mérő-tétel + álló gomb-módú 2 oszlop `data-option-fit="1"`-nél).
 3. Mérés: a két spec teljesen a kapu beállításával, `npm test`.
 
-Állapot: KAPU-WIN folyamatban.
+Mérés (a kapu beállításával, SwiftShader, 1 worker): `blockcraft-perf-panel.spec.ts` + `tornado-play.spec.ts` 55 passed (a javítás előtt a mainen 3 bukás: perf-panel L3 640×360 / 568×320, Tornádó K3 360×640).
+
+Állapot: KAPU-WIN kész — kapulánc, PR.

@@ -292,7 +292,7 @@ export default function TornadoHunter200() {
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   /** Teszt-kampó jelzők (növekvő sorszám): a PlayScreen csak a változásra reagál, újraindításkor nem. */
   const [forceResult, setForceResult] = useState(0);
-  const [forceQuiz, setForceQuiz] = useState(0);
+  const [forceQuiz, setForceQuiz] = useState<{ n: number; medium: boolean }>({ n: 0, medium: false });
   /** J7a teszt-kampó: a játékos a tölcsértől ennyi km-re kerül (a mérési sávba állításhoz); `n` a jelző sorszáma. */
   const [forceNear, setForceNear] = useState<{ n: number; km: number }>({ n: 0, km: 0 });
   /** J7b teszt-kampó: azonnali elágazás (`long`: a bank leghosszabb válaszaival — a tábla-beférés mérése). */
@@ -337,7 +337,7 @@ export default function TornadoHunter200() {
         // K.2: a `question: true` azonnal kérdést nyit; a `phase: "quiz"` ennek kompatibilis álneve (terv 9.).
         if (patch.phase === "quiz" || patch.question === true) {
           setScreen("play");
-          setForceQuiz((n) => n + 1);
+          setForceQuiz((cur) => ({ n: cur.n + 1, medium: (patch as { answers?: unknown }).answers === "medium" }));
         }
         const junction = (patch as { junction?: unknown }).junction;
         if (junction === true || junction === "long") {
@@ -357,7 +357,7 @@ export default function TornadoHunter200() {
   useEffect(() => {
     if (screen !== "play") {
       setForceResult(0);
-      setForceQuiz(0);
+      setForceQuiz({ n: 0, medium: false });
       setForceNear({ n: 0, km: 0 });
       setForceJunction({ n: 0, long: false });
       setPlayState("playing");
@@ -1334,7 +1334,8 @@ function PlayScreen(props: {
   /** Teszt-kampó (növekvő sorszám): > 0 és változik → győzelmi eredmény. */
   forceResult: number;
   /** Teszt-kampó (növekvő sorszám): > 0 és változik → kvíz feldobása (M9/M10 rossz válasz). */
-  forceQuiz: number;
+  /** K.2 teszt-kampó: azonnali turbó-kérdés; `medium`: a KAPU-WIN mérő-tétele (közepes hosszú címkék). */
+  forceQuiz: { n: number; medium: boolean };
   /** J7a teszt-kampó: `n` > 0 és változik → a játékos `km` távolságra kerül a tölcsértől. */
   forceNear: { n: number; km: number };
   /** J7b teszt-kampó: `n` > 0 és változik → azonnali elágazás; `long` → a leghosszabb válaszú teszt-tétel. */
@@ -2324,8 +2325,10 @@ function PlayScreen(props: {
   }, [props.forceJunction.n]);
   // K.2: `forceState({ question: true })` / `phase: "quiz"` → azonnali kérdés (turbó-kérdés, gomb-mód).
   useEffect(() => {
-    if (props.forceQuiz > 0 && !finishedRef.current) driverRef.current?.core.forceTurbo();
-  }, [props.forceQuiz]);
+    if (props.forceQuiz.n <= 0 || finishedRef.current) return;
+    if (props.forceQuiz.medium) forcedQuizRef.current = MEDIUM_ANSWER_FIXTURE;
+    driverRef.current?.core.forceTurbo();
+  }, [props.forceQuiz.n]);
   useEffect(() => {
     if (props.forceNear.n <= 0 || finishedRef.current) return;
     const tp = tornadoPosRef.current;
@@ -3043,6 +3046,9 @@ function PlayScreen(props: {
   .play-question[data-testid="tornado-quiz"][data-mode="buttons"] { justify-content: flex-start; }
   .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-cols="2"] .play-question-col[data-side="right"] > :only-child { grid-column: auto; }
+  /* KAPU-WIN: ha a címkék a 3 oszlopot túlcsordulják (data-option-fit=1), 2 oszlop (2 + 1) — egy oszlopban a gombsor a járműig érne. */
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-option-fit="1"] .play-question-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .play-question[data-testid="tornado-quiz"][data-mode="buttons"][data-count="3"][data-option-fit="1"] .play-question-col[data-side="right"] > :only-child { grid-column: 1 / -1; }
 }`}</style>
       {/* Teljes képernyős 3D jelenet: a HUD és a vezérlők áttetszően fölötte (mobiljáték-elrendezés). */}
       <div className="absolute inset-0 bg-black">
@@ -3386,6 +3392,19 @@ function PlayScreen(props: {
  * J7b teszt-kampó (M3): a kézi bank három leghosszabb válasza egy tételben — a tábla-beférés és a teljes válaszlista mérése
  * mindhárom nézetben (`forceState({ junction: "long" })`).
  */
+/** KAPU-WIN mérő-tétel: közepes címkék, amelyek álló nézetben a 3 oszlopot túlcsordulják (a kapu helyi bukásának esete). */
+const MEDIUM_ANSWER_FIXTURE: Question = {
+  id: "tornado-fixture-medium-answers",
+  subject: "english",
+  grade: 4,
+  prompt: "Mit jelent: „listen to music”?",
+  options: ["szeretem, tetszik", "a folyó mellett", "zenét hallgat"],
+  correctIndex: 2,
+  explanation: "listen to music = zenét hallgat.",
+  difficulty: 1,
+  source: "bank",
+};
+
 const LONG_ANSWER_FIXTURE: Question = {
   id: "tornado-fixture-long-answers",
   subject: "english",
