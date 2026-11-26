@@ -141,6 +141,20 @@ Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compare
 2. GREEN: `shared/try-scoring.ts`, `client/src/lesson-runtime/blocks/try-cards.tsx`, `try-blocks.tsx`, `useLessonProgress.ts`,
    `shared/lesson-block-label.ts`, `server/studio/grounding.ts`.
 3. Próbahiba, kapulánc, PR (a V2a beolvadása után).
+
+## V5a — végrehajtás (2026-11-25): szókereső és keresztrejtvény (séma, rácsgenerátor, megjelenítő; gyártás nélkül)
+A V3a-ra épül (`try` keret). Fajták: `wordSearch` (3–10 szó, 3–12 betű; a rács a szavakból számolt MAGBÓL determinisztikus,
+vízszintes / függőleges / átlós elhelyezés, kitöltés magyar betűkkel) és `crossword` (3–10 bejegyzés: megfejtés + meghatározás; a
+rácsgenerátor determinisztikus, a bejegyzések keresztezik egymást, ahol lehet; ami nem fér el keresztezve, külön sorba kerül).
+Pontozás (`shared/word-grid.ts`): szókereső — pont = megtalált szavak; keresztrejtvény — pont = helyesen kitöltött bejegyzések
+(kis- / nagybetű és ékezet nélküli összevetés NEM: a magyar ékezet számít, csak a kis- / nagybetű nem).
+1. RED: `source/tests/word-grid.test.ts` (determinizmus azonos bemenetre; minden szó / bejegyzés a rácsban olvasható; a keresztrejtvény
+   betűi ütközésmentesek; pontozás teljes / részleges / rossz; séma), `source/tests/lesson-word-grid.spec.ts` (e2e: billentyűzettel
+   megoldható, az állapot visszaáll).
+2. GREEN: `shared/word-grid.ts`, `shared/try-scoring.ts` (fajták, séma), `client/src/lesson-runtime/blocks/try-word-grid.tsx`, regiszter,
+   állapot, címke, grounding.
+3. A gyártás (szókincsleckénél kötelező kiosztás) és a fejezetvégi boss-kérdés a V5b.
+
 ### V3a — újraépítés és review #609 (2026-11-26)
 - A V2a squash-beolvadása (#615) után az ág egymásra épített volt: `feat/v3a-kartyak-v2` az `origin/main`-ről, a V3a saját változása három commitban (utasítás → RED → kód); a #609 lezárva, utódja ez a PR.
 - **Döntés rádiócsoport (review #609):** a döntés lehetőségei a V2a közös `RadioRow`-ját használják — egy Tab-megálló (kijelölt / első), a nyilak léptetnek és választanak. RED: `lesson-try-cards.spec.ts` „döntés: valódi rádiócsoport” (a javítás előtt a `tabindex` hiányzott).
