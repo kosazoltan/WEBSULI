@@ -136,15 +136,20 @@ export function practiceTarget(n: number, pairs: number): { lower: number; upper
 export const practiceQuotaEnabled = (env: NodeJS.ProcessEnv = process.env) => env.STUDIO_PRACTICE_QUOTA === "on";
 
 /** TG-P4b: a csomag (vagy bank) gyakorlati sávja — korlátozott kvízcsomagnál (N − C < 60%) a fogalompár-maximum a cél. */
-export function practiceQuota(quizN: number, pairs: number, taskN: number): { quiz: { min: number; max: number }; tasks: { min: number; max: number } } {
-  const q = practiceTarget(quizN, pairs), t = practiceTarget(taskN, 0);
-  return { quiz: q.limited ? { min: q.max, max: q.max } : { min: q.lower, max: q.upper }, tasks: { min: t.lower, max: t.upper } };
+type QuotaBand = { min: number; max: number; goal: number };
+export function practiceQuota(quizN: number, pairs: number, taskN: number): { quiz: QuotaBand; tasks: QuotaBand } {
+  // review #631: a felső határ a fogalompár-maximumnál (N − C) sem lehet nagyobb; min ≤ max; a cél (kétharmad) a sávba szorítva.
+  const band = (x: ReturnType<typeof practiceTarget>): QuotaBand => {
+    const max = Math.min(x.upper, x.max), min = Math.min(x.lower, max);
+    return { min, max, goal: Math.min(max, Math.max(min, x.goal)) };
+  };
+  return { quiz: band(practiceTarget(quizN, pairs)), tasks: band(practiceTarget(taskN, 0)) };
 }
 
 /** TG-P4b: a bankcsomag-szerződés számszerű gyakorlati sora (a program ugyanezt méri a `practiceQuotaProblems`-szel). */
 export function practiceQuotaLine(quizN: number, pairs: number, taskN: number): string {
   const { quiz, tasks } = practiceQuota(quizN, pairs, taskN);
-  return `GYAKORLATI ARÁNY (a program méri; a nem egyértelmű tétel nem számít): quiz: legalább ${quiz.min}, legfeljebb ${quiz.max} igazolt alkalmazás (konkrét példán döntés, kiegészítés, számolás, javítás) a ${quizN} tételből, a többi a fejezet fogalmainak felidézése; tasks: legalább ${tasks.min}, legfeljebb ${tasks.max} alkalmazó feladat a ${taskN}-ból.`;
+  return `GYAKORLATI ARÁNY (a program méri; a nem egyértelmű tétel nem számít): quiz: legalább ${quiz.min}, legfeljebb ${quiz.max} igazolt alkalmazás (cél: ${quiz.goal}) (konkrét példán döntés, kiegészítés, számolás, javítás) a ${quizN} tételből, a többi a fejezet fogalmainak felidézése; tasks: legalább ${tasks.min}, legfeljebb ${tasks.max} alkalmazó feladat (cél: ${tasks.goal}) a ${taskN}-ból.`;
 }
 
 /** TG-P4b: csomagszintű kvóta-ellenőrzés a gyártáskor — kevés vagy a sávnál több igazolt alkalmazás javító kört kap. */

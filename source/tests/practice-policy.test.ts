@@ -224,7 +224,7 @@ describe("TG-P4b: gyakorlati kvóta a bankcsomagon", () => {
   });
   it("korlátozott csomag (12 tétel, 10 kötelező pár) a maximumot kéri, a bizonytalan nem számít", async () => {
     const { practiceQuota, practiceQuotaProblems } = await import("../shared/practice-policy");
-    assert.deepEqual(practiceQuota(12, 10, 0).quiz, { min: 2, max: 2 });
+    assert.deepEqual(practiceQuota(12, 10, 0).quiz, { min: 2, max: 2, goal: 2 });
     const unsure = q("Melyik a legszebb?", ["a", "b", "c"]);
     assert.equal(practiceQuotaProblems({ quiz: [unsure, unsure, ...Array.from({ length: 10 }, (_, i) => rec(i))], tasks: [] }, 10).length, 1);
   });
