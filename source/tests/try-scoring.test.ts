@@ -57,7 +57,7 @@ test("séma: a helyes specifikáció átmegy, a hibás elutasítva; a modellnek 
     highlight: { text: "A macska gyorsan fut.", targets: ["gyorsan"] },
     categorize: { categories: ["páros", "páratlan"], items: [{ text: "2", category: "páros" }, { text: "3", category: "páratlan" }, { text: "4", category: "páros" }] },
     numberLine: { min: 0, max: 10, target: 7, tolerance: 0.5 },
-    estimate: { min: 0, max: 1000, answer: 400, unit: "m" },
+    estimate: { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" },
   };
   const bad: Record<string, unknown> = {
     trueFalseSeries: { statements: [{ text: "egy", answer: true }] },
@@ -93,9 +93,15 @@ test("review #609/#615/#617: a séma elutasítja a megoldhatatlan csúszkát —
     ["numberLine", { min: 0, max: 10, step: 1, target: 7, tolerance: 0.5 }],
     ["numberLine", { min: 0, max: 10, target: 7, tolerance: 0.5 }],
     ["numberLine", { min: 0, max: 10, step: 4, target: 8, tolerance: 0.1 }],
-    ["estimate", { min: 0, max: 1000, step: 10, answer: 400 }],
-    ["estimate", { min: 0, max: 1000, answer: 400, unit: "m" }],
-    ["estimate", { min: -1, max: 1, step: 0.5, answer: 0 }],
+    // SPEC-VÁLTOZÁS (review #612): a becslés leírása (prompt) kötelező.
+    ["estimate", { prompt: "Becsüld meg a távolságot!", min: 0, max: 1000, step: 10, answer: 400 }],
+    ["estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }],
+    ["estimate", { prompt: "Becsüld meg az értéket!", min: -1, max: 1, step: 0.5, answer: 0 }],
   ];
   for (const [k, s] of solvable) assert.deepEqual(trySpecProblems(k, s), [], `${k} ${JSON.stringify(s)}: megoldható`);
+});
+test("review #612: a becslés leírás (prompt) nélkül nem érvényes — különben csak „Becsüld meg:” és egy csúszka látszik", () => {
+  assert.ok(trySpecProblems("estimate", { min: 0, max: 1000, answer: 400, unit: "m" }).some((m) => /leírás/.test(m)));
+  assert.ok(trySpecProblems("estimate", { prompt: "   ", min: 0, max: 1000, answer: 400 }).some((m) => /leírás/.test(m)));
+  assert.deepEqual(trySpecProblems("estimate", { prompt: "Hány méter magas a torony?", min: 0, max: 1000, answer: 400, unit: "m" }), []);
 });
