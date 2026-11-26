@@ -9,7 +9,7 @@ const cfg = loadConfig();
 const SPECS = ['coupon-expired-all-games.spec.ts', 'game-meta-quality.spec.ts', 'game-mobile-quality.spec.ts', 'tornado-j7a.spec.ts',
   'tornado-hunter-render.spec.ts', 'speed-math-play.spec.ts', 'studio-ui.spec.ts', 'websuli.spec.ts'];
 const SPEC_TEXT = { 'studio-ui.spec.ts': 'await page.getByTestId("StudioPanel")' };
-const pick = (changed) => pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles: SPECS, readSpec: (s) => SPEC_TEXT[s] ?? '', cfg, changed });
+const pick = (changed, full = true) => pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles: SPECS, readSpec: (s) => SPEC_TEXT[s] ?? '', cfg, changed, full });
 
 test('classifyChanges: játék, közös játékmotor, UI, DB', () => {
   assert.deepEqual(classifyChanges(['source/client/src/pages/TornadoHunter200.tsx'], cfg), { games: ['tornado-hunter-200'], allGames: false, ui: true, db: false });
@@ -30,6 +30,24 @@ test('pickE2eSpecs: közös játékmotor → minden játék, szűrés nélkül',
   const { runs } = pick(['source/client/src/game-engine/play/questionDirector.ts']);
   assert.equal(runs[0].grep, undefined);
   assert.ok(runs[1].specs.includes('speed-math-play.spec.ts') && runs[1].specs.includes('tornado-j7a.spec.ts'));
+});
+
+// KAPU-SZUKITES (docs/specs/2026-11-26-kapu-szukites.md): az alapértelmezés a szűkített mód; a fenti két teszt a TELJES módot
+// (`full: true`, GATE_E2E_FULL=1) rögzíti változatlanul.
+test('KAPU-SZUKITES: egy játéknál a szűkített mód nem futtatja a meta-mérőt és a lejárt-kupon spec-et', () => {
+  const { runs } = pick(['source/client/src/lib/tornado/upgrades.ts'], false);
+  assert.deepEqual(runs[0], { label: 'mobil mérő (tornado-hunter-200)', specs: ['game-mobile-quality.spec.ts'], grep: 'tornado-hunter-200' });
+  assert.deepEqual(runs[1].specs, ['tornado-hunter-render.spec.ts', 'tornado-j7a.spec.ts']);
+});
+
+test('KAPU-SZUKITES: közös játékmotornál csak a változott tövet említő játék-spec + a változott spec fut (a mobil mérő minden játékra)', () => {
+  const specs = ['game-mobile-quality.spec.ts', 'speed-math-play.spec.ts', 'tornado-j7a.spec.ts', 'game-meta-quality.spec.ts', 'coupon-expired-all-games.spec.ts'];
+  const text = { 'tornado-j7a.spec.ts': 'questionDirector állapot', 'speed-math-play.spec.ts': 'nincs említés' };
+  const changed = ['source/client/src/game-engine/play/questionDirector.ts', 'source/tests/coupon-expired-all-games.spec.ts'];
+  const { runs } = pickE2eSpecs({ classification: classifyChanges(changed, cfg), specFiles: specs, readSpec: (s) => text[s] ?? '', cfg, changed, full: false });
+  assert.equal(runs[0].grep, undefined);
+  assert.deepEqual(runs[1].specs, ['coupon-expired-all-games.spec.ts', 'tornado-j7a.spec.ts']);
+  assert.match(runs[1].label, /szűkített/);
 });
 
 test('pickE2eSpecs: nem játék UI → a komponenst említő spec; ha egy sem, figyelmeztetés', () => {
