@@ -4187,8 +4187,8 @@ export default function BlockCraftQuiz() {
               <div
                 className="game-touch-layer bc-touch-layer"
                 data-game-controls
-                data-hand={hand}
                 data-testid="bc-touch-controls"
+                data-hand={hand}
                 style={{ touchAction: "none", userSelect: "none", WebkitTouchCallout: "none", WebkitTapHighlightColor: "transparent" }}
               >
                 {/*
