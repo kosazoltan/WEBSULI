@@ -493,6 +493,8 @@ export const AUTHOR_BLOCK_CATALOG = [
 export const AUTHOR_BLOCK_CATALOG_VARIETY = [
   `A VÁLTOZATOSSÁG mellett a try blokk tryKind értéke ezek egyike is lehet: ${PROMPT_TRY_KINDS.filter((k) => !["dragSort", "fillBlank", "match"].includes(k)).map((k) => JSON.stringify(k)).join("|")}.`,
   'Új gyakorlófajták (V2b) try.spec alakja: trueFalseSeries: {"statements":[{"text":"állítás","answer":true,"explanation":"miért"}]} 2–8 állítással, igaz és hamis is legyen köztük; highlight: {"prompt":"Jelöld ki a …!","text":"a kiemelendő szöveg","targets":["szó"]} 1–8 célszóval, mindegyik a text egy szava pontosan; categorize: {"categories":["A","B"],"items":[{"text":"elem","category":"A"}]} 2–4 kategória, 3–12 elem, minden kategória az items-ben előforduló; numberLine: {"prompt":"Hol van a …?","min":0,"max":10,"step":1,"target":7,"tolerance":0.5} (min < target < max, a tűrés a tartomány negyedénél kisebb) — CSAK számos tartalomhoz; estimate: {"prompt":"Becsüld meg …!","min":0,"max":1000,"step":10,"answer":400,"unit":"m"} — CSAK a forrásban szereplő, ellenőrizhető mennyiséghez. A helyes válasz (answer, target, category, targets) mindig a forrásból / a fejezet tanításából következik.',
+  // V3b: kártyák (csak ha a VÁLTOZATOSSÁG / KÁRTYA vagy a villámkártyás összefoglaló kéri).
+  'Kártyák (V3) try.spec alakja — CSAK ha a VÁLTOZATOSSÁG kéri: flipCard: {"front":"…","back":"…"}; stepReveal: {"title":"…","steps":["…","…"]} 2–8 lépés; didYouKnow: {"fact":"…"}; decision: {"situation":"…","options":[{"text":"…","consequence":"…","best":true}]} 2–4 lehetőség, pontosan egy best=true; flashcards: {"cards":[{"front":"…","back":"…"}]} 2–12 kártya.',
 ].join("\n");
 
 /** A szerzői katalógus a futás kapcsolója szerint (BE változatosság: a kiegészítéssel). */
