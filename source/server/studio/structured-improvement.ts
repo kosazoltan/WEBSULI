@@ -2,6 +2,7 @@ import { publicationBankProblems } from "../../shared/lesson-experience";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
+import { newTryProblems } from "../../shared/try-scoring";
 import { lessonRepairSchema, markRepairCandidate, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
 import { sourceVisualsEnabled } from "./source-visuals-flag";
 import { adoptStoredOpeningForm, runWithLessonVariety } from "./lesson-variety-flag";
@@ -220,6 +221,9 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
       const drawn = drawableCandidate(modelLessonSchema(sourceVisualsEnabled()).parse(previous), (line) => logger.info(line), "Javítás");
       dropNotes = drawn.notes;
       const parsed = drawn.lesson;
+      // Review #624/2: a leckejavító új / megváltoztatott try-blokkja is teljesítse a gyártás-határ követelményét (becslés-leírás).
+      const tryNew = newTryProblems(original, parsed);
+      if (tryNew.length) throw new Error(tryNew.join("; "));
       assertRepairTeaching(original, parsed, corrected, classroom);
       const stale = staleFormProblems(parsed, owner.corrections, sourceWords);
       if (stale.length) throw new Error(stale.join("; "));

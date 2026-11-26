@@ -9,7 +9,8 @@ import { seedFrom } from "../shared/seeded";
 
 // Spec docs/specs/2026-11-20-tgm-valtozatossag-abrak.md (13. szakasz; V17–V20).
 
-const KIND_TRY: Record<Exclude<SectionKind, "any">, string> = { procedure: "dragSort", comparison: "match", description: "fillBlank" };
+// V2b: típusonkénti készlet (nem számtárgy).
+const KIND_TRY: Record<Exclude<SectionKind, "any">, readonly string[]> = { procedure: ["dragSort"], comparison: ["match", "categorize"], description: ["fillBlank", "trueFalseSeries", "highlight"] };
 
 test("V17: ≥ 1/3 try, a fajta a típushoz illik, egymást követő try nem azonos (any-nél), 3…12 fejezet × 200 mag", () => {
   for (let n = 3; n <= 12; n++) {
@@ -21,7 +22,8 @@ test("V17: ≥ 1/3 try, a fajta a típushoz illik, egymást követő try nem azo
       assert.ok(withTry.length >= Math.ceil(n / 3), `${n}/${s}: ${withTry.length} try`);
       plan.forEach((p, i) => {
         assert.equal(p.blocks.includes("try"), p.tryKind !== undefined, `${n}/${s}/${i}: tryKind ↔ try`);
-        if (p.tryKind && kinds[i] !== "any") assert.equal(p.tryKind, KIND_TRY[kinds[i] as Exclude<SectionKind, "any">]);
+        // V2b (dokumentált spec-változás): a kötött típus a saját készletéből választ (nem számtárgyban a számos fajta nélkül).
+        if (p.tryKind && kinds[i] !== "any") assert.ok(KIND_TRY[kinds[i] as Exclude<SectionKind, "any">].includes(p.tryKind), `${n}/${s}/${i}: ${p.tryKind}`);
         // A try nem kerülhet a kérdés után és nem nyithat (az ív szabálya: magyarázat elöl).
         assert.equal(p.blocks[0], "explain");
       });
