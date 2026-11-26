@@ -173,3 +173,21 @@ describe("practice-policy: audit (csak olvas, determinisztikus)", () => {
     assert.deepEqual(a.quiz.items.filter((i) => i.kind === "meta").map((i) => i.id), [lesson.experience!.quiz[0]!.id]);
   });
 });
+
+describe("TG-P4a: meta-kapu a bankcsomag elfogadásán", () => {
+  it("a meta-kvíz és a meta-nyílt feladat hibát ad, a gyakorlati és a fogalmi nem", async () => {
+    const { practiceMetaProblems } = await import("../shared/practice-policy");
+    const p = practiceMetaProblems({
+      quiz: [q("Hány pontot ér a felvételi 2. feladata?", ["2 pont", "4 pont", "6 pont"]), q("Melyik mondatban helyes az elválasztás?", ["a-lma", "al-ma", "alm-a"]), q("Mit jelent a szólás?", ["a", "b", "c"])],
+      tasks: [{ q: "Mondd el, hány pontot ér a felvételin a szólásos feladat!", sample: "4" }, { q: "Egészítsd ki: Lassan járj, tovább ___!", sample: "érsz" }],
+    });
+    assert.equal(p.length, 2);
+    assert.match(p[0], /^quiz\[0\]/);
+    assert.match(p[1], /^tasks\[0\]/);
+    assert.match(p.join(" "), /tanított tartalom/);
+  });
+  it("a bankcsomag-validátor hívja", async () => {
+    const { readFileSync } = await import("node:fs");
+    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /practiceMetaProblems\(/);
+  });
+});
