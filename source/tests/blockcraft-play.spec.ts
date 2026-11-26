@@ -665,9 +665,10 @@ test.describe("vak K2 360x640", () => {
     const wb = (await wrong.boundingBox())!;
     await tapAt(page, wb.x + wb.width / 2, wb.y + wb.height / 2);
     await expect(page.locator('[data-testid="bc-quiz"][data-state="reveal"]')).toBeVisible({ timeout: 10_000 });
-    // A mérés 5 Hz-es: a kijelzés alatt több mintát veszünk, egyik sem lóghat rá.
-    for (let k = 0; k < 6; k++) {
-      await page.waitForTimeout(250);
+    // FLAKE-BC-K1K2: a kijelzés ELSŐ képkockájától sűrűn mintázunk (azonnal, majd 50 ms-onként 1,5 s-ig) — az 5 Hz-es mérő
+    // ütemei közötti rálógást is el kell kapni (korábban 250 ms-os mintavétel csak terhelt gépen akadt bele).
+    for (let k = 0; k < 30; k++) {
+      if (k > 0) await page.waitForTimeout(50);
       const o = await overlap();
       expect(o.overlap, `a kártya ${o.overlap} px²-en lóg a látható szünetgombra`).toBe(0);
     }
