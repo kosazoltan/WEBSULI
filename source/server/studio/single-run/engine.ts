@@ -10,7 +10,7 @@
  */
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { seedFrom } from "../../../shared/seeded";
-import { applySectionShapes, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
+import { applySectionShapes, numericSubject, tryShare, tryShareLow, withTryShareNote } from "../../../shared/lesson-section-shapes";
 import { visualKindCounts, withKindShareNotes } from "../../../shared/visual-kind-plan";
 import { experienceProblems } from "../../../shared/lesson-experience-validation";
 import { verifyLessonSkillBank } from "../../../shared/lesson-skill-checks";
@@ -778,12 +778,14 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // V1: ha a kiosztott blokkváz az előző leckéével azonos, egyszer újramagozunk (a só a job állapotába kerül, folytatásnál az számít).
   const savedSalt = typeof output.shapeSalt === "number" && Number.isInteger(output.shapeSalt) ? output.shapeSalt : undefined;
   const shapeSeed = (salt: number) => seedFrom(salt ? `${mapId}#${salt}` : mapId);
-  let outline = applySectionShapes(plannedOutline, shapedNow ? shapeSeed(savedSalt ?? 0) : undefined, savedAssigned);
+  // V2b: a számegyenes és a becslés csak számtárgyban kerül a kiosztásba.
+  const tryOptions = { numeric: numericSubject(promptMap.subject) };
+  let outline = applySectionShapes(plannedOutline, shapedNow ? shapeSeed(savedSalt ?? 0) : undefined, savedAssigned, tryOptions);
   if (shapedNow && savedSalt === undefined && seriesPrev?.shapeSignature && seriesPrev.shapeSignature === shapeSignature(outline.sections)) {
     // Review #611: egyetlen újramagozás nem garantál eltérő vázat — korlátos, determinisztikus keresés, a végleges aláírás ellenőrizve.
-    const salt = seriesShapeSalt((s) => shapeSignature(applySectionShapes(plannedOutline, shapeSeed(s), savedAssigned).sections), seriesPrev.shapeSignature);
+    const salt = seriesShapeSalt((s) => shapeSignature(applySectionShapes(plannedOutline, shapeSeed(s), savedAssigned, tryOptions).sections), seriesPrev.shapeSignature);
     if (salt > 0) {
-      outline = applySectionShapes(plannedOutline, shapeSeed(salt), savedAssigned);
+      outline = applySectionShapes(plannedOutline, shapeSeed(salt), savedAssigned, tryOptions);
       output = { ...output, shapeSalt: salt };
       log(`[EGYFUTÁS] Sorozatszabály: a blokkváz azonos volt az előző leckéével — újramagozva (só: ${salt}).`);
     } else {

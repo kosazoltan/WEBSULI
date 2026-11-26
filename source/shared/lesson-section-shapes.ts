@@ -78,9 +78,21 @@ export function assignSectionShapes(kinds: readonly SectionKind[], seed: number,
 
 const engaging = (id: string) => byId.get(id)!.blocks.some((b) => b === "animate" || b === "try");
 
-export type TryKind = "dragSort" | "fillBlank" | "match";
-const TRY_ROTATION: readonly TryKind[] = ["dragSort", "fillBlank", "match"];
-const KIND_TRY: Record<Exclude<SectionKind, "any">, TryKind> = { procedure: "dragSort", comparison: "match", description: "fillBlank" };
+export type TryKind = "dragSort" | "fillBlank" | "match" | "trueFalseSeries" | "highlight" | "categorize" | "numberLine" | "estimate";
+/**
+ * V2b (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): a gyakorlófajták készlete fejezettípusonként. A két számos fajta
+ * (`numberLine`, `estimate`) csak számtárgyban. Egy elemű készletnél a kiosztás a régi (determinisztikus, mag nélkül).
+ */
+const NUMERIC_TRY: readonly TryKind[] = ["numberLine", "estimate"];
+const KIND_TRY_POOL: Record<Exclude<SectionKind, "any">, readonly TryKind[]> = {
+  procedure: ["dragSort", "numberLine"], comparison: ["match", "categorize"], description: ["fillBlank", "trueFalseSeries", "highlight"],
+};
+const TRY_ROTATION: readonly TryKind[] = ["dragSort", "fillBlank", "match", "trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"];
+/** Számtárgy a tantárgynévből (a számegyenes és a becslés csak itt). */
+export function numericSubject(subject: string): boolean {
+  return /mat|fizik|kémi|kemi|földrajz|foldrajz|természettud|termeszettud|informatik/i.test(subject.normalize("NFC"));
+}
+export type TryOptions = { numeric?: boolean };
 
 export type PlannedSection = { shape: string; blocks: string[]; tryKind?: TryKind };
 
@@ -91,7 +103,8 @@ export type PlannedSection = { shape: string; blocks: string[]; tryKind?: TryKin
  * Az S6a követelménye a `try` beszúrása UTÁN is áll: a pótlás olyan fejezetbe kerül, ahol a végleges sor nem lesz azonos a szomszédjával,
  * és nem lépi túl a 40%-ot — csak ha nincs ilyen fejezet, enged a szabály (a `try`-minimum az erősebb).
  */
-export function planSections(kinds: readonly SectionKind[], seed: number, closingLast = true): PlannedSection[] {
+export function planSections(kinds: readonly SectionKind[], seed: number, closingLast = true, tryOptions: TryOptions = {}): PlannedSection[] {
+  const allowed = (pool: readonly TryKind[]) => pool.filter((t) => tryOptions.numeric || !NUMERIC_TRY.includes(t));
   const n = kinds.length;
   const ids = assignSectionShapes(kinds, seed, closingLast);
   const random = mulberry32(seedFrom(`try\u0001${seed}`));
@@ -124,12 +137,13 @@ export function planSections(kinds: readonly SectionKind[], seed: number, closin
   // kötött try fajtáját is kerüli (három fajtából így mindig marad jelölt), ezért két egymást követő try csak akkor azonos, ha mindkettő
   // kötött típusú.
   const carriers = plan.map((p, i) => ({ p, kind: kinds[i] })).filter(({ p }) => p.blocks.includes("try"));
-  for (const { p, kind } of carriers) if (kind !== "any") p.tryKind = KIND_TRY[kind];
+  // V2b: a kötött típus a saját készletéből (számtárgy-szűrve) a magból választ; egy elemű készletnél a régi, determinisztikus fajta.
+  for (const { p, kind } of carriers) if (kind !== "any") { const pool = allowed(KIND_TRY_POOL[kind]); p.tryKind = pool.length === 1 ? pool[0] : pool[Math.floor(random() * pool.length)]; }
   carriers.forEach(({ p, kind }, k) => {
     if (kind !== "any") return;
     const before = carriers[k - 1]?.p.tryKind;
     const after = carriers[k + 1]?.kind !== "any" ? carriers[k + 1]?.p.tryKind : undefined;
-    const pool = TRY_ROTATION.filter((t) => t !== before && t !== after);
+    const pool = allowed(TRY_ROTATION).filter((t) => t !== before && t !== after);
     p.tryKind = pool[Math.floor(random() * pool.length)];
   });
   return plan;
@@ -162,7 +176,7 @@ type OutlineLike = { sections: Array<{ heading: string; plannedBlocks: string[];
  * fejezet recap-pal zárul. `seed` nélkül (KI) ugyanaz az objektum jön vissza — csak a modell kéretlen `sectionKind` mezője esik ki.
  * A `sectionKind` sosem megy tovább (a szerző a kiosztott `plannedBlocks`-ot kapja).
  */
-export function applySectionShapes<T extends OutlineLike>(outline: T, seed: number | undefined, keepAssignedTryKind = false): T {
+export function applySectionShapes<T extends OutlineLike>(outline: T, seed: number | undefined, keepAssignedTryKind = false, tryOptions: TryOptions = {}): T {
   // 1. vak kör (L1): `keepAssignedTryKind` — a MENTETT, program által kiosztott terv folytatásánál (a job `sectionShapes` jelzője) a
   // `tryKind` a program kiosztása, megmarad; a modell friss tervénél, a jóváhagyott tervnél és KI állapotban kéretlen mező, kiesik.
   const strip = <S extends T["sections"][number]>(s: S): S => {
@@ -179,7 +193,7 @@ export function applySectionShapes<T extends OutlineLike>(outline: T, seed: numb
   const regular = outline.sections.map((s, i) => ({ i, s })).filter(({ s }) => sectionRoleOf(s.heading) === null);
   const kinds = regular.map(({ s }) => ((SECTION_KINDS as readonly unknown[]).includes(s.sectionKind) ? s.sectionKind as SectionKind : "any"));
   const last = outline.sections.length - 1;
-  const plan = planSections(kinds, seed, regular.at(-1)?.i === last);
+  const plan = planSections(kinds, seed, regular.at(-1)?.i === last, tryOptions);
   const assigned = new Map(regular.map(({ i }, k) => [i, plan[k]]));
   const sections = outline.sections.map((s, i) => {
     const planned = assigned.get(i);

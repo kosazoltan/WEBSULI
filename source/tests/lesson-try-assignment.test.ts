@@ -35,8 +35,12 @@ test("számtárgy a tantárgynévből", () => {
 test("a szerző és a vázlat az öt új gyakorlófajtát ismeri, pontos spec-alakkal; a kártyák (V3) még nem", async () => {
   for (const k of PRACTICE) assert.ok((PROMPT_TRY_KINDS as readonly string[]).includes(k), k);
   for (const k of ["flipCard", "stepReveal", "didYouKnow", "decision", "flashcards"]) assert.ok(!(PROMPT_TRY_KINDS as readonly string[]).includes(k), k);
-  const { AUTHOR_BLOCK_CATALOG } = await import("../server/studio/step-io");
-  const catalog = AUTHOR_BLOCK_CATALOG;
+  const { AUTHOR_BLOCK_CATALOG, AUTHOR_BLOCK_CATALOG_VARIETY } = await import("../server/studio/step-io");
+  const catalog = AUTHOR_BLOCK_CATALOG_VARIETY;
+  // KI kapcsolónál a régi katalógus bájtra változatlan (új fajta nélkül).
+  const tryLine = AUTHOR_BLOCK_CATALOG.split("\n").find((l) => l.startsWith('- { "kind": "try"'))!;
+  for (const k of ["trueFalseSeries", "highlight", "categorize", "numberLine", "estimate"]) assert.ok(!tryLine.includes(`"${k}"`), `alapkatalógus: ${k}`);
+  assert.ok(!AUTHOR_BLOCK_CATALOG.includes("trueFalseSeries"), "a V2b-mondat csak a kiegészítésben");
   for (const [k, field] of [["trueFalseSeries", "statements"], ["highlight", "targets"], ["categorize", "categories"], ["numberLine", "tolerance"], ["estimate", "answer"]]) {
     assert.ok(catalog.includes(`"${k}"`) && catalog.includes(`"${field}"`), `${k}: ${field}`);
   }
