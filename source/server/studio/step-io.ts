@@ -28,6 +28,7 @@ import { canonicalJson } from "../lib/canonical-hash";
 import { SECTION_ROLE_HEADING } from "../../shared/lesson-ui-text";
 import { SECTION_KINDS } from "../../shared/lesson-section-shapes";
 import { SOURCE_VISUAL_SKIP_REASONS, type SourceVisual } from "../../shared/source-visuals";
+import { PRACTICE_TEACHING_RULE } from "../../shared/practice-rules";
 
 /**
  * LS-2c — schemas, validators and prompt builders for the model-driven steps.
@@ -400,6 +401,8 @@ export function buildPedagoguePrompt(map: PromptMap, visual?: VisualWorld, owner
       : "A körpazarlás elkerülése: fejezetenként add meg a tanítási sorrendet (explain → example lépésekkel → check), az ábra fajtáját és a forrás melyik feladata tartozik oda — így a lecke írásakor nem kell szerkezetet kitalálni, és az ellenőrzés ehhez a tervhez mér.",
     "",
     "Követelmények:",
+    // TANANYAG-GYAKORLATI P3: a tervezés is a gyakorlatias ívet tervezi (példa → szükséges fogalom → a tanuló cselekszik).
+    `- ${PRACTICE_TEACHING_RULE}`,
     "- Minden `core` fogalom és legalább 90%-a a `supporting` fogalmaknak szerepeljen a vázlat valamelyik szakaszában (conceptIds).",
     "- Csak a térképen lévő fogalom-azonosítókat használd; újat ne találj ki.",
     "- Minden szakaszhoz tervezz blokkokat (plannedBlocks) a megengedett típusokból: explain, example, check, recap, animate, try.",
@@ -608,7 +611,9 @@ export function buildAuthorPrompt(
     "- Minden szabályt vagy eljárást tanító fejezetben legyen legalább egy `example` blokk, amelynek `steps` tömbje a megoldás LÉPÉSEIT sorolja (legalább 2 lépés, lépésenként egy művelet/döntés, a végén az eredmény). Ne csak a végeredményt add meg.",
     "- Ha a forrásban gyakorlófeladat(ok) van(nak), a vázlat szerinti fejezetben oldd meg őket egyenként `example` blokkokban, lépésről lépésre (a forrás adataival, nem más számokkal).",
     "- Ha a vázlat „gyakori hibák” fejezetet tervez: minden tévhithez egy `explain` (depth „why”: rossz gondolat → helyes → miért) és egy `check` (a rossz megoldás opcióként, minden opcióhoz magyarázat).",
-    "- Ha a vázlat „ellenőrzés” fejezetet tervez: `explain` a teljes eljárás számozott lépéseivel és egy önellenőrző kérdéssorral (miért ez következik?), majd `recap`.",
+    // TANANYAG-GYAKORLATI P3: az önellenőrzés új példán végzett lépéssor, nem „miért” kérdéssor (tulajdonosi kérés 2026-11-26).
+    "- Ha a vázlat „ellenőrzés” fejezetet tervez: `explain` a teljes eljárás számozott lépéseivel, majd egy új, a forrásból levezethető példa, amelyen a tanuló maga végzi el a lépéseket (önellenőrzés), végül `recap`.",
+    `- ${PRACTICE_TEACHING_RULE}`,
     "- A `misconceptions` tömb a vázlat tévhitlistáját tartalmazza változatlanul (conceptId + text); ne hagyd üresen, ha a vázlatban van.",
     // Spec 2026-09-20 (színes tananyag): a tervező kulcskifejezéseit a szerző emeli ki.
     ...(sections.some((s) => s.keyPhrases?.length)

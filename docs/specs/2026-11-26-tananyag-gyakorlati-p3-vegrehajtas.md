@@ -21,4 +21,4 @@ utasításait igazítja ehhez (a mérőkapu a P4).
    következik?” önellenőrző kérdéssort; a játékos szerződés `selfCheck`-je nem „magyarázd el, miért”.
 4. A `tananyag-keszito` és a `tananyag-javito` skill (mindhárom tükör) a szabályt követi (TANANYAG-SKILL).
 
-Állapot: TG-P3 1/3 egység kész — következő: bukó teszt
+Állapot: TG-P3 3/3 egység kész — következő: kapulánc, PR

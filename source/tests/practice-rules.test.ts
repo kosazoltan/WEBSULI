@@ -17,11 +17,11 @@ const sections = [{ heading: "H", conceptIds: ["c1"], plannedBlocks: ["explain" 
 
 test("a szabályszöveg: alkalmazás vs. fogalmi tudás, kétharmad, meta-tilalom, tantárgyfüggetlen példák", () => {
   assert.match(PRACTICE_TEACHING_RULE, /következő példán/);
-  assert.match(PRACTICE_TEACHING_RULE, /indokl/);
+  assert.match(PRACTICE_TEACHING_RULE, /indokl/i);
   assert.match(PRACTICE_BANK_RULE, /kétharmad/);
   assert.match(PRACTICE_BANK_RULE, /pontoz/);
   assert.match(PRACTICE_BANK_RULE, /feladattípus/);
-  for (const peldak of [/szólás|közmondás/, /elválaszt/, /mindkettő/, /számol/]) assert.match(PRACTICE_BANK_RULE, peldak);
+  for (const peldak of [/szólás|közmondás/i, /elválaszt/i, /mindkettő/i, /számol/i]) assert.match(PRACTICE_BANK_RULE, peldak);
 });
 
 test("a szerző és a tervező promptja a gyakorlatiassági szabályt kapja", () => {
