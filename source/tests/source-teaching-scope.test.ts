@@ -23,3 +23,21 @@ test("TG-P2a: a forrásállomás a pontozási fogalmat javító fordulóra küld
   assert.match(SOURCE_SCOPE_RULE, /pontérték/);
   assert.match(SOURCE_SCOPE_RULE, /vegyes sor/);
 });
+
+test("review #630: pontosabb határ — szakfogalom, sport, jelölés nélküli helyes válasz és tágabb pontozási mondat", async () => {
+  const { adminConceptProblem } = await import("../shared/source-teaching-scope");
+  const c = (term: string, quote: string, definition = "—") => ({ id: "x", term, definition, quote });
+  // nem adminisztráció
+  assert.equal(adminConceptProblem(c("pontozott vonal", "A pontozott vonal a takart élt jelöli.")), null, "geometriai szakfogalom");
+  assert.equal(adminConceptProblem(c("kosár értéke", "Egy kosárért 2 pont jár.", "A mezőnydobással szerzett kosár két pontot ér.")), null, "sportadat");
+  assert.equal(adminConceptProblem(c("főváros", "Elfogadható: Budapest — 1 pont")), null, "jelölés nélküli helyes válasz a vegyes sorban");
+  assert.equal(adminConceptProblem(c("elválasztás", "Elfogadható: osz-tály — 1 pont", "A feladatlap példája szerinti helyes elválasztás.")), null, "a definícióban említett feladatlap nem kizáró");
+  // adminisztráció
+  assert.ok(adminConceptProblem(c("helyes megoldás", "Minden helyes megoldásért két pont jár.")), "betűvel írt pontszám");
+  assert.ok(adminConceptProblem(c("válasz", "Minden helyes válasz 1 pont.")), "ige nélküli pontérték");
+  assert.ok(adminConceptProblem(c("első feladat", "1. feladat — 2 pont")), "feladat-sorszám + pont");
+  assert.ok(adminConceptProblem(c("válasz", "A helyes válasz-ért 1 pont jár.")), "véletlen kötőjel nem menti meg");
+  assert.ok(adminConceptProblem(c("sorszám", "3.")), "sorszám fogalomnév");
+  // a hibaüzenet vezérlőkaraktert nem visz tovább
+  assert.doesNotMatch(adminConceptProblem(c("pontozás", "1 pont\u0007 jár\nösszesen"))!, /[\u0000-\u001f]/);
+});

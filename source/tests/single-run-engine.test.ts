@@ -1104,3 +1104,27 @@ test("S2a (végkapu): a folytatott futás mentett leckéjében maradt hibás par
   assert.equal(done.telemetry.gates.undrawableVisualsDropped, 1);
   assert.equal(logs.filter((l) => l.includes("Kirajzolhatatlan ábrablokk kivéve")).length, 1);
 });
+
+test("review #630 (TG-P2a): a forrásállomás a pontozási fogalmat javító fordulóra küldi, a térképbe nem kerül, a mentett térkép adminisztratív fogalma kiesik", async () => {
+  const content = "A szótagolás szabálya szerint választunk el. Elfogadható: osz-tály — 1 pont. A feladat helyes megoldásáért összesen 2 pont jár.";
+  const files = [{ name: "a.txt", kind: "text" as const, content }];
+  const teach = { id: "c-szotag", term: "szótagolás", definition: "Szótagok szerint választunk el.", quote: "A szótagolás szabálya szerint választunk el.", type: "concept", examWeight: "core", relatedIds: [] };
+  const admin = { id: "c-pont", term: "pontozás", definition: "A feladatért járó pont.", quote: "A feladat helyes megoldásáért összesen 2 pont jár.", type: "concept", examWeight: "core", relatedIds: [] };
+  const base = { title: "Elválasztás", subject: fixture.subject, classroom: fixture.classroom, transcript: content };
+  const replies = [{ ...base, concepts: [teach, admin] }, { ...base, concepts: [teach] }];
+  const requests: string[] = [];
+  const client = withOverride(scriptedClient(), (station, turns) => {
+    if (station === "1" || station === "forrás és tudásbank") { requests.push(lastUserText(turns)); return JSON.stringify(replies.shift()); }
+    return null;
+  });
+  const maps: SingleRunMap[] = [];
+  await runSingleLesson({ files, ownerId: "u1" }, deps(client, memoryStore(), maps));
+  assert.deepEqual(client.calls.slice(0, 2), ["1", "forrás és tudásbank"], "a pontozási fogalom javító fordulót kap");
+  assert.match(requests[1], /c-pont: a fogalom a feladatlap pontozására/);
+  assert.deepEqual(maps[0].concepts.map((c) => c.id), ["c-szotag"]);
+  const { dropAdminConcepts } = await import("../shared/source-teaching-scope");
+  const logs: string[] = [];
+  const kept = dropAdminConcepts({ ...maps[0], concepts: [...maps[0].concepts, { ...maps[0].concepts[0], ...admin, sourceFile: "a.txt", verbatimOk: true }] }, (m) => logs.push(m));
+  assert.deepEqual(kept.concepts.map((c) => c.id), ["c-szotag"], "a régi, mentett térkép adminisztratív fogalma kiesik");
+  assert.match(logs.join(" "), /c-pont/);
+});
