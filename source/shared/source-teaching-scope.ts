@@ -17,8 +17,11 @@ const SCORE_SRC = `(?:^|[^\\p{L}])(?:${NUM}\\s*pont(?:ot|ja)?(?![\\p{L}])(?:\\s+
 const TIME_SRC = "(?:\\d+\\s*perc(?:\\s+(?:áll|van))?(?:\\s+rendelkezésre)?|időkeret)";
 /** Sportadat: a pont itt tanított tény, nem a lap pontozása. */
 const SPORT = /(kosár|gól|mérkőzés|meccs|verseny|játékos|csapat|dobás|pálya|bajnokság|szett|játszma)/iu;
-/** A lap és a pontozás szókincse (szókezdet) — ami ezen kívül marad, az tanított tartalom. */
-const SHEET_WORD = /^(?:a|az|és|is|csak|minden|mind|helyes|hibátlan|jó|megold|válasz|feladat|pont|összesen|elfogad|jár|adható|kap|levon|ér|teljes|rész|tétel|kérdés|perc|időkeret|rendelkez|áll|van|egy|két|kettő|három|négy|öt|hat|hét|nyolc|kilenc|tíz|ért)/iu;
+/**
+ * A lap és a pontozás szókincse — ami ezen kívül marad, az tanított tartalom. review #630/2: a rövid szó és a számnév csak EGÉSZ
+ * szóként (különben az „alma”, „állat”, „egyenes”, „háromszög” válasz is lapszónak számítana); a hosszabb tő ragozva is.
+ */
+const SHEET_WORD = /^(?:(?:a|az|és|is|csak|minden|mind|jó|ér|ért|áll|van|kap|jár|rész|teljes|pont|pontot|pontja|pontért|egy|két|kettő|három|négy|öt|hat|hét|nyolc|kilenc|tíz)$|helyes|hibátlan|megold|válasz|feladat|összesen|elfogad|adható|levon|tétel|kérdés|perc|időkeret|rendelkez)/iu;
 
 /** Tanított tartalom marad-e az idézetben a pontozási / időkeret-töredék és a lap szókincse nélkül. */
 function teachingResidue(quote: string): boolean {
