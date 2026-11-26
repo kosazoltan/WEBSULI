@@ -14,4 +14,4 @@ utasítja el; a P4b a gyártáskor a csomagra kéri és ellenőrzi az arányt.
 4. Kapcsoló: `STUDIO_PRACTICE_QUOTA=on` (alapból KI → a gyártás és a meglévő tesztek változatlanok); élesítés a deploy után.
 5. Az egész leckére vetített kiadási kapu és a javítójelölt kapuja a P4c.
 
-Állapot: TG-P4b 1/3 egység kész — következő: bukó teszt
+Állapot: TG-P4b 3/3 egység kész — következő: kapulánc, PR
