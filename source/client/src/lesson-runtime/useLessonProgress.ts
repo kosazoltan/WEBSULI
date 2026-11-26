@@ -23,7 +23,10 @@ export type TrySnapshot =
   | { kind: "flipCard"; flipped: boolean }
   | { kind: "stepReveal"; shown: number }
   | { kind: "decision"; choice: number | null }
-  | { kind: "flashcards"; index: number; flipped: boolean };
+  | { kind: "flashcards"; index: number; flipped: boolean }
+  // V5a
+  | { kind: "wordSearch"; found: string[] }
+  | { kind: "crossword"; answers: string[]; checked: boolean };
 
 export type LessonProgressSnapshot = {
   v: typeof LESSON_PROGRESS_VERSION;
