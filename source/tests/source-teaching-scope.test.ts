@@ -41,3 +41,11 @@ test("review #630: pontosabb határ — szakfogalom, sport, jelölés nélküli 
   // a hibaüzenet vezérlőkaraktert nem visz tovább
   assert.ok(![...adminConceptProblem(c("pontozás", "1 pont\u0007 jár\nösszesen"))!].some((ch) => ch.charCodeAt(0) < 32));
 });
+
+test("review #630/2: a rövid lapszavak csak egész szóként — az „alma”, „állat”, „egyenes”, „háromszög” válasz tanítható", async () => {
+  const { adminConceptProblem } = await import("../shared/source-teaching-scope");
+  for (const ans of ["alma", "állat", "egyenes", "háromszög", "hatszög", "kapu", "érték"]) {
+    assert.equal(adminConceptProblem({ id: "x", term: "válasz", definition: "—", quote: `Elfogadható: ${ans} — 1 pont` }), null, ans);
+  }
+  assert.ok(adminConceptProblem({ id: "x", term: "válasz", definition: "—", quote: "Minden helyes válaszért egy pont jár." }));
+});
