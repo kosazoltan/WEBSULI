@@ -536,6 +536,9 @@ for (const size of [3, 5, 8]) {
     });
     await startGame(page);
     await expect(page.getByTestId("coupon-hud")).toBeVisible({ timeout: 10_000 });
+    // FLAKE-BC-M5: a kupon-szabály (csak a lecke tételei) a lecke BETÖLTÉSE után él — addig a játék szándékosan a rendes forrásból
+    // kérdez. Az első rúnazár előtt megvárjuk, hogy a lecke a bankba kerüljön (a kupon-HUD ennél korábban látszik).
+    await expect.poll(async () => (await probe(page)).couponOnly, { timeout: 15_000, message: "a kupon-mód él (a lecke a bankban)" }).toBe(1);
     const keys: string[] = [];
     const sources: string[] = [];
     let lastId: number | null = null;
