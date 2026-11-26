@@ -149,7 +149,7 @@ Az összehasonlító tábla és az idővonal már meglévő ábrafajta (`compare
   nyers elemszámot is nézi, nem tűnhet el csendben a megjelenítőben; (2) az utolsó lépés felfedése után az Újrakezdés, a döntés Újra gombja
   után a rádiócsoport kapja a fókuszt; (3) a „Tudtad?” kártya háttere és szövege ugyanabból a lecke-témás tokenpárból
   (`--lesson-warn-bg` / `--lesson-warn-ink`) jön — a 11–12. évfolyam sötét témájában a kontraszt 1,04 volt. RED: `try-cards.test.ts`,
-  `lesson-try-cards.spec.ts` (+2).
+  `lesson-try-cards.spec.ts` (+2). 2. kör (Vercel): az Újrakezdés után a fókusz a „Következő lépés” gombra kerül (RED + javítás).
 
 ### V2a — review #615 / #609 / #617 (2026-11-25)
 - **Megoldhatatlan csúszka:** a séma (`trySpecProblems`) a számegyenesnél és a becslésnél is ellenőrzi, hogy a `min + k·step` rácson (≤ max) van-e teljes pontot érő érték (`sliderHasFullScore`, a célhoz legközelebbi két rácspont); ha nincs, elutasít.

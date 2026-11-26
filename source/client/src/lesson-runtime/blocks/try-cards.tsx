@@ -34,10 +34,16 @@ export function FlipCard({ spec, persisted, onPersist }: TryProps) {
 export function StepReveal({ spec, persisted, onPersist }: TryProps) {
   const s = readStepReveal(spec);
   const [shown, setShown] = useState(() => Math.max(1, persisted?.kind === "stepReveal" ? persisted.shown : 1));
-  // Review #619: az utolsó lépés felfedésekor a „Következő lépés” gomb eltűnik — a fókusz az Újrakezdésre kerül, nem vész el.
+  // Review #619: az utolsó lépés felfedésekor a „Következő lépés”, az Újrakezdés után maga az Újrakezdés gomb tűnik el — a fókusz
+  // a megmaradó vezérlőre kerül, nem vész el.
   const restartRef = useRef<HTMLButtonElement>(null);
-  const [focusRestart, setFocusRestart] = useState(false);
-  useEffect(() => { if (focusRestart) { restartRef.current?.focus(); setFocusRestart(false); } }, [focusRestart]);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const [focusTo, setFocusTo] = useState<"restart" | "next" | null>(null);
+  useEffect(() => {
+    if (!focusTo) return;
+    (focusTo === "restart" ? restartRef : nextRef).current?.focus();
+    setFocusTo(null);
+  }, [focusTo]);
   if (s.steps.length < 2) return <Empty kind="stepReveal" />;
   const set = (n: number) => { setShown(n); onPersist?.({ kind: "stepReveal", shown: n }); };
   return (
@@ -47,8 +53,8 @@ export function StepReveal({ spec, persisted, onPersist }: TryProps) {
         {s.steps.slice(0, shown).map((step, i) => <li key={i} className="text-sm">{step}</li>)}
       </ol>
       <div className="flex gap-2">
-        {shown < s.steps.length && <Button className="min-h-11" onClick={() => { set(shown + 1); if (shown + 1 >= s.steps.length) setFocusRestart(true); }}>Következő lépés ({shown}/{s.steps.length})</Button>}
-        {shown > 1 && <Button ref={restartRef} variant="ghost" className="min-h-11" onClick={() => set(1)} aria-label="Újrakezdés"><RotateCcw className="w-4 h-4" /></Button>}
+        {shown < s.steps.length && <Button ref={nextRef} className="min-h-11" onClick={() => { set(shown + 1); if (shown + 1 >= s.steps.length) setFocusTo("restart"); }}>Következő lépés ({shown}/{s.steps.length})</Button>}
+        {shown > 1 && <Button ref={restartRef} variant="ghost" className="min-h-11" onClick={() => { set(1); setFocusTo("next"); }} aria-label="Újrakezdés"><RotateCcw className="w-4 h-4" /></Button>}
       </div>
     </div>
   );
