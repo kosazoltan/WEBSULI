@@ -63,3 +63,35 @@ test("a szerzői katalógus (BE változatosság) a kártyák spec-alakját is k�
     assert.ok(AUTHOR_BLOCK_CATALOG.includes(`${k}:`) && AUTHOR_BLOCK_CATALOG.includes(`"${f}"`), k);
   }
 });
+test("review #612: placeVarietyCards — a kártya egy nem első (és villámkártyás összefoglalónál nem utolsó) fejezet try-helyére kerül; a villámkártya az utolsó fejezet recap-ja elé; idempotens; < 4 fejezetnél nincs kártya", async () => {
+  const { placeVarietyCards } = await import("../shared/lesson-variety-axes");
+  const sec = (blocks: string[], tryKind?: string) => ({ plannedBlocks: blocks, ...(tryKind ? { tryKind } : {}) });
+  const card = CARD_FORMS[3];
+  const plain = recapFormById(RECAP_FORMS.find((r) => r.id !== "villamkartya")!.id)!;
+  const flash = recapFormById("villamkartya")!;
+  // Nincs try sehol: a kártya az 1. fejezetbe, a check elé kerül.
+  const noTry = [sec(["explain", "check"]), sec(["explain", "example", "check"]), sec(["explain", "check"]), sec(["explain", "check", "recap"])];
+  const a = placeVarietyCards(noTry, { cardForm: card, recapForm: plain });
+  assert.deepEqual(a[1], sec(["explain", "example", "try", "check"], card.id));
+  assert.deepEqual(a[0], noTry[0], "az első fejezet érintetlen");
+  assert.deepEqual(placeVarietyCards(a, { cardForm: card, recapForm: plain }), a, "idempotens");
+  // Van try egy nem első fejezetben: annak a fajtája lesz a kártya (nincs plusz blokk).
+  const withTry = [sec(["explain", "try", "check"], "match"), sec(["explain", "check"]), sec(["explain", "try", "check"], "fillBlank"), sec(["explain", "recap"])];
+  const b = placeVarietyCards(withTry, { cardForm: card, recapForm: plain });
+  assert.deepEqual(b[2], sec(["explain", "try", "check"], card.id));
+  assert.deepEqual(b[0], withTry[0]);
+  assert.deepEqual(b[1], withTry[1]);
+  // Villámkártyás összefoglaló: az utolsó fejezetben a recap elé egy flashcards try; a kártya nem az utolsóba kerül.
+  const c = placeVarietyCards(noTry, { cardForm: card, recapForm: flash });
+  assert.deepEqual(c[3], sec(["explain", "check", "try", "recap"], "flashcards"));
+  assert.equal(c.slice(1, 3).filter((s) => s.tryKind === card.id).length, 1);
+  assert.deepEqual(placeVarietyCards(c, { cardForm: card, recapForm: flash }), c, "idempotens");
+  // < 4 fejezet: nincs kártya (a kapu sem méri).
+  const three = noTry.slice(0, 3);
+  assert.deepEqual(placeVarietyCards(three, { cardForm: card, recapForm: plain }), three);
+});
+
+test("review #612: a kártya-szerződés csak ≥ 4 fejezetnél kerül a promptba (a kapuval egyezően)", () => {
+  for (const n of [1, 2, 3]) assert.equal(/KÁRTYA/.test(varietyAxesContract({ ...pickVarietyAxes(1, n), cardForm: CARD_FORMS[0] }, 900)), false, `${n} fejezet`);
+  assert.match(varietyAxesContract({ ...pickVarietyAxes(1, 4), cardForm: CARD_FORMS[0] }, 900), /KÁRTYA/);
+});

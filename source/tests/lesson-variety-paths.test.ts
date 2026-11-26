@@ -530,3 +530,38 @@ test("review #611 (Codex, Vercel, Copilot): a szerzői állomáson megszakadt fu
   assert.equal(after.recapForm, saved.recapForm);
   assert.deepEqual(after.lengthBands, saved.lengthBands);
 });
+// --- Review #612 ---
+
+test("review #612 (Codex, Vercel, Copilot): ≥ 4 fejezetes, program által kiosztott tervben a kártya HELYE a végleges blokksorban van (nem első fejezet), a szerző ugyanezt kapja; egyfejezetes leckénél nincs kártyakérés", async () => {
+  const base = outline.sections[0];
+  // A terjedelmi keret (kb. 3 fogalom / fejezet) miatt 4 fejezethez 12 fogalom kell.
+  const ids = Array.from({ length: 12 }, (_, i) => (i ? `c${i}` : "area"));
+  const four = { ...outline, sections: [0, 1, 2, 3].map((i) => ({ ...base, heading: `${base.heading} ${i + 1}`, conceptIds: ids.slice(i * 3, i * 3 + 3), sectionKind: "description" })) };
+  const requests: string[] = [];
+  const inner = client({ outline: four, failAuthor: true, onAuthor: (r) => requests.push(r) });
+  const wide: ModelClient = { model: inner.model, async complete(system, turns) {
+    const r = await inner.complete(system, turns);
+    const t = turns.at(-1)!.blocks.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+    if (/1\. ÁLLOMÁS/.test(t)) {
+      const j = JSON.parse(r.text) as { concepts: Array<Record<string, unknown>> };
+      j.concepts = ids.map((id, i) => ({ ...j.concepts[0], id, term: i ? `${j.concepts[0].term} ${i}` : j.concepts[0].term }));
+      return { ...r, text: JSON.stringify(j) };
+    }
+    return r;
+  } };
+  const mem = memory();
+  await assert.rejects(runSingleLesson({ files, ownerId: "u1" }, runDeps(wide, mem, { lessonVariety: true })));
+  const saved = lastOutput(mem);
+  const card = String(saved.cardForm);
+  const secs = (saved.outline as { sections: Array<{ tryKind?: string; plannedBlocks: string[] }> }).sections;
+  assert.equal(secs.length, 4);
+  const at = secs.findIndex((s) => s.tryKind === card);
+  assert.ok(at >= 1, `a kártya (${card}) egy nem első fejezet kiosztott try-helye: ${JSON.stringify(secs)}`);
+  assert.ok(secs[at].plannedBlocks.includes("try"), "a kártyának van try-helye a sorban");
+  assert.ok(requests.length > 0 && requests[0].includes(`tryKind: "${card}"`), "a szerzői kérés végleges blokksora a kártyát hordozza");
+  assert.ok(requests[0].includes("- KÁRTYA:"), "≥ 4 fejezetnél a kártya-szerződés is ott van");
+
+  const one: string[] = [];
+  await runSingleLesson({ files, ownerId: "u1" }, runDeps(client({ onAuthor: (r) => one.push(r) }), memory(), { lessonVariety: true }));
+  assert.ok(one.length > 0 && !one.some((r) => r.includes("- KÁRTYA:")), "egyfejezetes leckénél (a kapu sem méri) nincs kártyakérés");
+});
