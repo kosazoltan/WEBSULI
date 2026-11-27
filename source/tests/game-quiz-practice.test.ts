@@ -104,7 +104,7 @@ test("TG-P5a: 10 kért, 1 átment (a pótlás után is hiányos) → nem teljes,
 test("review #634: tartalomhiánynál a generate-quiz a munkafolyamat előtt, hibaüzenettel áll meg (nem 500)", async () => {
   const { generateMaterialQuiz } = await import("../server/gameQuizGeneratorService");
   const html = `<header>WEBSULI</header><h1>Feladatlap</h1>${PREAMBLE}`;
-  const result = await generateMaterialQuiz("m1", 10, "owner", { materialExists: async () => true, materialContent: async () => html });
+  const result = await generateMaterialQuiz("m1", 10, "owner", { materialExists: async () => true, canonicalQuiz: async () => null, materialContent: async () => html });
   assert.equal(result.inserted, 0);
   assert.match(result.errors.join(" "), /Elégtelen tanítható tartalom/u);
 });
