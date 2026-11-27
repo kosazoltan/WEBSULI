@@ -70,12 +70,14 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
   const repair = parseLessonRepair(candidate.data?.content);
   const applied = candidate.data?.status === "applied";
 
-  const start = async () => {
+  // TG-P7b: `practiceBank` — csak a kvíz- és feladatbank gyakorlati javítása (a tanítás marad; utasítás nem kell).
+  const start = async (practiceBank = false) => {
     const text = instruction.trim();
-    if (!text) return;
+    if (!text && !practiceBank) return;
     setBusy(true);
     try {
-      const r = await apiRequest<{ jobId?: string; existingJobId?: string }>("POST", `/api/admin/improve-material/${fileId}`, { customPrompt: text });
+      const body = practiceBank ? { mode: "practice-bank" } : { customPrompt: text };
+      const r = await apiRequest<{ jobId?: string; existingJobId?: string }>("POST", `/api/admin/improve-material/${fileId}`, body);
       if (!r.jobId) throw new Error("Nem érkezett javítási azonosító.");
       setJobId(r.jobId);
       toast({ title: "Javítás elindítva", description: "A tananyag újragyártása több lépésben fut; itt követheted." });
@@ -143,10 +145,18 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
               aria-label="Javítási utasítás"
               data-testid="lesson-repair-instruction"
             />
-            <Button onClick={start} disabled={busy || !instruction.trim()} className="min-h-11" data-testid="lesson-repair-start">
-              {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wrench className="w-4 h-4 mr-2" />}
-              Javítás indítása
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => start()} disabled={busy || !instruction.trim()} className="min-h-11" data-testid="lesson-repair-start">
+                {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Wrench className="w-4 h-4 mr-2" />}
+                Javítás indítása
+              </Button>
+              {isLesson && (
+                <Button variant="outline" onClick={() => start(true)} disabled={busy} className="min-h-11 h-auto max-w-full whitespace-normal text-left py-2" data-testid="lesson-repair-practice-bank"
+                  title="Csak a feladatlapra / pontozásra kérdező (meta) kvíz- és feladattételek cseréje; a tanítás és a jó tételek változatlanok.">
+                  Gyakorlati bankjavítás (a tanítás marad)
+                </Button>
+              )}
+            </div>
           </>
         )}
         {jobId && (s === "processing" || !s) && (
