@@ -21,6 +21,9 @@ function verifiedTlsClient(url: string): pg.Client {
   });
 }
 
+/** RED (PRACTICE-AUDIT-SNAPSHOT): a régi nyitás. */
+export const READ_ONLY_BEGIN = "BEGIN READ ONLY";
+
 /**
  * Review #187: a mérő/kinyerő scriptek közös, CSAK OLVASÓ kapcsolata — ellenőrzött TLS-sel (a tanúsítvány-ellenőrzés nem
  * kapcsolható ki csendben; a `DATABASE_CA_CERT` saját CA-t ad). Mérve 2026-10-05: az éles (Neon) DB ellenőrzött TLS-sel működik.
