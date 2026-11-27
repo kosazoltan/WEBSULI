@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { sampleIds } from "@shared/lesson-experience-score";
+import { sampleQuizIds } from "@shared/practice-sampling";
 import { newRoundNonce, recoverRoundNonce, rememberRoundNonce, ROUND_NONCE } from "@shared/round-id";
 
 const roundSchema = z.object({
@@ -13,7 +13,8 @@ const roundSchema = z.object({
 });
 export type ExperienceRound = z.infer<typeof roundSchema>;
 export { experienceFingerprint } from "@shared/experience-fingerprint";
-export function useExperienceRound(bank: Array<{ id: string }>, count: number, storageKey: string, sample = () => sampleIds(bank, count)) {
+// TG-P6: az alapértelmezett (kvíz-) sorsolás kiegyensúlyozott — 60–75% alkalmazó tétel; a nyílt kör saját választót ad át.
+export function useExperienceRound(bank: Array<{ id: string; question?: string; options?: readonly string[] }>, count: number, storageKey: string, sample = () => sampleQuizIds(bank, count)) {
   const fresh = (): ExperienceRound => ({ ids: sample(), answers: {}, picks: {}, sampleViewed: [], startedAt: 0, nonce: newRoundNonce() });
   const [round, setRound] = useState<ExperienceRound>(() => {
     try {

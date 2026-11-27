@@ -1,3 +1,4 @@
+import { pickBalanced } from "./practice-sampling";
 /** Server-owned choice practice. Oral self-check scores never enter this contract. */
 export type AttemptQuestion = {
   id: string; questionId: string; questionVersion: string; prompt: string; options: string[];
@@ -27,11 +28,16 @@ export function reviewState(history: QuestionReview[]) {
   const days = REVIEW_DAYS[Math.min(Math.max(streak - 1, 0), REVIEW_DAYS.length - 1)];
   return { latest, streak, dueAt: latest ? latest.at + days * DAY : 0 };
 }
-export function selectPracticeQuestions<T extends { id: string }>(bank: T[], count: number, history: Record<string, QuestionReview[]>, now: number): T[] {
+/**
+ * TG-P6: `isApply` megadásakor a kör 60–75% alkalmazó tételt kap (`pickBalanced`); a csoporton belül a fenti ismétlési rangsor
+ * marad. Nélküle a régi viselkedés (a rangsor első `count` tétele).
+ */
+export function selectPracticeQuestions<T extends { id: string }>(bank: T[], count: number, history: Record<string, QuestionReview[]>, now: number, isApply?: (q: T) => boolean): T[] {
   const ranked = bank.map((q, index) => {
     const { latest, dueAt } = reviewState(history[q.id] ?? []);
     const priority = !latest ? 0 : !latest.correct || latest.usedHint ? 1 : dueAt <= now ? 2 : 3;
     return { q, index, priority, at: latest?.at ?? 0 };
   });
-  return ranked.sort((a, b) => a.priority - b.priority || a.at - b.at || a.index - b.index).slice(0, count).map(r => r.q);
+  const ordered = ranked.sort((a, b) => a.priority - b.priority || a.at - b.at || a.index - b.index).map(r => r.q);
+  return isApply ? pickBalanced(ordered, count, isApply) : ordered.slice(0, count);
 }
