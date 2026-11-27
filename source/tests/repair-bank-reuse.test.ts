@@ -98,3 +98,54 @@ test("a kihagyott fejezet (forrás-helyesbítés: undefined) és a mostani kapun
   await buildLessonExperience(lesson, [], { previous: broken, previousSections: lesson.sections, call: async () => { calls++; return structuredClone(packets[0]); } });
   assert.equal(calls, 1, "a mostani kapun bukó régi csomag helyett új készül");
 });
+
+// TG-P7a (docs/specs/2026-11-27-tananyag-gyakorlati-p7a-vegrehajtas.md): a meta-kérdés miatt csak a kifogásolt tétel cserélődik.
+const META = "Hány pontot ér a feladatlapon a 3. feladat?";
+const PRACTICAL = "Egy háromszög alapja 6 cm, magassága 4 cm. Mekkora a területe?";
+
+test("TG-P7a: a csak meta-hibás régi csomagból célzott tételcsere — a többi tétel és azonosító stabil", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  const dirty = structuredClone(first);
+  const victim = dirty.quiz.find(q => q.sectionIndex === 0)!;
+  victim.question = META;
+  const prompts: string[] = [];
+  const repaired = await buildLessonExperience(lesson, [], {
+    previous: dirty, previousSections: lesson.sections,
+    call: async (_system, user) => {
+      prompts.push(user);
+      return { methods: [], tasks: [], quiz: [{ ...structuredClone(victim), question: PRACTICAL }], glossary: [] };
+    },
+  });
+  assert.equal(prompts.length, 1, "egyetlen célzott modellhívás (a hibátlan fejezet modell nélkül átvéve)");
+  assert.match(prompts[0], /JAVÍTÁSI MÓD/u);
+  assert.match(prompts[0], new RegExp(victim.id), "a kifogásolt tétel azonosítója a javítási jogosultságban");
+  const fixed = repaired.quiz.find(q => q.id === victim.id);
+  assert.ok(fixed, "a lecserélt tétel az eredeti azonosítóján");
+  assert.equal(fixed.question, PRACTICAL);
+  const others = (e: typeof first) => e.quiz.filter(q => q.id !== victim.id);
+  assert.deepEqual(others(repaired), others(first), "a többi kvíztétel tartalma és azonosítója változatlan");
+  assert.deepEqual(repaired.tasks, first.tasks);
+  assert.deepEqual(repaired.methods, first.methods);
+  assert.deepEqual(repaired.bankPlan!.units.map(u => u.sourceHash), first.bankPlan!.units.map(u => u.sourceHash), "a csomag-hash marad (a következő javítás is megtalálja)");
+
+  let again = 0;
+  const rerun = await buildLessonExperience(lesson, [], { previous: repaired, previousSections: lesson.sections, call: async () => { again++; return structuredClone(packets[0]); } });
+  assert.equal(again, 0, "azonos javítás újrafuttatása: nulla modellhívás");
+  assert.deepEqual(rerun.quiz, repaired.quiz, "és nulla módosítás");
+});
+
+test("TG-P7a: meta MELLETT más kapuhibás régi csomag továbbra is teljes újragyártást kap", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  const dirty = structuredClone(first);
+  const [a, b] = dirty.quiz.filter(q => q.sectionIndex === 0);
+  a.question = META;
+  b.correctIndex = b.options.length + 3;
+  const prompts: string[] = [];
+  await buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, call: async (_s, user) => { prompts.push(user); return structuredClone(packets[0]); } });
+  assert.equal(prompts.length, 1);
+  assert.doesNotMatch(prompts[0], /JAVÍTÁSI MÓD: a teljes csomag már megvan/u, "teljes csomagot kér");
+});
