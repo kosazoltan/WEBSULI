@@ -135,6 +135,11 @@ export type ExperienceBuildDeps = {
   previousSections?: ReadonlyArray<Lesson["sections"][number] | undefined>;
   /** Review #379: e fogalmak egységei nem vehetők át (forrás-helyesbítés) — egységenként, nem a teljes fejezetre. */
   reuseExcludedConceptIds?: ReadonlySet<string>;
+  /**
+   * P7B-TANITAS-MEGORZES: csak-bank javítás — a régi csomag a nyitómese-verziótól függetlenül átvehető, tétel-szintű hibái célzott cserét
+   * kapnak, csomag-szintű (régebbi szabály szerinti) eltérései tűrt örökség.
+   */
+  keepLegacy?: boolean;
   reviewFeedback?: BankReviewFeedback[];
   /** Spec 2026-10-21-ciklus6 (review #357): a tulajdonos pontozási szabálya (a csomag rendszerpromptjába és hash-ébe kerül). */
   scoringRules?: string;
@@ -562,7 +567,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződés-verzióval készült (a
     // bankterv egységének `opener` jelölője — a lektorált csomag hash-e nem a tanítás hash-e, ezért nem a hash-egyezés dönt). A kapcsoló
     // előtt gyártott bank így nem kerül át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
-    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
+    // P7B-TANITAS-MEGORZES: a csak-bank javítás (keepLegacy) a nyitómese előtti csomagot is átveszi — a tanítás és a jó tételek maradnak.
+    const keptUnit = contentKept && (deps.keepLegacy || !lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     // V4: a kvíztípusok és a keverés csak változatosság BE mellett szerződés.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, quizFormats: effectiveLessonVariety(), language });
@@ -648,6 +654,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // TG-P7a: a tanításában változatlan, CSAK meta-hibás régi csomag célzott javítási alap (a J1 `seed` útja) — egy meta-kérdés miatt
     // nem gyártódik újra a teljes csomag; a jó tételek tartalma és azonosítója (a tanulói előzmény) marad.
     let previousSeed: { packet: unknown; issues: string[] } | undefined;
+    // P7B-TANITAS-MEGORZES: a régi csomag csomag-szintű (régebbi szabály szerinti) eltérései — a csak-bank javításban tűrt örökség.
+    let legacyIssues = new Set<string>();
+    // Review #645: az átvett régi csomag a SAJÁT nyitómese-jelölőjét tartja (a következő szerzői javítás újragyártja).
+    let previousTaken = false;
     const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
     // Review #298: a javításlista sem vész el — az elfogadott mentett csomagé a naplóba kerül (mint a modellválaszoknál).
@@ -664,12 +674,25 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
         const meta = new Set(practiceMetaProblems(parsed.data));
         // Review #635: kvóta (STUDIO_PRACTICE_QUOTA=on) mellett a régi csomag arányeltérése nem kényszerít teljes újragyártást.
         if (meta.size && savedProblems.every(p => meta.has(p) || isPracticeQuotaProblem(p))) previousSeed = { packet: parsed.data, issues: [...meta] };
+        else if (deps.keepLegacy) {
+          // P7B-TANITAS-MEGORZES: tétel-szintű hiba → célzott csere; csomag-szintű → tűrt örökség; ha csak örökség van, átvétel modell nélkül.
+          const plan = repairPermissions(savedProblems.filter(p => !isPracticeQuotaProblem(p)), parsed.data);
+          legacyIssues = new Set(plan.packetLevel);
+          if (plan.allows.length) previousSeed = { packet: parsed.data, issues: savedProblems.filter(p => !isPracticeQuotaProblem(p) && !legacyIssues.has(p)) };
+          else {
+            packet = parsed.data;
+            if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
+            hash = keptUnit.sourceHash; unit.sourceHash = hash; previousTaken = true;
+            deps.onToolFix?.("practice-legacy", [`${unit.sectionIndex + 1}. fejezet: régi csomag átvéve (örökölt eltérés: ${[...legacyIssues].join("; ").slice(0, 300)})`]);
+            break;
+          }
+        }
       }
       if (parsed.success && savedProblems.length === 0) {
         packet = parsed.data;
         if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
         // Az átvett korábbi csomag a saját hash-ével bélyegződik: a tételazonosítók és a tanulói előzmények változatlanok maradnak.
-        if (source === "previous" && keptUnit?.sourceHash) { hash = keptUnit.sourceHash; unit.sourceHash = hash; }
+        if (source === "previous" && keptUnit?.sourceHash) { hash = keptUnit.sourceHash; unit.sourceHash = hash; previousTaken = true; }
         break;
       }
     }
@@ -799,7 +822,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       answerKeyReport = [];
       // Review #633: a válaszkulcs-tesztek a CSAK arányhiányos csomagon is lefutnak (az engedmény nem kerülheti meg a rubrika-ellenőrzést).
       const quotaIssues = issues.filter(isPracticeQuotaProblem);
-      if (parsed?.success && issues.length === quotaIssues.length && deps.answerKeys) {
+      // Review #645: a csak-bank javítás örökölt csomag-szintű eltérése mellett is lefut a válaszkulcs-kapu (az engedmény nem kerülheti meg).
+      const legacyOk = (i: string) => !!deps.keepLegacy && previousRepair && legacyIssues.has(i);
+      const legacyIssuesNow = issues.filter(legacyOk);
+      if (parsed?.success && issues.length === quotaIssues.length + legacyIssuesNow.length && issues.every(i => isPracticeQuotaProblem(i) || legacyOk(i)) && deps.answerKeys) {
         const keys = await deps.answerKeys(previousRepair ? parsed.data.tasks.filter(t => previousRepairIds.has(t.id)) : parsed.data.tasks, unit.sectionIndex);
         // T2.1b: gépi kalibráció (modellhívás nélkül); a kalibrált csomag újra átmegy a teljes ellenőrzésen, különben visszavonódik.
         const before = parsed.data.tasks;
@@ -810,15 +836,15 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         if (applied) {
           parsed.data.tasks = calibrated.map((c) => c.task);
           let recheck: string[];
-          try { recheck = validate(parsed.data); } catch (error) { recheck = [String(error)]; }
+          try { recheck = validate(parsed.data).filter(i => !legacyOk(i)); } catch (error) { recheck = [String(error)]; }
           if (recheck.length) { parsed.data.tasks = before; applied = false; logger.warn(`[STUDIO] Rubrika-kalibráció visszavonva (${unit.sectionIndex + 1}. fejezet): ${recheck.slice(0, 3).join("; ")}`); }
         }
         // T2.1c: blokkoló csak a túl megengedő rubrika; a maradék helyes-eset bukás jelentés (nem javítókör).
         const all = parsed.data.tasks.map((t) => ({ id: t.id, problems: answerKeyProblems(t, keys.get(t.id) ?? null) }));
-        issues = [...all.flatMap((r) => r.problems.filter((p) => p.includes("válaszkulcs-teszt: a hibás"))), ...quotaIssues];
+        issues = [...all.flatMap((r) => r.problems.filter((p) => p.includes("válaszkulcs-teszt: a hibás"))), ...quotaIssues, ...legacyIssuesNow];
         answerKeyReport = all.map((r, i) => ({ modelId: r.id, calibration: applied ? calibrated[i].changes : [], correctFails: r.problems.filter((p) => p.includes("válaszkulcs-teszt: a helyes")) }))
           .filter((r) => r.calibration.length || r.correctFails.length);
-        answerKeyOnly = issues.length > quotaIssues.length;
+        answerKeyOnly = issues.length > quotaIssues.length + legacyIssuesNow.length;
       }
       // Biztonsági szelep (regressziós futás 94a5ccf9): az aritmetikai gyanú determinisztikus, de nem
       // tévedhetetlen; az utolsó (mentő) kísérletnél egyedül nem ölheti meg a csomagot — figyelmeztetéssel
@@ -842,6 +868,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // Review #635: a célzott meta-cserénél az arány a régi csomagé — nyitott lelet, nem teljes újragyártás oka.
       // Review #635/2: a nem utolsó célzott körben CSAK a tiszta arányhiány megy át — új számítási hiba javítókört kap.
       const quotaPass = lastAttempt ? quotaSoft : previousRepair && issues.length > 0 && issues.every(isPracticeQuotaProblem);
+      // P7B-TANITAS-MEGORZES: a csak-bank javításban a régi csomag örökölt eltérése nem javítókör oka — csak az ÚJ hiba az.
+      const legacyPass = !!deps.keepLegacy && previousRepair && issues.length > 0 && issues.every(i => isPracticeQuotaProblem(i) || legacyIssues.has(i));
       if (parsed?.success && quotaPass) deps.onToolFix?.("practice-quota", issues.filter(isPracticeQuotaProblem).map(i => `${unit.sectionIndex + 1}. fejezet — nyitott lelet (átengedve): ${i}`));
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
@@ -859,7 +887,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
       if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
       else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
-      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || quotaPass)) packet = parsed!.data;
+      if (parsed?.success && legacyPass) deps.onToolFix?.("practice-legacy", issues.filter(i => legacyIssues.has(i)).map(i => `${unit.sectionIndex + 1}. fejezet — örökölt eltérés (átengedve): ${i}`));
+      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || quotaPass || legacyPass)) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
       else {
@@ -869,7 +898,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         const uniqueIds = parsed?.success && BANKS.every(bank => new Set(parsed!.data[bank].map(item => item.id)).size === parsed!.data[bank].length);
         // Spec 2026-09-30 (U2, C9): a javítási jogosultság a hibakódból; csomagszintű hiba (darabszám, hiányzó módszer, oral/written)
         // tételcserével nem javítható → teljes újraírás, nem elvesztegetett javító kör.
-        const plan = parsed?.success && uniqueIds ? repairPermissions(previousRepair ? issues.filter(i => !isPracticeQuotaProblem(i)) : issues, parsed!.data) : { allows: [] as RepairPermission[], packetLevel: issues };
+        const plan = parsed?.success && uniqueIds ? repairPermissions(previousRepair ? issues.filter(i => !isPracticeQuotaProblem(i) && !legacyOk(i)) : issues, parsed!.data) : { allows: [] as RepairPermission[], packetLevel: issues };
         repairBase = parsed?.success && uniqueIds && plan.allows.length && !plan.packetLevel.length ? parsed!.data : undefined;
         if (!repairBase) seeded = false; // J1: teljes újraírás következik — arra a tartalékos séma vonatkozik
         // Review #635: teljes újraíráskor az új csomag a friss hash-sel és saját bélyegzéssel épül (a célzott javítás állapota megszűnik).
@@ -915,6 +944,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const keep = (reusedPacket && items.every(i => i.sourceHash === hash) || previousRepair) && new Set(items.map(i => i.id)).size === items.length;
       return items.map((i, n) => ({ ...i, id: keep ? i.id : `${prefix}-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     };
+    if (deps.keepLegacy && keptUnit && (previousTaken || previousRepair)) { if (keptUnit.opener === undefined) delete unit.opener; else unit.opener = keptUnit.opener; }
     packet.methods = stamp(packet.methods, "m");
     packet.tasks = stamp(packet.tasks, "t");
     packet.quiz = stamp(packet.quiz, "q");
