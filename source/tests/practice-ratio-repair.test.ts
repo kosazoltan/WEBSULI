@@ -32,3 +32,17 @@ test("nyílt feladatnál is: kvóta alatt fogalmi feladat kap cserejogot", () =>
   const issues = practiceRatioRepairIssues({ quiz: [], tasks }, ["c1"]);
   assert.ok(issues.length > 0 && issues.every((s) => /^t\d: /.test(s)));
 });
+
+test("review #649: fogalmanként a recall címkéjű tétel is marad", () => {
+  const quiz = [{ ...recall("r0", "c1"), intent: "recall" }, ...Array.from({ length: 9 }, (_, i) => ({ ...recall(`r${i + 1}`, "c1"), intent: "apply" }))];
+  const ids = practiceRatioRepairIssues({ quiz, tasks: [] }, ["c1"]).map((s) => s.split(":")[0]);
+  assert.ok(ids.length > 0);
+  assert.ok(!ids.includes("r0"), "az egyetlen recall-címkés tétel nem cserélődik");
+});
+
+test("review #649: a meta-tétel előre alkalmazásnak számít (a meta-csere gyakorlatira cserél) — nincs kvóta-túllépés", () => {
+  const meta = (id: string) => ({ id, question: "Hány pontot ér a feladatlapon a 3. feladat?", options: ["1", "2", "3", "4"], coversConceptIds: ["c1"] });
+  const quiz = [...Array.from({ length: 6 }, (_, i) => meta(`m${i}`)), ...Array.from({ length: 4 }, (_, i) => recall(`r${i}`, i % 2 ? "c1" : "c2"))];
+  assert.equal(classifyQuizItem(quiz[0]).kind, "meta");
+  assert.deepEqual(practiceRatioRepairIssues({ quiz, tasks: [] }, ["c1", "c2"]), []);
+});
