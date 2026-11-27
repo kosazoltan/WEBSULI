@@ -81,3 +81,9 @@ cards:
     observed: "deploy megölte a tulajdonos élő gyártását (2026-11-26 17:11 és 17:18)"
     fix: "gyartas-szunet.sh őr a merge-one.sh-ban"
     rule: "élő gyártás alatt nincs merge/deploy"
+  - id: 14
+    status: rule
+    date: "2026-11-27"
+    observed: "2026-11-27: egy nap alatt 4 felesleges teljes kapukör saját folyamathibából + 2 CI-infrahiba + review-körök"
+    fix: "láncgenerátor, LR jelzés, 2 párhuzamos hely, alacsony súlyú szálak gyűjtése, CI auto-rerun, feladatonként 1 PR"
+    rule: "WEBSULI szelet: 1 PR/feladat, lánc csak lanc-general.sh-ból"
