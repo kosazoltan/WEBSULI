@@ -309,4 +309,3 @@ test("review #645: örökölt eltérés mellett is lefut a válaszkulcs-kapu a c
     call: async () => ({ methods: [], tasks: [{ ...structuredClone(first.tasks.find(t => t.id === victim.id)!) }], quiz: [], glossary: [] }) }));
   assert.ok(keyed.includes(victim.id), "a cserélt feladat a válaszkulcs-kapun átment");
 });
-
