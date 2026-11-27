@@ -57,8 +57,8 @@ import { subjectKeyOf } from "../../../shared/subject-key";
 import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
-import { lessonVarietyForRun, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
-import { avoidSeriesRepeat, exampleThemeById, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { lessonVarietyForRun, runVarietyAxes, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
+import { avoidSeriesRepeat, cardFormById, cardFormForLength, cardFormProblems, recapFlashcardProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -807,12 +807,6 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // (ahol a bemenetben már nincs `approvedOutline`) nem kap kiosztásra hivatkozó szerzői kérést.
   const programAssigned = shapedNow || savedAssigned;
   output = { ...output, outline, approvedOutline: outline, ...(programAssigned ? { sectionShapes: true } : {}) };
-  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
-  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
-  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
-  const assignedPlanLines = programAssigned
-    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}${section.tryKind ? ` — tryKind: "${section.tryKind}"` : ""}`).join("\n")}`
-    : "";
 
   // SK1 — a forrás-fedettségi kapu mérése (spec 2026-11-18-tananyag-gyartas-minoseg): szkript ítél, nem modell. Független review F12: a
   // kapu hibája (kivétel) egyik módban sem állítja meg a kifizetett futást — megszámolva, naplózva, `null` ítélettel (nincs következmény).
@@ -853,18 +847,39 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);
       const pick = openingFormById(assigned.openingForm, promptMap.classroom)!;
       assignedForm = pick.id;
-      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands };
+      // Review #647: 4-nél rövidebb leckénél nincs kártya (a mentett érték sem fogyasztja a sorozat-forgást).
+      const card = cardFormForLength(outline.sections.length, assigned.cardForm);
+      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, ...(card ? { cardForm: card.id } : {}) };
       setRunOpeningForm(pick);
-      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands });
+      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: card });
     } else if (typeof output.openingForm === "string") {
       const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
       // V1: folytatásnál a mentett tengelyek (régi, tengely nélküli checkpointnál nincs kiosztás).
       const theme = exampleThemeById(output.exampleTheme), recap = recapFormById(output.recapForm);
       const bands = Array.isArray(output.lengthBands) && output.lengthBands.every((b) => b === "rövid" || b === "közepes" || b === "hosszabb") ? output.lengthBands as LengthBand[] : undefined;
-      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands });
+      // V3b: a kártyaforma csak a mentett értékből (régi, kártya nélküli checkpoint: nincs kártya-kiosztás).
+      if (theme && recap && bands) setRunVarietyAxes({ exampleTheme: theme, recapForm: recap, lengthBands: bands, cardForm: cardFormById(output.cardForm) });
     }
   }
+  // Review #612 (Codex, Vercel, Copilot): program által kiosztott tervnél a kártya és a villámkártyás összefoglaló helye a végleges
+  // blokksorban van (különben a pontos sor és a plusz try blokk ellentmond). Idempotens: a mentett, már elhelyezett terv változatlan.
+  const axesNow = varietyOn && programAssigned ? runVarietyAxes() : undefined;
+  if (axesNow) {
+    // Review #647: a sorozatszabály az elhelyezés ELŐTTI blokkvázzal vet össze — ezt mentjük (a folytatott, már elhelyezett tervnél megmarad).
+    if (typeof output.seriesShape !== "string") output = { ...output, seriesShape: shapeSignature(outline.sections) };
+    const placed = placeVarietyCards(outline.sections, axesNow);
+    if (placed.some((sec, i) => sec !== outline.sections[i])) {
+      outline = { ...outline, sections: placed as typeof outline.sections };
+      output = { ...output, outline, approvedOutline: outline };
+    }
+  }
+  // Review #536 (Copilot): a program által kiosztott blokksorok a szerzőhöz is eljutnak — a beszélgetésben a modell EREDETI terve áll,
+  // a szerzői kérés ezért kimondja a végleges sorokat. Csak a program által kiosztott tervnél (`programAssigned`); a tulajdonos
+  // jóváhagyott tervénél (folytatva is) és KI állapotban a kérés bájtra a régi.
+  const assignedPlanLines = programAssigned
+    ? `\nA FEJEZETEK TANÍTÁSI TÖRZSÉNEK VÉGLEGES BLOKKSORA (a program osztotta ki; ez FELÜLÍRJA a 2. állomás vázlatának plannedBlocks mezőit — a fejezet tanító blokkjai pontosan ebben a sorrendben követik egymást; ha a nyitás szerződése az első fejezet elejére nyitóblokkokat ír elő, azok a sor ELŐTT állnak, a sor utánuk kezdődik):\n${outline.sections.map((section, i) => `- [${i}] ${section.heading}: ${JSON.stringify(section.plannedBlocks)}${section.tryKind ? ` — tryKind: "${section.tryKind}"` : ""}`).join("\n")}`
+    : "";
   if (!resumed?.lesson) await save("author", output);
 
   // 3. Tananyag (tanítás).
@@ -894,7 +909,10 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     // Review #260: a tanításon mérhető végkapuk már itt (javító forduló jár rájuk, nem a bank és a lektor után derülnek ki).
     const coverage = checkCoverageGate(parsed.data, concepts);
     const arc = checkLessonArc(parsed.data);
-    const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons)];
+    // V3b: a kiosztott kártya (≥ 4 fejezetnél) — javító kört kap.
+    // Review #647: a TERVEZETT fejezetszám dönt; a villámkártyás összefoglaló flashcards blokkja is kapu.
+    const card = varietyOn ? [...cardFormProblems(parsed.data, runVarietyAxes()?.cardForm, outline.sections.length), ...recapFlashcardProblems(parsed.data, runVarietyAxes()?.recapForm)] : [];
+    const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons), ...card];
     if (problems.length && dropNotes.length) {
       telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;
       log(`[EGYFUTÁS] A javító üzenet megnevezi a kivett ábrablokkot (${dropNotes.length}) — a kivétel után kapu bukott.`);

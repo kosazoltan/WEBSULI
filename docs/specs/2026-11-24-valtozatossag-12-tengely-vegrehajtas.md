@@ -175,6 +175,26 @@ Dokumentált spec-változás: a V2a tesztje a hirdetett fajtákat a régi hárma
 2. GREEN: `shared/lesson-section-shapes.ts`, `shared/lesson-schema.ts` (`PROMPT_TRY_KINDS`), `server/studio/step-io.ts` (katalógus),
    `server/studio/single-run/engine.ts` (tantárgy → számos jelző).
 3. Próbahiba, kapulánc, PR (a V3a után).
+
+## V3b — végrehajtás (2026-11-25): kártyaformák a GYÁRTÁSBAN (V1 + V2b + V3a után)
+- Új változatossági tengely: **kártyaforma** (`CARD_FORMS`: fordítókártya, lépésenkénti felfedés, „Tudtad?”, döntés–következmény) — a
+  magból, a sorozatszabály a következőre lépteti, a job állapotába mentve (`cardForm`), folytatásnál a mentett számít (régi checkpoint:
+  nincs kártya-kiosztás).
+- Szerződés (BE változatosság): a lecke egy NEM első fejezetébe pontosan egy kiosztott kártya kerül `try` blokként (pontos spec-alak).
+- Kapu: ≥ 4 fejezetes leckénél a kiosztott kártya hiánya (vagy csak az első fejezetben) javító kört kap (`cardFormProblems`).
+- Új összefoglaló forma: **villámkártyák** (`villamkartya`) — a záró recap előtt egy `flashcards` csomag a kulcsfogalmakkal.
+- A szerzői katalógus a kártyafajták spec-alakját is közli.
+1. RED: `source/tests/lesson-card-form.test.ts`. 2. GREEN: `shared/lesson-variety-axes.ts`, `server/studio/{step-io.ts,pipeline-store.ts,
+   single-run/engine.ts}`. 3. Próbahiba, kapulánc, PR (a V1, V2a, V3a, V2b után).
+### V3b — újraépítés és review #612 (2026-11-26)
+- A V2b utódja fölé épült újra (`feat/v3b-kartyak-gyartas-v2`, utasítás → RED → kód); a #612 lezárva, utódja ez a PR. A V1 review-ja (#611)
+  után a folytatás a mentett tengelyeket használja (`savedAxes`) — a kártyaforma ugyanebből az ágból töltődik vissza.
+- **Kártya helye a blokksorban (review #612):** program által kiosztott (pontos blokksorú) tervnél `placeVarietyCards` a kártyát egy nem első
+  fejezet try-helyére teszi (ha nincs ilyen, try-helyet kap a check elé), a villámkártyás összefoglalónál az utolsó fejezet recap-ja elé
+  `flashcards` try kerül; idempotens. A szerzői kérés végleges blokksora így a kártyát is hordozza — nincs ellentmondó plusz blokk.
+- **Rövid lecke:** a kártya-szerződés csak ≥ 4 fejezetnél (`CARD_MIN_SECTIONS`, a kapuval egyezően) kerül a promptba.
+- Tesztek (RED a javítás előtt): `lesson-card-form.test.ts` (+2), `lesson-variety-paths.test.ts` (motor: 4 fejezet, 12 fogalom).
+
 ### V2b — újraépítés és review #612 / #617 (2026-11-26)
 - A V3a utódja (#619) fölé épült újra (`feat/v2b-gyartas-v2`, utasítás → RED → kód); a #617 lezárva, utódja ez a PR. A kiosztás a mainen
   azóta bővült sorozatszabály (#611 `seriesShapeSalt`) minden `applySectionShapes`-hívásán megkapja a számtárgy-jelzőt.
