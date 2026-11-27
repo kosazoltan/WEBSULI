@@ -48,7 +48,8 @@ export type QuizGenerationResult = {
   canonical?: { lessonId: string; items: number };
 };
 
-const SYSTEM_PROMPT = `Magyar általános / középiskolai (1-12. osztály) tananyagból kvíz-tételeket generálsz egy oktatási játék-platformhoz.
+/** RED (GAMEQUIZ-PROMPT-KOZOS): exportálva a teszthez. */
+export const GAME_QUIZ_SYSTEM_PROMPT = `Magyar általános / középiskolai (1-12. osztály) tananyagból kvíz-tételeket generálsz egy oktatási játék-platformhoz.
 
 KÖVETELMÉNYEK minden generált tétel esetén:
 - A kérdés MAGYAR nyelven van (kivéve angol szókincs-tételeknél, ahol angol szót/mondatot tesztelünk magyar fordítás-választással).
@@ -190,7 +191,7 @@ Generálj pontosan ${n} db kvíz-tételt a fenti tananyag legfontosabb tudásmag
       const response = await client.messages.create({
         model: ANTHROPIC_MODEL,
         max_tokens: maxTokens,
-        system: cachedSystem(withSupportSkill("quiz-generator", SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
+        system: cachedSystem(withSupportSkill("quiz-generator", GAME_QUIZ_SYSTEM_PROMPT)), // Spec 2026-10-03-gpt61-sol-kv-cache
         messages: [{ role: "user", content: userPrompt }],
       });
       if (response.stop_reason === "max_tokens") throw new Error("A Claude-válasz elérte a hosszkorlátot.");
@@ -200,7 +201,7 @@ Generálj pontosan ${n} db kvíz-tételt a fenti tananyag legfontosabb tudásmag
     },
     fallbackModel && studioModelReady(fallbackModel) ? async () => {
       const response = await createStudioProvider(fallbackModel, 90_000, maxTokens, crossFamilyFallbackOptions(fallbackModel, true)).chat([
-        { role: "system", content: withSupportSkill("quiz-generator", SYSTEM_PROMPT) },
+        { role: "system", content: withSupportSkill("quiz-generator", GAME_QUIZ_SYSTEM_PROMPT) },
         { role: "user", content: userPrompt },
       ]);
       if (response.finishReason === "length") throw new Error("A tartalék modell válasza elérte a hosszkorlátot.");
