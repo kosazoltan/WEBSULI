@@ -241,7 +241,7 @@ describe("TG-P4b: gyakorlati kvóta a bankcsomagon", () => {
       if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
     }
     const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /if \(practiceQuotaEnabled\(\)\) problems\.push\(\.\.\.practiceQuotaProblems\(packet, unit\.conceptIds\.length\)\)/);
+    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /if \(opts\.quota && practiceQuotaEnabled\(\)\) problems\.push\(\.\.\.practiceQuotaProblems\(packet, unit\.conceptIds\.length\)\)/);
   });
 });
 
@@ -271,5 +271,72 @@ describe("review #631: kvóta-sáv és a csomag-validátor viselkedése", () => 
     };
     assert.match(await run("on"), /igazolt alkalmazás; legalább/);
     assert.doesNotMatch(await run(undefined), /igazolt alkalmazás; legalább/);
+  });
+});
+
+describe("TG-P4c: a végleges bank mérése és meta-kapuja", () => {
+  const app = (i: number) => ({ id: `q${i}`, question: `Melyik sortörés helyes a(z) „osztály${i}” szóban?`, options: [`osz-tály${i}`, `oszt-ály${i}`], format: "choice" });
+  const recall = (i: number) => ({ id: `r${i}`, question: `Mit jelent a(z) ${i}. fogalom?`, options: ["a", "b"], format: "choice" });
+  it("bankonként rövid jelentés (azonosítólista nélkül); a sáv alatti kvízbank látható jelzést kap, a meta-tétel azonosítója a hibában", async () => {
+    const { finalPracticeReport, auditExperience } = await import("../shared/practice-policy");
+    const e = { quiz: [app(1), recall(2), recall(3), recall(4), recall(5)], tasks: [] as Array<{ id: string; q: string; sample?: string }> };
+    const r = finalPracticeReport(e)!;
+    const a = auditExperience(e);
+    assert.equal(r.report.version, a.version);
+    assert.deepEqual(r.report.quiz, { total: a.quiz.total, counts: a.quiz.counts, status: a.quiz.status, lower: a.quiz.target.lower, upper: a.quiz.target.upper, limited: a.quiz.target.limited });
+    assert.equal("items" in r.report.quiz, false);
+    assert.equal(a.quiz.status, "alacsony");
+    assert.deepEqual(r.notes.map((n) => n.reason), ["practice_low"]);
+    assert.match(r.notes[0]!.note, /kvíz/);
+    assert.deepEqual(r.metaProblems, []);
+    const meta = finalPracticeReport({ quiz: [app(1), { id: "m1", question: "Hány pontot ér ez a feladat?", options: ["1 pont", "2 pont"], format: "choice" }], tasks: [] })!;
+    assert.equal(meta.metaProblems.length, 1);
+    assert.match(meta.metaProblems[0]!, /m1/);
+  });
+  it("teljesülő bank: nincs jelzés; fogalompár által korlátozott bank: tájékoztató practice_limited; bank nélkül: null", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const ok = finalPracticeReport({ quiz: [app(1), app(2), app(3), recall(4), recall(5)], tasks: [] })!;
+    assert.deepEqual(ok.notes, []);
+    const limited = finalPracticeReport({ quiz: [app(1), recall(2), recall(3), recall(4)], tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: ["c1", "c2", "c3"] }] } })!;
+    assert.deepEqual(limited.notes.map((n) => n.reason), ["practice_limited"]);
+    assert.equal(finalPracticeReport(undefined), null);
+  });
+});
+
+describe("élő hiba (d241d7fa): a csomagkvóta a javító körök után nem állítja meg a leckét", () => {
+  it("kapcsoló BE: ha az utolsó kísérlet után CSAK a gyakorlati arány hiányzik, a csomag átmegy (nyitott leletként jelezve), nem dob", async () => {
+    const { buildLessonExperience } = await import("../server/studio/experience-builder");
+    const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+    const prev = process.env.STUDIO_PRACTICE_QUOTA;
+    process.env.STUDIO_PRACTICE_QUOTA = "on";
+    const fixes: string[] = [];
+    try {
+      const lesson = standardFusionFixture(); const e = lesson.experience!;
+      const recall = e.quiz.map((q, i) => ({ ...q, question: `Mit jelent a(z) ${i}. fogalom a fejezetben?` }));
+      let error: unknown = null;
+      await buildLessonExperience(lesson, [], { call: async () => ({ methods: e.methods, tasks: e.tasks, quiz: recall, glossary: [] }), onToolFix: (kind: string, notes: string[]) => { fixes.push(`${kind}: ${notes.join(" | ")}`); } } as never).catch((err) => { error = err; });
+      assert.equal(error, null, `review #633: a banképítés nem dobhat — ${String(error).slice(0, 300)}`);
+      assert.ok(fixes.some((f) => f.startsWith("practice-quota:")), JSON.stringify(fixes).slice(0, 300));
+    } finally {
+      if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+    }
+  });
+});
+
+describe("review #633: a végleges jelentés és az átvétel ugyanazt a sávot használja", () => {
+  const app = (i: number) => ({ id: `q${i}`, question: `Melyik sortörés helyes a(z) „osztály${i}” szóban?`, options: [`osz-tály${i}`, `oszt-ály${i}`], format: "choice" });
+  const recall = (i: number) => ({ id: `r${i}`, question: `Mit jelent a(z) ${i}. fogalom?`, options: ["a", "b"], format: "choice" });
+  it("75 kvíz, 30 kötelező pár, 50 alkalmazás → magas (a maximum 45), a jelentés sávja 45–45", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const quiz = [...Array.from({ length: 50 }, (_, i) => app(i)), ...Array.from({ length: 25 }, (_, i) => recall(i))];
+    const r = finalPracticeReport({ quiz, tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: Array.from({ length: 30 }, (_, i) => `c${i}`) }] } })!;
+    assert.equal(r.report.quiz.status, "magas");
+    assert.deepEqual([r.report.quiz.lower, r.report.quiz.upper], [45, 45]);
+    assert.deepEqual(r.notes.map((n) => n.reason), ["practice_high"]);
+  });
+  it("korlátozott, 4 tételes, 3 páros bank: a jelentés sávja 1–1", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const r = finalPracticeReport({ quiz: [app(1), recall(2), recall(3), recall(4)], tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: ["c1", "c2", "c3"] }] } })!;
+    assert.deepEqual([r.report.quiz.lower, r.report.quiz.upper], [1, 1]);
   });
 });
