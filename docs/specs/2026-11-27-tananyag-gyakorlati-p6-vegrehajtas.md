@@ -20,4 +20,8 @@ tételekkel kezdődő bankból az első 25-ben túl sok fogalmi kérdés lehet.
    viselkedése változatlan; a mentett kör a neki mentett azonosítókkal / kérdésekkel folytatódik (a választó csak új kört érint).
 3. Ellenőrzés: új + érintett egységtesztek (lesson-attempt, lesson-experience*, no-lookbehind-client), tsc, eslint.
 
-Állapot: tervezve — következő: RED.
+3b. Mért: RED 5 bukás (a régi minta / banksorrend fogalmi többséget adott, bekötés hiányzott); utána `practice-sampling`
+   6/0, a 20 érintett tesztfájl (practice, lesson-attempt, lesson-experience, round, reward, coupon, lookbehind) 222/0; tsc, eslint OK.
+   A csoporton belüli rangsor-teszt a régi kódon is zöld (a rangsort őrzi, nem a hiányt bizonyítja).
+
+Állapot: kész — következő: kapulánc.

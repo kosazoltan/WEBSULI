@@ -1,5 +1,7 @@
 import type { OpenTask } from "./lesson-experience";
 import { answerWindow, gradeTypedAnswers } from "./answer-value";
+import { classifyOpenTask } from "./practice-policy";
+import { balancedCounts } from "./practice-sampling";
 
 /**
  * Spec 2026-09-30-utasitasrendszer-rendbetetel (U1): a pontozó két úton fut.
@@ -487,9 +489,16 @@ export function quizOptionIndices(question: { id: string; question: string; opti
   return indices;
 }
 
-/** Keep oral practice present in every round, not only somewhere in the full bank. */
+/**
+ * Keep oral practice present in every round, not only somewhere in the full bank.
+ * TG-P6: the rest of the round is balanced to 60–75% applied tasks (`balancedCounts`), counting the oral picks too.
+ */
 export function sampleTaskIds(bank: readonly OpenTask[], count = 15, random = Math.random): string[] {
+  const isApply = (t: OpenTask) => classifyOpenTask({ q: t.q, sample: t.sample }).kind === "alkalmazas";
   const oral = new Set(sampleIds(bank.filter(t => t.mode === "oral"), Math.min(2, count), random));
-  const selected = [...oral, ...sampleIds(bank.filter(t => !oral.has(t.id)), count - oral.size, random)];
+  const rest = bank.filter(t => !oral.has(t.id));
+  const oralApply = bank.filter(t => oral.has(t.id) && isApply(t)).length;
+  const want = balancedCounts(Math.min(count, bank.length), rest.filter(isApply).length, rest.filter(t => !isApply(t)).length, oralApply, oral.size - oralApply);
+  const selected = [...oral, ...sampleIds(rest.filter(isApply), want.apply, random), ...sampleIds(rest.filter(t => !isApply(t)), want.other, random)];
   return sampleIds(selected.map(id => ({ id })), count, random);
 }

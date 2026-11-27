@@ -28,11 +28,13 @@ test("TG-P6: a szerveres gyakorlás üres előzménnyel, fogalmi elejű bankon i
 });
 
 test("TG-P6: a csoporton belül az ismétlési rangsor dönt (a rosszul megválaszolt alkalmazó tétel előre kerül)", () => {
-  const history = { a29: [{ at: 5, correct: false, usedHint: false }], a0: [{ at: 4, correct: true, usedHint: false }] };
-  const picked = selectPracticeQuestions(conceptFirst, 25, history, 1, isApplyQuiz).filter((q) => q.id.startsWith("a"));
-  assert.equal(picked[0].id, "a1", "a még nem látott tétel elöl");
-  assert.ok(picked.some((q) => q.id === "a29"), "a hibás tétel bent van");
-  assert.ok(!picked.some((q) => q.id === "a0"), "a frissen jól megválaszolt hátra szorul");
+  // Minden alkalmazó tétel frissen, jól megválaszolt (hátra sorolt), kivéve az a29-et (hibás → előre).
+  const history: Record<string, Array<{ at: number; correct: boolean; usedHint: boolean }>> = {};
+  for (let i = 0; i < 29; i++) history[`a${i}`] = [{ at: 4 + i, correct: true, usedHint: false }];
+  history.a29 = [{ at: 50, correct: false, usedHint: false }];
+  const picked = selectPracticeQuestions(conceptFirst, 25, history, 60, isApplyQuiz).filter((q) => q.id.startsWith("a"));
+  assert.equal(picked[0].id, "a29", "a hibás tétel a csoport elején");
+  assert.deepEqual(picked.slice(1).map((q) => q.id), Array.from({ length: picked.length - 1 }, (_, i) => `a${i}`), "utána a legrégebben látott");
 });
 
 test("TG-P6: besoroló nélkül a selectPracticeQuestions régi viselkedése marad", () => {
@@ -68,7 +70,7 @@ test("TG-P6: a nyílt kör 15-ből 9–11 alkalmazót ad, a szóbeli feladat tov
 });
 
 test("TG-P6: a szerver és a helyi körök a kiegyensúlyozott választót használják", () => {
-  assert.match(fs.readFileSync("server/rewards/lesson-attempts.ts", "utf8"), /selectPracticeQuestions\([^)]*isApplyQuiz\)/u);
+  assert.match(fs.readFileSync("server/rewards/lesson-attempts.ts", "utf8"), /selectPracticeQuestions\(.*isApplyQuiz\)/u);
   assert.match(fs.readFileSync("client/src/lesson-runtime/useExperienceRound.ts", "utf8"), /sampleQuizIds\(/u);
   assert.match(fs.readFileSync("client/src/lesson-runtime/HtmlLessonQuiz.tsx", "utf8"), /sampleQuizIds\(/u);
 });
