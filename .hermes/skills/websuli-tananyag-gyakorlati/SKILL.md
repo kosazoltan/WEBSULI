@@ -12,7 +12,8 @@ feladatlapról (pontozás, pontszám, feladattípus, a lap felépítése, a ját
 ## Mérce (egy helyen — ne írj párhuzamos szabályt)
 
 - `source/shared/practice-policy.ts` — tételenként `alkalmazas | fogalmi | meta | bizonytalan` (`classifyQuizItem`,
-  `classifyOpenTask`); bankonként külön 60–75% igazolt alkalmazás, célérték kétharmad (`practiceTarget`); a modell `intent`
+  `classifyOpenTask`); bankonként külön 60–75% igazolt alkalmazás, célérték kétharmad (`practiceTarget`; a kötelező fogalmi párok
+  ezt lejjebb szoríthatják — ilyenkor a `practiceTarget` értéke a mérce, nem a 60%); a modell `intent`
   címkéje nem bizonyíték.
 - `source/shared/practice-rules.ts` — a promptok közös szövege (`PRACTICE_TEACHING_RULE`, `PRACTICE_BANK_RULE`,
   `SOURCE_SCOPE_RULE`). Új gyártási út ezt kapja, nem saját megfogalmazást.
@@ -24,10 +25,10 @@ feladatlapról (pontozás, pontszám, feladattípus, a lap felépítése, a ját
 | Út | Kapu / viselkedés |
 |---|---|
 | Stúdió bankcsomag | `experience-builder`: meta → javító kör (P4a); arány `STUDIO_PRACTICE_QUOTA=on` mellett csomagkvóta, az utolsó kísérlet után csak jelzés (P4b/P4c) |
-| Kiadott bank | `finalPracticeReport` a jobon; végleges bankban maradt meta megállít (P4c) |
+| Kiadott bank | `finalPracticeReport` a jobon; végleges bankban maradt meta megállít — CSAK `STUDIO_PRACTICE_QUOTA=on` mellett (élesben be; kikapcsolva csak jelzés) (P4c) |
 | Külön játékkvíz (`generate-quiz`) | Stúdió-leckénél a lecke saját bankja, nincs generálás (P5b); régi HTML-nél tanítható kivonat (`gameQuizSource.ts`), meta-szűrés tételes okkal, legfeljebb 1 célzott pótlás, csak teljes bank cserél (P5a) |
 | HTML-javítás záró kapuja | `verifyLessonMethodHtml` → `practiceMetaProblems` (P5b) |
-| Tanulói kör | `practice-sampling.ts`: a 25-ös kvízkör 15–18, a 15-ös nyílt kör 9–11 alkalmazó; a szerveres gyakorlásban a csoporton belül az ismétlési rangsor marad (P6) |
+| Tanulói kör | `practice-sampling.ts` (közös keverő) + `lesson-experience-score.ts` (`sampleIds` / `sampleTaskIds`): a 25-ös kvízkör 15–18, a 15-ös nyílt kör 9–11 alkalmazó, ha a készlet engedi (hiánynál a másik csoportból pótol — csak fogalmi bankból 0 is lehet); a szerveres gyakorlásban a csoporton belül az ismétlési rangsor marad (P6) |
 | Meglévő lecke javítása | csak meta-hibás régi csomag → célzott tételcsere, a jó tételek azonosítója stabil (P7a); admin „Gyakorlati bankjavítás (a tanítás marad)” = `mode: "practice-bank"` (P7b) |
 
 ## Eljárás
@@ -35,8 +36,10 @@ feladatlapról (pontozás, pontszám, feladattípus, a lap felépítése, a ját
 1. **Mérés előbb, csak olvasva:** `cd source && npx tsx scripts/measure/practice-audit.mts --db --out <fájl>` (éles DB, `BEGIN READ ONLY`);
    egy leckére `--lesson <json>` / `--html <fájl>`. Bankonként a darabszám és az arány számít, nem a leckeátlag.
 2. **Új lecke:** a Stúdió gyártja; utólag a job `practiceAudit` mezőjét nézd. `practice_low` jelzés nem hiba, hanem tétel a javítási listára.
-3. **Meglévő lecke meta-tétellel:** admin → lecke → „Gyakorlati bankjavítás” → előnézet (csak a kifogásolt tétel változhat) →
-   jóváhagyás (biztonsági mentéssel) → visszaolvasás (`practice-audit --db`). Teljes újragyártás csak tanítási hibánál.
+3. **Meglévő Stúdió-lecke meta-tétellel** (régi HTML-leckénél a gomb nincs: HTML-javítás / `generate-quiz`): admin → lecke →
+   „Gyakorlati bankjavítás” → a job lefuttatja a séma-, bank- és lektorkapukat → előnézet (a kifogásolt tétel változik; ha a
+   csomagban érvénytelen helyes-válasz-index is van, a csomag egésze újraépül — szabályos) → jóváhagyás (biztonsági mentéssel)
+   → visszaolvasás (`practice-audit --db`) → valódi böngészős próba egy leckén. Teljes újragyártás csak tanítási hibánál.
 4. **Kérdésminta:** konkrét mondaton / adaton / helyzeten cselekvés (helyzethez illő szólás, hiányzó szó a mondat értelméből,
    helyes elválasztás kiválasztása, „Csak A / Csak B / Mindkettő”, adatos számolás, állandó változó a kísérletben, forrásrészlet
    kiválasztása). A puszta besorolás / definíció-felmondás fogalmi tétel — kell, de kisebbségben.
