@@ -103,7 +103,8 @@ test("V5b (a #612 tanulsága): a szójáték helye a program által kiosztott bl
 });
 
 // Review #648 (Codex, Vercel): a boss- és szójáték-kapu szigorítása.
-const G = (n: number, blocks: Array<Record<string, unknown>> = []) => ({ sections: Array.from({ length: n }, (_, i) => ({ blocks: i === n - 1 ? blocks : [{ kind: "text" }] })) });
+type GB = { kind: string; tryKind?: string; boss?: boolean; coversConceptIds?: string[] };
+const G = (n: number, blocks: GB[] = []) => ({ sections: Array.from({ length: n }, (_, i) => ({ blocks: i === n - 1 ? blocks : [{ kind: "text" } as GB] })) });
 
 test("review #648: a TERVEZETT fejezetszám dönt — kevesebb fejezetű kimenet nem kerüli meg a boss- és szójáték-kaput", () => {
   assert.ok(bossProblems(G(2), 3).length > 0, "boss");
