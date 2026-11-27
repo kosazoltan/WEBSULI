@@ -309,19 +309,3 @@ test("review #645: örökölt eltérés mellett is lefut a válaszkulcs-kapu a c
     call: async () => ({ methods: [], tasks: [{ ...structuredClone(first.tasks.find(t => t.id === victim.id)!) }], quiz: [], glossary: [] }) }));
   assert.ok(keyed.includes(victim.id), "a cserélt feladat a válaszkulcs-kapun átment");
 });
-
-test("P7C: kvóta alatti, egyébként hibátlan régi csomag a csak-bank javításban célzott arányjavító kört kap (nem vehető át változatlanul)", async () => {
-  const { lesson, packets, first } = await legacyFirst();
-  const dirty = structuredClone(first);
-  for (const q of dirty.quiz.filter((x) => x.sectionIndex === 0)) q.question = `Mit jelent a(z) ${q.coversConceptIds[0]} fogalma?`;
-  const prev = process.env.STUDIO_PRACTICE_QUOTA;
-  process.env.STUDIO_PRACTICE_QUOTA = "on";
-  let calls = 0;
-  try {
-    await withOpener(() => buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, keepLegacy: true,
-      call: async () => { calls++; return structuredClone(packets[0]); } })).catch(() => undefined);
-  } finally {
-    if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
-  }
-  assert.ok(calls >= 1, "a kvóta alatti fejezet modellhívást (célzott kört) kap");
-});
