@@ -194,12 +194,12 @@ test("review #635: a célzott javításnál a válaszkulcs-teszt és a vak kvíz
 });
 
 test("review #635: STUDIO_PRACTICE_QUOTA=on mellett is célzott a meta-csere (az arányeltérés nem kényszerít teljes újragyártást)", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
   const prev = process.env.STUDIO_PRACTICE_QUOTA;
   process.env.STUDIO_PRACTICE_QUOTA = "on";
   try {
-    const { lesson, packets } = twoSectionLesson();
-    let calls = 0;
-    const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
     const dirty = structuredClone(first);
     const victim = dirty.quiz.find(q => q.sectionIndex === 0)!;
     victim.question = META;
