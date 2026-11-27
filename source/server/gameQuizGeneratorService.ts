@@ -25,6 +25,7 @@ import { cachedSystem } from "./ai/prompt-cache";
 import { collectQuizBank, type GeneratedQuizItem } from "./gameQuizValidation";
 import { teachableQuizSource } from "./gameQuizSource";
 import { classifyQuizItem } from "../shared/practice-policy";
+import { PRACTICE_BANK_RULE } from "../shared/practice-rules";
 import { runToolWorkflow } from "./workflows/tool-run";
 import { workflowFence, workflowPhase } from "./workflows/engine";
 
@@ -48,7 +49,7 @@ export type QuizGenerationResult = {
   canonical?: { lessonId: string; items: number };
 };
 
-/** RED (GAMEQUIZ-PROMPT-KOZOS): exportálva a teszthez. */
+/** GAMEQUIZ-PROMPT-KOZOS (review #640): a gyakorlatiassági szabály a közös `PRACTICE_BANK_RULE` (egy szabály egy helyen). */
 export const GAME_QUIZ_SYSTEM_PROMPT = `Magyar általános / középiskolai (1-12. osztály) tananyagból kvíz-tételeket generálsz egy oktatási játék-platformhoz.
 
 KÖVETELMÉNYEK minden generált tétel esetén:
@@ -59,8 +60,8 @@ KÖVETELMÉNYEK minden generált tétel esetén:
 - Válasz-opciók rövidek (max 30 karakter mindegyik), érthetőek, ugyanolyan hosszúak/stílusúak.
 - A rossz válaszok hihetőek legyenek, ne triviálisan hibásak.
 - KÖTELEZŐ "explanation" mező: EGY rövid magyar mondat (max 200 karakter) arról, hogy MIÉRT a helyes válasz a helyes. Matematikánál a levezetést írd le (pl. "7 x 8 = 56, mert 7 x 8 = 7 x 4 x 2 = 28 x 2."), szókincsnél a jelentést. NE hivatkozz sorszámra ("2. válasz"), mert a játék kevert sorrendben rajzol.
-- GYAKORLATIASSÁG: a tanuló a tanított példán mutassa meg a tudását — a tételek kb. kétharmada konkrét mondaton, adaton, helyzeten vagy példányon dönt, kiegészít, javít vagy számol; a többi a szükséges fogalom (jelentés, szabály) felidézése.
-- TILOS a feladatlapra, a pontozásra, a feladattípus nevére, a feladatlap felépítésére vagy a játék kezelésére kérdezni. Ha a tananyag csak ilyen adatot tartalmaz, adj vissza üres tömböt ([]).
+- ${PRACTICE_BANK_RULE}
+- Játékkvíznél csak a kvíz-szabály érvényes (nyílt feladat nincs). Ha a tananyag csak a feladatlapra / pontozásra vonatkozó adatot tartalmaz, adj vissza üres tömböt ([]).
 - NE használj idézőjelet ("," " " """ stb.) a prompt vagy options szövegében — JSON-parse miatt csak \\" escape-elt formában lenne kezelhető. Idézőjel helyett írd át (pl. "Star magyarul" — idézőjel nélkül).
 
 KIMENET: SZIGORÚAN egyetlen JSON tömb, semmilyen magyarázat / markdown / előszó, csak nyers JSON.
