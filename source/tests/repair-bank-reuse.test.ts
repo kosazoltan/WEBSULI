@@ -288,3 +288,25 @@ test("P7B: sémán bukó (érvénytelen kulcsú) régi csomag újragyártódik, 
   assert.deepEqual(inSection(repaired.quiz, 1), inSection(first.quiz, 1), "a másik fejezet kvíztételei és azonosítói változatlanok");
   assert.deepEqual(inSection(repaired.tasks, 1), inSection(first.tasks, 1));
 });
+
+test("review #645: az átvett régi csomag egysége a SAJÁT (hiányzó) nyitómese-jelölőjét tartja — a következő szerzői javítás újragyártja", async () => {
+  const { lesson, packets, first } = await legacyFirst();
+  const kept = await withOpener(() => buildLessonExperience(lesson, [], { previous: first, previousSections: lesson.sections, keepLegacy: true, call: async () => structuredClone(packets[0]) }));
+  assert.ok(kept.bankPlan!.units.every(u => u.opener === undefined), "nincs aktuális opener-jelölő az átvett egységen");
+  let author = 0;
+  await withOpener(() => buildLessonExperience(lesson, [], { previous: kept, previousSections: lesson.sections, call: async () => structuredClone(packets[author++ % 2]) }));
+  assert.equal(author, 2, "a szerzői javítás (C döntés) a régi szerződésű bankot újragyártja");
+});
+
+test("review #645: örökölt eltérés mellett is lefut a válaszkulcs-kapu a célzottan cserélt feladaton", async () => {
+  const { lesson, first } = await legacyFirst();
+  const dirty = structuredClone(first);
+  const victim = dirty.tasks.find(t => t.sectionIndex === 0)!;
+  victim.q = "Hány pontot ér a feladatlapon a 2. feladat, és milyen feladattípus?";
+  const keyed: string[] = [];
+  await withOpener(() => buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, keepLegacy: true,
+    answerKeys: async (tasks) => { keyed.push(...tasks.map(t => t.id)); return new Map(); },
+    call: async () => ({ methods: [], tasks: [{ ...structuredClone(first.tasks.find(t => t.id === victim.id)!) }], quiz: [], glossary: [] }) }));
+  assert.ok(keyed.includes(victim.id), "a cserélt feladat a válaszkulcs-kapun átment");
+});
+
