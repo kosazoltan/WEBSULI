@@ -24,7 +24,7 @@ const META_CONTEXT =
   /(feladatlap|feladatsor|feladatt[ií]pus|feladatfajt|javítási útmutató|értékelési útmutató|pontozási útmutató|javítókulcs|vizsgaszerkezet|felvételi|\ba feladatban\b|\bebben a feladatban\b|\bez a feladat\b|\ba feladat\b(?= (?:a|az|hány|mennyit))|\bezen a lapon\b|\ba lapon\b|tesztlap)/;
 /** A kérdező rész: pontszám, típus, összetétel, sorrend, időkeret. */
 const META_ASK =
-  /(hány pont|pontot ér|pontszám|pont jár|maximális pont|összesen \d* ?pont|pontoz|mennyit ér|milyen (?:két |három |négy )?(?:feladat)?(?:típus|fajt)|melyik feladatt[ií]pus|szerepel|\bvannak\b|található|hányadik feladat|sorrendje|időkeret|hány perc|csoport)/u;
+  /(hány pont|pontot ér|pontszám|pont jár|maximális pont|összesen \d* ?pont|pontoz|mennyit ér|milyen (?:két |három |négy )?(?:feladat)?(?:típus|fajt)|melyik feladatt[ií]pus|szerepel|\bvannak\b|található|hányadik feladat|sorrendje|(?:^|[^\p{L}])felépítés|időkeret|hány perc|csoport)/u;
 /** Közvetlen meta-alakok (környezet nélkül is). */
 const META_DIRECT = /(feladatt[ií]pus|feladatfajt)\w* .*(pont|ér\b)|javítási útmutató szerint/;
 /** Vizsga / feladatlap környezet — a „hány pontot ér” csak ezzel együtt meta (review #625: a sportpont tanítható tartalom). */
@@ -61,8 +61,6 @@ function classifyText(text: string, opts: { options?: string[]; format?: string 
   // Leírt feladat típusának felismerése (pl. „… Melyik feladattípus ez?”): besorolás — fogalmi, nem a feladatlapra kérdez.
   if (/melyik (?:feladatt[ií]pus|ütközéstípus|típus) ez\??$/.test(t) && t.length > 60) return v("fogalmi", "leírt eset típusának besorolása");
   if (META_DIRECT.test(t)) return v("meta", "a feladatlap pontozására / feladattípusára kérdez");
-  // META-TÉVES-JELÖLÉS: a „felépítés” csak önálló szóként meta (a „testfelépítése” a tananyagra kérdez, nem a feladatlapra).
-  if (/(?:^|[^\p{L}])felépítés(?:e|ét|ének)?(?:[^\p{L}]|$)/u.test(t) && META_CONTEXT.test(t)) return v("meta", "a feladatlap felépítésére kérdez");
   const exam = EXAM.test(t) && !SPORT.test(t);
   if (exam && /hány pontot ér/.test(t)) return v("meta", "a feladatlap pontozására kérdez");
   if (exam && /(feladatlap|feladatsor|felvételi|vizsg|dolgozat)/.test(t) && META_STRUCT.test(t)) return v("meta", "a feladatlap / vizsga szerkezetére kérdez");

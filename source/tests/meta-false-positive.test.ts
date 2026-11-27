@@ -14,3 +14,9 @@ test("a feladatlap feladattípusára és pontszámára kérdező tétel meta mar
   assert.equal(classifyQuizItem({ question: "Melyik feladattípus szerepel a felvételi kérdéssorában?", options: ["szótagolás", "betűrend", "mindkettő"] }).kind, "meta");
   assert.equal(classifyQuizItem({ question: "Hány pontot ér a felvételi 2. feladata?", options: ["2 pont", "4 pont", "5 pont"] }).kind, "meta");
 });
+
+test("review #643: a „felépítés” önálló szóként minden ragos alakban meta marad, és a konkrét / idézetes kivételek érvényesek", () => {
+  assert.equal(classifyQuizItem({ question: "Mit tudsz a javítókulcs felépítéséről?", options: ["a", "b", "c"] }).kind, "meta");
+  assert.notEqual(classifyQuizItem({ question: "Ebben a feladatban a „felépítés” szót kell elemezned. Melyik igéből képeztük?", options: ["épít", "fel", "lép"] }).kind, "meta");
+  assert.notEqual(classifyQuizItem({ question: "Ebben a feladatban 2 sejt felépítését hasonlítjuk össze 3 szempont szerint. Melyikben van sejtmag?", options: ["az elsőben", "a másodikban", "mindkettőben"] }).kind, "meta");
+});
