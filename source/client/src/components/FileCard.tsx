@@ -61,6 +61,8 @@ export default function FileCard({
         "POST",
         `/api/admin/materials/${id}/generate-quiz`,
         { count: 10 },
+        // Review #634: az első válasz + egy célzott pótlás két modellhívás — a 60 s alapkeret lejárhat, mielőtt a szerver végez.
+        { timeout: 180_000 },
       );
       // A material-quizzes cache invalidálása — a játékok a friss tételeket
       // kapják, nem kell manuális oldal-frissítés.

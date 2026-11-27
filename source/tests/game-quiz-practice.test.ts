@@ -100,3 +100,21 @@ test("TG-P5a: 10 kért, 1 átment (a pótlás után is hiányos) → nem teljes,
   assert.equal(bank.items.length, 1);
   assert.ok(bank.rejected.length >= 10);
 });
+
+test("review #634: tartalomhiánynál a generate-quiz a munkafolyamat előtt, hibaüzenettel áll meg (nem 500)", async () => {
+  const { generateMaterialQuiz } = await import("../server/gameQuizGeneratorService");
+  const html = `<header>WEBSULI</header><h1>Feladatlap</h1>${PREAMBLE}`;
+  const result = await generateMaterialQuiz("m1", 10, "owner", { materialExists: async () => true, materialContent: async () => html });
+  assert.equal(result.inserted, 0);
+  assert.match(result.errors.join(" "), /Elégtelen tanítható tartalom/u);
+});
+
+test("review #634: a számolós (főként számokból álló) anyag tanítható tartalom", () => {
+  const src = teachableQuizSource(`<h1>Összeadás</h1><p>12 + 8 = 20</p><p>35 + 15 = 50</p><p>7 · 6 = 42</p><p>81 : 9 = 9</p><p>100 − 37 = 63</p><p>245 + 155 = 400</p><p>1200 − 450 = 750</p><p>36 · 12 = 432</p>`);
+  assert.ok(src, "a számolós anyag nem minősül üresnek");
+});
+
+test("review #634: a csak szóközből álló opció érvénytelen (a játék úgyis eldobná)", () => {
+  const { rejected } = validateGeneratedQuizItems([{ ...IDIOM, options: [" ", "futsz", "mész", "látsz"] }]);
+  assert.equal(rejected.length, 1);
+});

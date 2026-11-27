@@ -79,15 +79,27 @@ async function materialExists(materialId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+async function materialContent(materialId: string): Promise<string | null> {
+  const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
+  return row?.content ?? null;
+}
+
 export async function generateMaterialQuiz(
   materialId: string,
   count: number,
   owner: string,
-  deps: { materialExists?: (materialId: string) => Promise<boolean> } = {},
+  deps: { materialExists?: (materialId: string) => Promise<boolean>; materialContent?: (materialId: string) => Promise<string | null> } = {},
 ): Promise<QuizGenerationResult> {
   // Input check BEFORE the workflow: an invalid request must not leave a failed run behind.
   if (!await (deps.materialExists ?? materialExists)(materialId)) {
     throw new QuizMaterialNotFound(`Tananyag nem található: ${materialId}`);
+  }
+  // TG-P5a (review #634): a tanítható tartalom hiánya a munkafolyamat ELŐTT dől el — a futás visszaolvasási szerződését nem
+  // sérti, és az admin a tartalomhiányról szóló üzenetet kapja (nem általános 500-at). Modellhívás és írás nincs.
+  const content = await (deps.materialContent ?? materialContent)(materialId);
+  if (content !== null && !teachableQuizSource(content, 14000)) {
+    return { materialId, materialTitle: "", inserted: 0, skipped: 0,
+      errors: ["Elégtelen tanítható tartalom (csak fejléc / pontozás) — nincs modellhívás, a meglévő kvízek változatlanok maradtak."] };
   }
   if (!ANTHROPIC_API_KEY) {
     throw new Error("Anthropic API kulcs nincs konfigurálva (AI_INTEGRATIONS_ANTHROPIC_API_KEY hiányzik).");
@@ -115,11 +127,8 @@ export async function generateMaterialQuiz(
     skipped: 0,
     errors: [],
   };
-  if (!source) {
-    // Csak fejlécből / pontozásból álló anyag: modellhívás nélkül áll meg, a meglévő kvízek változatlanok.
-    result.errors.push("Elégtelen tanítható tartalom (csak fejléc / pontozás) — nincs modellhívás, a meglévő kvízek változatlanok maradtak.");
-    return { value: result, result: { kind: "material" as const, id: materialId } };
-  }
+  // A tartalomhiányt a munkafolyamat előtt már kiszűrtük; ha közben a tananyag kiürült, a futás hibával áll meg (a régi készlet marad).
+  if (!source) throw new Error("Elégtelen tanítható tartalom (a tananyag a kérés közben változott) — a meglévő kvízek változatlanok maradtak.");
 
   // 3. Claude hívás
   await workflowPhase("author");

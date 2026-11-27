@@ -10,7 +10,7 @@ import { adminLineProblem } from "../shared/source-teaching-scope";
 
 export type TeachableQuizSource = { text: string; sections: number };
 
-/** Legalább ennyi betű tanítható szöveg kell (fejléc nélkül), különben nincs miből kérdezni. */
+/** Legalább ennyi betű / számjegy tanítható szöveg kell (fejléc nélkül), különben nincs miből kérdezni. */
 const MIN_TEACHING_LETTERS = 40;
 const SEP = "\n\n";
 
@@ -25,7 +25,8 @@ const decode = (s: string) => s
 /** Mondatokra bont (a „3. feladat” sorszáma nem mondathatár: utána kisbetű jön). */
 const sentences = (line: string) => line.replace(/([.!?])\s+(?=\p{Lu})/gu, "$1\n").split("\n");
 
-const letters = (s: string) => (s.match(/\p{L}/gu) ?? []).length;
+// Review #634: a betű MELLETT a számjegy is tanítható tartalom (a számolós matematikai anyag főként számokból áll).
+const letters = (s: string) => (s.match(/[\p{L}\p{N}]/gu) ?? []).length;
 
 /** A szöveg levágása legfeljebb `n` karakterre, lehetőleg szóhatáron. */
 function cut(text: string, n: number): string {

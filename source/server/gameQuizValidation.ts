@@ -25,7 +25,7 @@ function quizItemProblem(raw: unknown): string | null {
   const item = raw as Partial<GeneratedQuizItem>;
   if (typeof item.prompt !== "string" || item.prompt.length < 3 || item.prompt.length > 200) return "a kérdés hiányzik vagy 3–200 karakteren kívül esik";
   if (!Array.isArray(item.options) || item.options.length !== 4 ||
-    !item.options.every((o): o is string => typeof o === "string" && o.length > 0 && o.length < 60)) return "nem pontosan 4 rövid (1–59 karakteres) válaszopció";
+    !item.options.every((o): o is string => typeof o === "string" && o.trim().length > 0 && o.length < 60)) return "nem pontosan 4 rövid (1–59 karakteres, nem üres) válaszopció";
   if (typeof item.correctIndex !== "number" || !Number.isInteger(item.correctIndex) || item.correctIndex < 0 || item.correctIndex > 3) return "a correctIndex nem 0–3 közötti egész";
   // T-1: magyarázat nélküli tétel nem kerül a bankba — a néma büntetés pont az, amit meg akarunk szüntetni.
   if (typeof item.explanation !== "string" || item.explanation.trim().length < 5 || item.explanation.length > 300) return "a magyarázat hiányzik vagy túl hosszú";
