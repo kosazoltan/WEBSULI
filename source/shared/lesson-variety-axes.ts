@@ -190,21 +190,21 @@ export const cardFormForLength = <C>(sections: number, card: C | undefined): C |
 type GateLesson = { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string; boss?: boolean; coversConceptIds?: readonly string[] }> }> };
 
 /** V5b kapu: ≥ 3 fejezetnél pontosan egy boss-kérdés, az utolsó kérdéses fejezet utolsó check blokkja, legalább 2 fogalommal. */
-export function bossProblems(lesson: GateLesson): string[] {
-  if (lesson.sections.length < WORD_GAME_MIN_SECTIONS) return [];
+export function bossProblems(lesson: GateLesson, plannedSections?: number): string[] {
+  // Review #648: a TERVEZETT fejezetszám dönt (összevont kimenet nem kerüli meg); check nélküli lecke sem teljesít.
+  if ((plannedSections ?? lesson.sections.length) < WORD_GAME_MIN_SECTIONS) return [];
   const all = lesson.sections.flatMap((s, si) => s.blocks.map((b, bi) => ({ b, si, bi })).filter((x) => x.b.kind === "check"));
-  if (!all.length) return [];
-  const last = all.at(-1)!;
+  const last = all.at(-1);
   const bosses = all.filter((x) => x.b.boss === true);
   const want = "BOSS-KÉRDÉS: az utolsó, kérdést tartalmazó fejezet UTOLSÓ check blokkja \"boss\": true (legalább 2 tanított fogalom, nehezebb alkalmazó kérdés); más check nem boss.";
-  if (bosses.length !== 1 || bosses[0] !== last) return [want];
-  if ((last.b.coversConceptIds?.length ?? 0) < 2) return [`${want} A boss-kérdés coversConceptIds listája legalább 2 fogalom.`];
+  if (!last || bosses.length !== 1 || bosses[0] !== last) return [want];
+  if (new Set(last.b.coversConceptIds ?? []).size < 2) return [`${want} A boss-kérdés coversConceptIds listája legalább 2 fogalom.`];
   return [];
 }
 
 /** V5b kapu: nyelvi leckénél (≥ 3 fejezet) a kiosztott szójáték egy nem első fejezetben. */
-export function wordGameProblems(lesson: GateLesson, game: WordGame | undefined): string[] {
-  if (!game || lesson.sections.length < WORD_GAME_MIN_SECTIONS) return [];
+export function wordGameProblems(lesson: GateLesson, game: WordGame | undefined, plannedSections?: number): string[] {
+  if (!game || (plannedSections ?? lesson.sections.length) < WORD_GAME_MIN_SECTIONS) return [];
   if (lesson.sections.slice(1).some((s) => s.blocks.some((b) => b.kind === "try" && b.tryKind === game))) return [];
   return [`VÁLTOZATOSSÁG / SZÓJÁTÉK: egy nem első fejezetbe ${WORD_GAME_SPEC[game].label} kell (try blokk, tryKind=${game}, spec: ${WORD_GAME_SPEC[game].spec}).`];
 }

@@ -914,7 +914,7 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     // Review #647: a TERVEZETT fejezetszám dönt; a villámkártyás összefoglaló flashcards blokkja is kapu.
     const card = varietyOn ? [...cardFormProblems(parsed.data, runVarietyAxes()?.cardForm, outline.sections.length), ...recapFlashcardProblems(parsed.data, runVarietyAxes()?.recapForm)] : [];
     // V5b: boss-kérdés és szójáték (csak kiosztott tengelyekkel futó, BE változatosságú körben).
-    if (varietyOn && runVarietyAxes()) card.push(...bossProblems(parsed.data), ...wordGameProblems(parsed.data, runVarietyAxes()?.wordGame));
+    if (varietyOn && runVarietyAxes()) card.push(...bossProblems(parsed.data, outline.sections.length), ...wordGameProblems(parsed.data, runVarietyAxes()?.wordGame, outline.sections.length));
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons), ...card];
     if (problems.length && dropNotes.length) {
       telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;
