@@ -48,6 +48,7 @@ import {
 
 import { db } from "./db";
 import { eq, desc, gt, gte, lt, and, sql, inArray, getTableColumns } from "drizzle-orm";
+import { reserveImprovementJob } from "./improve-job-reservation";
 import { assertBackupFilesHaveContent } from "./lib/backup-guard";
 import { logger } from "./lib/logger";
 import { coversByFile, materialCoverId } from "@shared/lesson-cover";
@@ -1346,15 +1347,16 @@ export class DatabaseStorage implements IStorage {
   async createImprovedHtmlFile(file: InsertImprovedHtmlFile, opts: { staleAfterMs?: number } = {}): Promise<ImprovedHtmlFile | null> {
     return db.transaction(async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${file.originalFileId}, 0))`);
-      const [active] = await tx.select({ id: improvedHtmlFiles.id, createdAt: improvedHtmlFiles.createdAt })
+      const active = await tx.select({ id: improvedHtmlFiles.id, createdAt: improvedHtmlFiles.createdAt })
         .from(improvedHtmlFiles)
         .where(and(eq(improvedHtmlFiles.originalFileId, file.originalFileId), sql`${improvedHtmlFiles.status} = 'processing'`))
         .for("update");
-      if (active) {
-        const stale = opts.staleAfterMs !== undefined && Date.now() - active.createdAt.getTime() > opts.staleAfterMs;
-        if (!stale) return null;
+      // Review #644: MINDEN találat számít — bármely friss job blokkol, különben az összes lejárt sor lezárul.
+      const decision = reserveImprovementJob(active, Date.now(), opts.staleAfterMs);
+      if (decision.block) return null;
+      if (decision.expire.length) {
         await tx.update(improvedHtmlFiles).set({ status: "error", improvementNotes: "Megszakadt feldolgozás (szerver újraindult vagy időtúllépés)." })
-          .where(eq(improvedHtmlFiles.id, active.id));
+          .where(inArray(improvedHtmlFiles.id, decision.expire));
       }
       const [improved] = await tx.insert(improvedHtmlFiles).values(file).returning();
       return improved;
