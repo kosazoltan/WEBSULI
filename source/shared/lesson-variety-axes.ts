@@ -140,12 +140,27 @@ export function placeVarietyCards<S extends PlanSection>(sections: readonly S[],
   return out;
 }
 
-/** V3b kapu: ≥ 4 fejezetes leckében a kiosztott kártya egy NEM első fejezetben szerepel (különben javító kör). */
-export function cardFormProblems(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string }> }> }, card: CardForm | undefined): string[] {
-  if (!card || lesson.sections.length < CARD_MIN_SECTIONS) return [];
-  if (lesson.sections.slice(1).some((s) => s.blocks.some((b) => b.kind === "try" && b.tryKind === card.id))) return [];
-  return [`VÁLTOZATOSSÁG / KÁRTYA: a lecke egy nem első fejezetébe pontosan egy ${card.label} kell (try blokk, tryKind=${card.id}, spec: ${card.spec}).`];
+/**
+ * V3b kapu: ≥ 4 fejezetes (TERVEZETT) leckében a kiosztott kártya PONTOSAN egyszer, egy NEM első fejezetben szerepel (különben javító kör).
+ * Review #647 (Sourcery): a duplikált / első fejezetbeli kártya is hiba; a tervezett fejezetszám dönt (rövidebb kimenet nem kerüli meg).
+ */
+export function cardFormProblems(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string }> }> }, card: CardForm | undefined, plannedSections?: number): string[] {
+  if (!card || (plannedSections ?? lesson.sections.length) < CARD_MIN_SECTIONS) return [];
+  const count = (secs: typeof lesson.sections) => secs.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "try" && b.tryKind === card.id).length, 0);
+  if (count(lesson.sections) === 1 && count(lesson.sections.slice(0, 1)) === 0) return [];
+  return [`VÁLTOZATOSSÁG / KÁRTYA: a lecke egy nem első fejezetébe pontosan egy ${card.label} kell (try blokk, tryKind=${card.id}, spec: ${card.spec}) — se több, se az első fejezetben.`];
 }
+
+/** Review #647: villámkártyás összefoglalónál az utolsó fejezetben `flashcards` try blokk kell (különben javító kör). */
+export function recapFlashcardProblems(lesson: { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string }> }> }, recap: Pick<AxisOption, "id"> | undefined): string[] {
+  if (recap?.id !== "villamkartya" || !lesson.sections.length) return [];
+  const last = lesson.sections[lesson.sections.length - 1];
+  return last.blocks.some((b) => b.kind === "try" && b.tryKind === "flashcards") ? []
+    : ["VÁLTOZATOSSÁG / ÖSSZEFOGLALÓ: a villámkártyás összefoglalóhoz az utolsó fejezetben (a recap előtt) flashcards try blokk kell."];
+}
+
+/** Review #647: 4-nél rövidebb leckénél nincs kártya-kiosztás — a mentett érték sem fogyasztja a sorozat-forgást. */
+export const cardFormForLength = <C>(sections: number, card: C | undefined): C | undefined => (sections >= CARD_MIN_SECTIONS ? card : undefined);
 
 /** A lektori lista V1-sora: az összefoglaló a kiosztott formát követi-e. */
 export function varietyAxesLektorLine(axes: Pick<VarietyAxes, "recapForm">): string {

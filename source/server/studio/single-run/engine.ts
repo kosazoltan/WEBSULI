@@ -58,7 +58,7 @@ import { gateMode, type GateMode, type GateName } from "../gates/config";
 import { sourceCoverageGate } from "../gates/source-coverage-gate";
 import { sourceVisualsEnabled } from "../source-visuals-flag";
 import { lessonVarietyForRun, runVarietyAxes, runWithLessonVariety, setRunOpeningForm, setRunVarietyAxes } from "../lesson-variety-flag";
-import { avoidSeriesRepeat, cardFormById, cardFormProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
+import { avoidSeriesRepeat, cardFormById, cardFormForLength, cardFormProblems, recapFlashcardProblems, exampleThemeById, placeVarietyCards, pickVarietyAxes, recapFormById, shapeSignature, type LengthBand, type SeriesPrevious } from "../../../shared/lesson-variety-axes";
 import { openerVarietyPick, openingFormById } from "../../../shared/lesson-opener";
 import { withVarietyMarker } from "../../../shared/lesson-feedback-openers";
 import { undrawableDropNotes } from "../undrawable-visuals";
@@ -847,9 +847,11 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
       const assigned = avoidSeriesRepeat({ openingForm: openerVarietyPick(promptMap.classroom, seed).form.id, ...pickVarietyAxes(seed, outline.sections.length) }, seriesPrev, promptMap.classroom);
       const pick = openingFormById(assigned.openingForm, promptMap.classroom)!;
       assignedForm = pick.id;
-      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, cardForm: assigned.cardForm.id };
+      // Review #647: 4-nél rövidebb leckénél nincs kártya (a mentett érték sem fogyasztja a sorozat-forgást).
+      const card = cardFormForLength(outline.sections.length, assigned.cardForm);
+      output = { ...output, openingForm: pick.id, exampleTheme: assigned.exampleTheme.id, recapForm: assigned.recapForm.id, lengthBands: assigned.lengthBands, ...(card ? { cardForm: card.id } : {}) };
       setRunOpeningForm(pick);
-      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: assigned.cardForm });
+      setRunVarietyAxes({ exampleTheme: assigned.exampleTheme, recapForm: assigned.recapForm, lengthBands: assigned.lengthBands, cardForm: card });
     } else if (typeof output.openingForm === "string") {
       const saved = openingFormById(output.openingForm, promptMap.classroom);
       if (saved) { assignedForm = saved.id; setRunOpeningForm(saved); }
@@ -864,6 +866,8 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
   // blokksorban van (különben a pontos sor és a plusz try blokk ellentmond). Idempotens: a mentett, már elhelyezett terv változatlan.
   const axesNow = varietyOn && programAssigned ? runVarietyAxes() : undefined;
   if (axesNow) {
+    // Review #647: a sorozatszabály az elhelyezés ELŐTTI blokkvázzal vet össze — ezt mentjük (a folytatott, már elhelyezett tervnél megmarad).
+    if (typeof output.seriesShape !== "string") output = { ...output, seriesShape: shapeSignature(outline.sections) };
     const placed = placeVarietyCards(outline.sections, axesNow);
     if (placed.some((sec, i) => sec !== outline.sections[i])) {
       outline = { ...outline, sections: placed as typeof outline.sections };
@@ -906,7 +910,8 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     const coverage = checkCoverageGate(parsed.data, concepts);
     const arc = checkLessonArc(parsed.data);
     // V3b: a kiosztott kártya (≥ 4 fejezetnél) — javító kört kap.
-    const card = varietyOn ? cardFormProblems(parsed.data, runVarietyAxes()?.cardForm) : [];
+    // Review #647: a TERVEZETT fejezetszám dönt; a villámkártyás összefoglaló flashcards blokkja is kapu.
+    const card = varietyOn ? [...cardFormProblems(parsed.data, runVarietyAxes()?.cardForm, outline.sections.length), ...recapFlashcardProblems(parsed.data, runVarietyAxes()?.recapForm)] : [];
     const problems = [...(coverage.ok ? [] : coverage.reasons), ...(arc.ok ? [] : arc.reasons), ...card];
     if (problems.length && dropNotes.length) {
       telemetry.gates.undrawableVisualsExplained = (telemetry.gates.undrawableVisualsExplained ?? 0) + dropNotes.length;

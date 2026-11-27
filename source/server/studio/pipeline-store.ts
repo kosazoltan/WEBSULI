@@ -119,11 +119,12 @@ export type PipelineStore = {
 /** V1: a job-kimenetből a sorozatszabály előzménye (csak ismert alakú mezők). */
 export function seriesPreviousOf(output: unknown): SeriesPrevious | undefined {
   if (!output || typeof output !== "object") return undefined;
-  const o = output as { openingForm?: unknown; exampleTheme?: unknown; recapForm?: unknown; cardForm?: unknown; outline?: { sections?: unknown } };
+  const o = output as { openingForm?: unknown; exampleTheme?: unknown; recapForm?: unknown; cardForm?: unknown; seriesShape?: unknown; outline?: { sections?: unknown } };
   // V3b: a kártyaforma-azonosító camelCase (flipCard) — betű / szám / kötőjel.
   const str = (v: unknown) => (typeof v === "string" && /^[A-Za-z0-9-]{1,40}$/.test(v) ? v : undefined);
   const sections = Array.isArray(o.outline?.sections) ? (o.outline!.sections as Array<{ plannedBlocks?: unknown }>) : undefined;
-  const signature = sections?.every((s) => Array.isArray(s?.plannedBlocks) && s.plannedBlocks.every((b) => typeof b === "string"))
+  // Review #647: a kártya-elhelyezés ELŐTTI blokkváz (mentett `seriesShape`) — a sorozatszabály ezzel vet össze.
+  const signature = typeof o.seriesShape === "string" && o.seriesShape.length <= 2000 ? o.seriesShape : sections?.every((s) => Array.isArray(s?.plannedBlocks) && s.plannedBlocks.every((b) => typeof b === "string"))
     ? shapeSignature(sections as Array<{ plannedBlocks: string[] }>) : undefined;
   const prev = { openingForm: str(o.openingForm), exampleTheme: str(o.exampleTheme), recapForm: str(o.recapForm), shapeSignature: signature, ...(str(o.cardForm) ? { cardForm: str(o.cardForm) } : {}) };
   return Object.values(prev).some(Boolean) ? prev : undefined;
