@@ -85,7 +85,10 @@ test('verdictResult: IGEN → PASS, FELTÉTELLEL / NEM → WARN (KAPU-LR-JELZES)
   const h = 'c'.repeat(40);
   assert.equal(verdictResult({ verdict: 'IGEN', source: 's' }, h).status, STATUS.PASS);
   assert.equal(verdictResult({ verdict: 'IGEN, FELTÉTELLEL', source: 's' }, h).status, STATUS.WARN);
-  assert.equal(verdictResult({ verdict: 'NEM', source: 's' }, h).status, STATUS.WARN);
+  const nem = verdictResult({ verdict: 'NEM', source: 's' }, h);
+  assert.equal(nem.status, STATUS.WARN);
+  assert.match(nem.note, /igazold .* vagy cáfold/u, 'review #639: a NEM teendője a PR-beli kezelés, nem új ellenőrkör');
+  assert.doesNotMatch(nem.note, /futtasd újra/u);
   const none = verdictResult(null, h);
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
