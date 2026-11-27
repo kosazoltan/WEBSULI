@@ -257,6 +257,11 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
   return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds }), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
 }
 
+/** TG-P7b: csak-bank gyakorlati javítás. RED: a régi út (a szerző újraírja a tanítást). */
+export function buildPracticeBankRepair(original: Lesson, source: RepairSource, call: RepairCall, opts: RepairBankOptions = {}) {
+  return buildStructuredImprovement(original, source, call, undefined, undefined, opts);
+}
+
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
 export function finishStructuredImprovement(original: Lesson, candidate: Lesson, source: RepairSource, call: RepairCall, progress?: { checkpoint?: ExperienceCheckpoint; save(checkpoint: ExperienceCheckpoint): Promise<void> }, owner?: RepairOwner, bank: RepairBankOptions = {}) {
   return runWithLessonVariety(storedVarietyMarker(original) !== undefined, () => finishStructuredImprovementScoped(original, carryVarietyMarker(candidate, original), source, call, progress, owner, bank));
