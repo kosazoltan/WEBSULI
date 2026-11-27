@@ -840,8 +840,9 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const quotaSoft = issues.length > 0 && issues.some(isPracticeQuotaProblem) && issues.every(i => isPracticeQuotaProblem(i) || /hibás számítás/.test(i));
       if (parsed?.success && lastAttempt && quotaSoft && !arithmeticOnly && issues.some(i => /hibás számítás/.test(i))) openIssues = issues.filter(i => /hibás számítás/.test(i));
       // Review #635: a célzott meta-cserénél az arány a régi csomagé — nyitott lelet, nem teljes újragyártás oka.
-      const quotaPass = lastAttempt || previousRepair;
-      if (parsed?.success && quotaPass && quotaSoft) deps.onToolFix?.("practice-quota", issues.filter(isPracticeQuotaProblem).map(i => `${unit.sectionIndex + 1}. fejezet — nyitott lelet (átengedve): ${i}`));
+      // Review #635/2: a nem utolsó célzott körben CSAK a tiszta arányhiány megy át — új számítási hiba javítókört kap.
+      const quotaPass = lastAttempt ? quotaSoft : previousRepair && issues.length > 0 && issues.every(isPracticeQuotaProblem);
+      if (parsed?.success && quotaPass) deps.onToolFix?.("practice-quota", issues.filter(isPracticeQuotaProblem).map(i => `${unit.sectionIndex + 1}. fejezet — nyitott lelet (átengedve): ${i}`));
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
       const quotaAndValidate = (p: Packet) => {
@@ -858,7 +859,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
       if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
       else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
-      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || (quotaPass && quotaSoft))) packet = parsed!.data;
+      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || quotaPass)) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
       else {

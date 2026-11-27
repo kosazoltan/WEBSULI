@@ -212,3 +212,25 @@ test("review #635: STUDIO_PRACTICE_QUOTA=on mellett is célzott a meta-csere (az
     if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
   }
 });
+
+test("review #635/2: kvóta mellett a célzott csere ÚJ számítási hibája javítókört kap (nem megy át az arányeltéréssel)", async () => {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  const prev = process.env.STUDIO_PRACTICE_QUOTA;
+  process.env.STUDIO_PRACTICE_QUOTA = "on";
+  try {
+    const dirty = structuredClone(first);
+    const victim = dirty.quiz.find(q => q.sectionIndex === 0)!;
+    victim.question = META;
+    const prompts: string[] = [];
+    // Az első célzott válasz hamis számítást állít (6 · 4 / 2 = 13), a második helyes.
+    const wrong = { ...structuredClone(victim), question: "Egy háromszög alapja 6 cm, magassága 4 cm, így a területe 6 · 4 : 2 = 13 cm². Igaz-e?" };
+    const repaired = await buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections,
+      call: async (_s, user) => { prompts.push(user); return { methods: [], tasks: [], quiz: [prompts.length === 1 ? wrong : { ...structuredClone(victim), question: PRACTICAL }], glossary: [] }; } });
+    assert.equal(prompts.length, 2, "a számítási hiba javítókört kapott");
+    assert.equal(repaired.quiz.find(q => q.id === victim.id)?.question, PRACTICAL);
+  } finally {
+    if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+  }
+});
