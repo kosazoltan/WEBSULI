@@ -37,6 +37,15 @@ export const CARD_FORMS: readonly CardForm[] = [
 ];
 export const cardFormById = (id: unknown) => CARD_FORMS.find((c) => c.id === id);
 
+/** V5b: szójáték-tengely (csak nyelvi leckénél) — V5a megjelenítő. */
+export const WORD_GAMES = ["wordSearch", "crossword"] as const;
+export type WordGame = (typeof WORD_GAMES)[number];
+export const wordGameById = (id: unknown): WordGame | undefined => (WORD_GAMES as readonly unknown[]).includes(id) ? (id as WordGame) : undefined;
+const WORD_GAME_SPEC: Record<WordGame, { label: string; spec: string }> = {
+  wordSearch: { label: "szókereső", spec: '{"words":["szó1","szó2","szó3"]} (3–10 szó, 3–12 betű, szóköz nélkül)' },
+  crossword: { label: "keresztrejtvény", spec: '{"entries":[{"answer":"szó","clue":"meghatározás"}]} (3–10 bejegyzés, a megfejtés 2–15 betű, szóköz nélkül)' },
+};
+
 export type LengthBand = "rövid" | "közepes" | "hosszabb";
 const BANDS: readonly LengthBand[] = ["rövid", "közepes", "hosszabb"];
 const BAND_WEIGHT: Record<LengthBand, number> = { rövid: 0.7, közepes: 1, hosszabb: 1.3 };
@@ -49,14 +58,15 @@ export function lengthBands(seed: number, sections: number): LengthBand[] {
 }
 
 /** `cardForm` (V3b) hiányozhat: régi, kártya nélküli checkpointból folytatott futás. */
-export type VarietyAxes = { exampleTheme: AxisOption; recapForm: AxisOption; lengthBands: LengthBand[]; cardForm?: CardForm };
+export type VarietyAxes = { exampleTheme: AxisOption; recapForm: AxisOption; lengthBands: LengthBand[]; cardForm?: CardForm; wordGame?: WordGame };
 
-export function pickVarietyAxes(seed: number, sections: number): VarietyAxes & { cardForm: CardForm } {
+export function pickVarietyAxes(seed: number, sections: number, opts: { language?: boolean } = {}): VarietyAxes & { cardForm: CardForm } {
   return {
     exampleTheme: seededPick(EXAMPLE_THEMES, seedFrom(`tema\u0001${seed}`))!,
     recapForm: seededPick(RECAP_FORMS, seedFrom(`osszefoglalo\u0001${seed}`))!,
     lengthBands: lengthBands(seed, sections),
     cardForm: seededPick(CARD_FORMS, seedFrom(`kartya\u0001${seed}`))!,
+    ...(opts.language ? { wordGame: seededPick(WORD_GAMES, seedFrom(`szojatek\u0001${seed}`))! } : {}),
   };
 }
 
@@ -64,7 +74,7 @@ export function pickVarietyAxes(seed: number, sections: number): VarietyAxes & {
 export const exampleThemeById = (id: unknown) => EXAMPLE_THEMES.find((t) => t.id === id);
 export const recapFormById = (id: unknown) => RECAP_FORMS.find((t) => t.id === id);
 
-export type SeriesPrevious = { openingForm?: string; exampleTheme?: string; recapForm?: string; cardForm?: string; shapeSignature?: string };
+export type SeriesPrevious = { openingForm?: string; exampleTheme?: string; recapForm?: string; cardForm?: string; wordGame?: string; shapeSignature?: string };
 
 const nextOf = <T extends { id: string }>(items: readonly T[], current: T): T => items[(items.findIndex((i) => i.id === current.id) + 1) % items.length];
 
@@ -84,6 +94,7 @@ export function avoidSeriesRepeat<T extends { openingForm: string } & Omit<Varie
     exampleTheme: previous.exampleTheme === picked.exampleTheme.id ? nextOf(EXAMPLE_THEMES, picked.exampleTheme) : picked.exampleTheme,
     recapForm: previous.recapForm === picked.recapForm.id ? nextOf(RECAP_FORMS, picked.recapForm) : picked.recapForm,
     cardForm: picked.cardForm && previous.cardForm === picked.cardForm.id ? nextOf(CARD_FORMS, picked.cardForm) : picked.cardForm,
+    ...(picked.wordGame ? { wordGame: previous.wordGame === picked.wordGame ? WORD_GAMES[(WORD_GAMES.indexOf(picked.wordGame) + 1) % WORD_GAMES.length] : picked.wordGame } : {}),
   };
 }
 
@@ -101,12 +112,18 @@ export function varietyAxesContract(axes: VarietyAxes, targetWords: number): str
     `- ÖSSZEFOGLALÓ FORMÁJA: ${axes.recapForm.label} — ${axes.recapForm.description}. A lecke záró recap blokkja ezt a formát követi (a nyitás szerződésének visszatérő ELSŐ pontja után).`,
     // Review #612: a kártyakérés csak ott, ahol a kapu is méri (≥ 4 fejezet) — rövidebb leckénél nem teljesíthető a „nem első fejezet”.
     ...(axes.cardForm && axes.lengthBands.length >= CARD_MIN_SECTIONS ? [`- KÁRTYA: a lecke egy NEM első fejezetébe pontosan egy ${axes.cardForm.label} kerül (${axes.cardForm.description}) — try blokk: {"kind":"try","tryKind":"${axes.cardForm.id}","spec":${axes.cardForm.spec},"coversConceptIds":[…]}; tartalma a fejezet tanításából következik.`] : []),
+    // V5b: boss-kérdés (mindig) és szójáték (nyelvi leckénél).
+    // A #612 tanulsága: a boss- és a szójáték-kérés csak ott, ahol a kapu is méri (≥ 3 fejezet).
+    ...(axes.lengthBands.length >= WORD_GAME_MIN_SECTIONS ? ["- BOSS-KÉRDÉS (legalább 3 fejezetnél): az utolsó, kérdést tartalmazó fejezet UTOLSÓ check blokkja \"boss\": true — a lecke legalább két tanított fogalmát összekötő, nehezebb, alkalmazó kérdés (coversConceptIds legalább 2 elem), csak a lecke anyagából; más check blokk nem boss."] : []),
+    ...(axes.wordGame && axes.lengthBands.length >= WORD_GAME_MIN_SECTIONS ? [`- SZÓJÁTÉK: egy NEM első fejezetbe egy ${WORD_GAME_SPEC[axes.wordGame].label} a lecke idegen szavaival — try blokk: {"kind":"try","tryKind":"${axes.wordGame}","spec":${WORD_GAME_SPEC[axes.wordGame].spec},"coversConceptIds":[…]}.`] : []),
     `- FEJEZETHOSSZ (ritmus; a teljes szókereten belül): ${axes.lengthBands.map((b, i) => `${i + 1}. fejezet: ${b} (kb. ${Math.round(avg * BAND_WEIGHT[b])} szó)`).join("; ")}.`,
   ].join("\n");
 }
 
 /** V3b: a kártya-kiosztás (szerződés, kapu, tervbeli hely) legalább ennyi fejezetnél él. */
 export const CARD_MIN_SECTIONS = 4;
+/** V5b: a boss-kérdés és a szójáték (szerződés, kapu, tervbeli hely) legalább ennyi fejezetnél él. */
+export const WORD_GAME_MIN_SECTIONS = 3;
 
 type PlanSection = { plannedBlocks: readonly string[]; tryKind?: string };
 /** A fejezet sorába (ha még nincs) egy `try` hely a `check` elé, ennek hiányában a záró `recap` elé, különben a végére. */
@@ -126,7 +143,7 @@ function withTrySlot<S extends PlanSection>(s: S, tryKind: string, beforeRecap =
  * az utolsó fejezet recap-ja elé kerül; a kártya egy nem első (villámkártyánál nem is utolsó) fejezet try-helyére — ha van ilyen fejezet
  * try-hellyel, annak fajtája lesz, különben az elsőként szóba jövő fejezet kap try-helyet. Idempotens; < 4 fejezetnél nincs kártya.
  */
-export function placeVarietyCards<S extends PlanSection>(sections: readonly S[], axes: { cardForm?: Pick<CardForm, "id">; recapForm: Pick<AxisOption, "id"> }): S[] {
+export function placeVarietyCards<S extends PlanSection>(sections: readonly S[], axes: { cardForm?: Pick<CardForm, "id">; recapForm: Pick<AxisOption, "id">; wordGame?: WordGame }): S[] {
   const out = [...sections];
   const last = out.length - 1;
   const flash = axes.recapForm.id === "villamkartya" && last >= 0;
@@ -136,6 +153,14 @@ export function placeVarietyCards<S extends PlanSection>(sections: readonly S[],
     const candidates = out.map((_, i) => i).filter((i) => i >= 1 && !(flash && i === last));
     const at = candidates.find((i) => out[i].plannedBlocks.includes("try")) ?? candidates[0];
     if (at !== undefined) out[at] = withTrySlot(out[at], card.id);
+  }
+  // V5b: a szójáték (nyelvi lecke, ≥ 3 fejezet) ugyanígy — nem első fejezet, nem a kártya és nem a villámkártya helye.
+  const game = axes.wordGame;
+  if (game && out.length >= WORD_GAME_MIN_SECTIONS && !out.slice(1).some((s) => s.tryKind === game)) {
+    const cardAt = card ? out.findIndex((s, i) => i >= 1 && s.tryKind === card.id) : -1;
+    const candidates = out.map((_, i) => i).filter((i) => i >= 1 && i !== cardAt && !(flash && i === last));
+    const at = candidates.find((i) => out[i].plannedBlocks.includes("try")) ?? candidates[0];
+    if (at !== undefined) out[at] = withTrySlot(out[at], game);
   }
   return out;
 }
@@ -162,7 +187,29 @@ export function recapFlashcardProblems(lesson: { sections: ReadonlyArray<{ block
 /** Review #647: 4-nél rövidebb leckénél nincs kártya-kiosztás — a mentett érték sem fogyasztja a sorozat-forgást. */
 export const cardFormForLength = <C>(sections: number, card: C | undefined): C | undefined => (sections >= CARD_MIN_SECTIONS ? card : undefined);
 
+type GateLesson = { sections: ReadonlyArray<{ blocks: ReadonlyArray<{ kind: string; tryKind?: string; boss?: boolean; coversConceptIds?: readonly string[] }> }> };
+
+/** V5b kapu: ≥ 3 fejezetnél pontosan egy boss-kérdés, az utolsó kérdéses fejezet utolsó check blokkja, legalább 2 fogalommal. */
+export function bossProblems(lesson: GateLesson, plannedSections?: number): string[] {
+  // Review #648: a TERVEZETT fejezetszám dönt (összevont kimenet nem kerüli meg); check nélküli lecke sem teljesít.
+  if ((plannedSections ?? lesson.sections.length) < WORD_GAME_MIN_SECTIONS) return [];
+  const all = lesson.sections.flatMap((s, si) => s.blocks.map((b, bi) => ({ b, si, bi })).filter((x) => x.b.kind === "check"));
+  const last = all.at(-1);
+  const bosses = all.filter((x) => x.b.boss === true);
+  const want = "BOSS-KÉRDÉS: az utolsó, kérdést tartalmazó fejezet UTOLSÓ check blokkja \"boss\": true (legalább 2 tanított fogalom, nehezebb alkalmazó kérdés); más check nem boss.";
+  if (!last || bosses.length !== 1 || bosses[0] !== last) return [want];
+  if (new Set(last.b.coversConceptIds ?? []).size < 2) return [`${want} A boss-kérdés coversConceptIds listája legalább 2 fogalom.`];
+  return [];
+}
+
+/** V5b kapu: nyelvi leckénél (≥ 3 fejezet) a kiosztott szójáték egy nem első fejezetben. */
+export function wordGameProblems(lesson: GateLesson, game: WordGame | undefined, plannedSections?: number): string[] {
+  if (!game || (plannedSections ?? lesson.sections.length) < WORD_GAME_MIN_SECTIONS) return [];
+  if (lesson.sections.slice(1).some((s) => s.blocks.some((b) => b.kind === "try" && b.tryKind === game))) return [];
+  return [`VÁLTOZATOSSÁG / SZÓJÁTÉK: egy nem első fejezetbe ${WORD_GAME_SPEC[game].label} kell (try blokk, tryKind=${game}, spec: ${WORD_GAME_SPEC[game].spec}).`];
+}
+
 /** A lektori lista V1-sora: az összefoglaló a kiosztott formát követi-e. */
 export function varietyAxesLektorLine(axes: Pick<VarietyAxes, "recapForm">): string {
-  return `- VÁLTOZATOSSÁG: a záró recap a kiosztott összefoglaló formát követi-e (${axes.recapForm.label} — ${axes.recapForm.description})? Ha nem: [arc] jelzés a recap blokkra.`;
+  return `- VÁLTOZATOSSÁG: a záró recap a kiosztott összefoglaló formát követi-e (${axes.recapForm.label} — ${axes.recapForm.description})? Ha nem: [arc] jelzés a recap blokkra. A boss-kérdés (check, "boss": true) a lecke tanított anyagából kérdez-e, és tényleg több fogalmat köt-e össze? Ha nem: [arc] jelzés rá.`;
 }

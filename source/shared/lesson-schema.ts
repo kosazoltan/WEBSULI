@@ -211,6 +211,8 @@ const checkBlock = z.object({
   hint: filled(LESSON_TEXT_LIMITS.hint).optional(),
   coversConceptIds,
   sourceVisualId,
+  /** V5b: fejezetvégi boss-kérdés (a régi kliens levágja — sima kérdésként jelenik meg). */
+  boss: z.boolean().optional(),
 });
 
 const tryBlock = z.object({
