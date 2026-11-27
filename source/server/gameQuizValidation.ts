@@ -22,7 +22,7 @@ const ALLOWED_TOPICS = new Set(["english", "math", "nature", "hungarian"]);
  * A modell által generált tételek validálása (kiemelve a DB-t importáló szolgáltatásból, hogy tesztelhető legyen).
  * Spec 2026-09-29 (egy-helyes-valasz): a bizonyíthatóan nem pontosan-egy helyes opciós tétel is eldobódik.
  */
-export function validateGeneratedQuizItems(raws: unknown[]): { valid: GeneratedQuizItem[]; skipped: number } {
+export function validateGeneratedQuizItems(raws: unknown[]): { valid: GeneratedQuizItem[]; skipped: number; rejected: string[] } {
   const valid: GeneratedQuizItem[] = [];
   let skipped = 0;
   for (const raw of raws) {
@@ -56,5 +56,14 @@ export function validateGeneratedQuizItems(raws: unknown[]): { valid: GeneratedQ
     }
     valid.push(item as GeneratedQuizItem);
   }
-  return { valid, skipped };
+  return { valid, skipped, rejected: [] };
+}
+
+/** TG-P5a: a kért darabszámú bank összegyűjtése. RED: a régi viselkedés (egy kérés, pótlás nélkül). */
+export async function collectQuizBank(
+  count: number,
+  ask: (n: number, note: string) => Promise<unknown[]>,
+): Promise<{ items: GeneratedQuizItem[]; complete: boolean; rejected: string[] }> {
+  const { valid, rejected } = validateGeneratedQuizItems((await ask(count, "")).slice(0, count));
+  return { items: valid, complete: valid.length > 0, rejected };
 }
