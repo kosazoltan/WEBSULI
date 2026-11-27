@@ -35,4 +35,7 @@ anyagra egymás közben írhat; a visszaolvasás csak darabszámot ellenőriz.
 3. Ellenőrzés: az új / érintett egységtesztek, tsc, lint; a kanonikus Stúdió-lecke saját bankjának átvétele és a
    `verifyLessonMethodHtml` auditja a TG-P5b-ben.
 
-Állapot: tervezve — következő: RED.
+3b. Mért: `game-quiz-practice` 8/0, az érintett egységtesztek (single-choice-wiring, audit-2026-09-static — a deaktiválás-őr
+   most a teljes bankra szigorítva —, s7-*, prompt-cache, cross-family-fallback-b3, source-visuals-flag) zöldek; tsc, eslint OK.
+
+Állapot: kész — következő: kapulánc, merge (csak gyártásmentes állapotban).

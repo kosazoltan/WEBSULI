@@ -57,7 +57,7 @@ export default function FileCard({
     setGenerating(true);
     try {
       // apiRequest: a CSRF-tokent ez teszi rá (SEC-107).
-      const data = await apiRequest<{ inserted: number; skipped: number }>(
+      const data = await apiRequest<{ inserted: number; skipped: number; errors?: string[] }>(
         "POST",
         `/api/admin/materials/${id}/generate-quiz`,
         { count: 10 },
@@ -65,6 +65,11 @@ export default function FileCard({
       // A material-quizzes cache invalidálása — a játékok a friss tételeket
       // kapják, nem kell manuális oldal-frissítés.
       void queryClient.invalidateQueries({ queryKey: ["/api/games/material-quizzes"] });
+      // TG-P5a: hiányos / tanítható tartalom nélküli anyagnál a régi készlet marad — ezt hibaként mutatjuk, nem „0 tétel mentve”-ként.
+      if (data.inserted === 0 && data.errors?.length) {
+        toast({ variant: "destructive", title: "Kvíz-generálás: nincs csere", description: data.errors[0] });
+        return;
+      }
       toast({
         title: "Kvíz-tételek generálva",
         description: `${data.inserted} tétel mentve. ${data.skipped > 0 ? `Kihagyva: ${data.skipped}.` : ""}`,
