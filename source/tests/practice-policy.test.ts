@@ -273,3 +273,32 @@ describe("review #631: kvóta-sáv és a csomag-validátor viselkedése", () => 
     assert.doesNotMatch(await run(undefined), /igazolt alkalmazás; legalább/);
   });
 });
+
+describe("TG-P4c: a végleges bank mérése és meta-kapuja", () => {
+  const app = (i: number) => ({ id: `q${i}`, question: `Melyik sortörés helyes a(z) „osztály${i}” szóban?`, options: [`osz-tály${i}`, `oszt-ály${i}`], format: "choice" });
+  const recall = (i: number) => ({ id: `r${i}`, question: `Mit jelent a(z) ${i}. fogalom?`, options: ["a", "b"], format: "choice" });
+  it("bankonként rövid jelentés (azonosítólista nélkül); a sáv alatti kvízbank látható jelzést kap, a meta-tétel azonosítója a hibában", async () => {
+    const { finalPracticeReport, auditExperience } = await import("../shared/practice-policy");
+    const e = { quiz: [app(1), recall(2), recall(3), recall(4), recall(5)], tasks: [] as Array<{ id: string; q: string; sample?: string }> };
+    const r = finalPracticeReport(e)!;
+    const a = auditExperience(e);
+    assert.equal(r.report.version, a.version);
+    assert.deepEqual(r.report.quiz, { total: a.quiz.total, counts: a.quiz.counts, status: a.quiz.status, lower: a.quiz.target.lower, upper: a.quiz.target.upper, limited: a.quiz.target.limited });
+    assert.equal("items" in r.report.quiz, false);
+    assert.equal(a.quiz.status, "alacsony");
+    assert.deepEqual(r.notes.map((n) => n.reason), ["practice_low"]);
+    assert.match(r.notes[0]!.note, /kvíz/);
+    assert.deepEqual(r.metaProblems, []);
+    const meta = finalPracticeReport({ quiz: [app(1), { id: "m1", question: "Hány pontot ér ez a feladat?", options: ["1 pont", "2 pont"], format: "choice" }], tasks: [] })!;
+    assert.equal(meta.metaProblems.length, 1);
+    assert.match(meta.metaProblems[0]!, /m1/);
+  });
+  it("teljesülő bank: nincs jelzés; fogalompár által korlátozott bank: tájékoztató practice_limited; bank nélkül: null", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const ok = finalPracticeReport({ quiz: [app(1), app(2), app(3), recall(4), recall(5)], tasks: [] })!;
+    assert.deepEqual(ok.notes, []);
+    const limited = finalPracticeReport({ quiz: [app(1), recall(2), recall(3), recall(4)], tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: ["c1", "c2", "c3"] }] } })!;
+    assert.deepEqual(limited.notes.map((n) => n.reason), ["practice_limited"]);
+    assert.equal(finalPracticeReport(undefined), null);
+  });
+});

@@ -1129,3 +1129,13 @@ test("review #630 (TG-P2a): a forrásállomás a pontozási fogalmat javító fo
   assert.deepEqual(kept.concepts.map((c) => c.id), ["c-szotag"], "a régi, mentett térkép adminisztratív fogalma kiesik");
   assert.match(logs.join(" "), /c-pont/);
 });
+
+test("TG-P4c: a közzétett job a végleges bank gyakorlati mérését is tartalmazza (szabályverzióval, bankonként)", async () => {
+  const { PRACTICE_POLICY_VERSION } = await import("../shared/practice-policy");
+  const mem = memoryStore();
+  await runSingleLesson({ files: [{ name: "forras.txt", kind: "text", content: TRANSCRIPT }], ownerId: "u1" }, deps(scriptedClient(), mem));
+  const out = mem.steps.at(-1)!.output as { practiceAudit?: { version: string; quiz: { total: number; status: string }; tasks: { total: number } } };
+  assert.equal(out.practiceAudit?.version, PRACTICE_POLICY_VERSION);
+  assert.ok((out.practiceAudit?.quiz.total ?? 0) > 0, "a kvízbank mérve");
+  assert.ok(["teljesul", "alacsony", "magas", "meta", "ures"].includes(out.practiceAudit!.quiz.status));
+});
