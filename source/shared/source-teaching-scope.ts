@@ -39,6 +39,15 @@ export function adminConceptProblem(c: { id: string; term: string; definition: s
   return `${c.id}: a fogalom a feladatlap pontozására / időkeretére / felépítésére vonatkozik („${clean(c.quote).slice(0, 100)}”) — ez nem tanítandó fogalom: hagyd ki, vagy a mellette álló tanított példát / szabályt idézd.`;
 }
 
+/**
+ * TG-P5a: egy forrásmondat a lap pontozására / időkeretére vonatkozik, tanított maradék nélkül (pl. „3. feladat (2 pont)”,
+ * „Összesen 20 pont.”, „Időkeret: 45 perc.”). A vegyes sor („Elfogadható: Budapest — 1 pont”) és a sportadat nem ilyen.
+ */
+export function adminLineProblem(line: string): boolean {
+  const scored = new RegExp(SCORE_SRC, "iu").test(line) || new RegExp(TIME_SRC, "iu").test(line);
+  return scored && !SPORT.test(line) && !teachingResidue(line);
+}
+
 /** review #630: a validátor előtt mentett (vagy újrahasznált) térkép adminisztratív fogalma kiesik, naplózva. */
 type StoredConcept = { id?: string; localId?: string; term?: string; definition?: string; quote?: string };
 export function dropAdminConcepts<C extends StoredConcept, M extends { concepts: C[] }>(map: M, log?: (msg: string) => void): M {

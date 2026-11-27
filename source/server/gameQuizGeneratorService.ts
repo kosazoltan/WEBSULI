@@ -13,7 +13,7 @@
  *    specifikus szűréshez használják (pl. Speed Quiz Math csak `math`)
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { gameQuizItems, htmlFiles } from "@shared/schema";
 import { crossFamilyFallback, resolveLegacyModel } from "./ai/models";
@@ -21,7 +21,9 @@ import { logger } from "./lib/logger";
 import { createStudioProvider, crossFamilyFallbackOptions, studioModelReady } from "./ai/studio-provider";
 import { withSupportSkill } from "./studio/support-skills";
 import { cachedSystem } from "./ai/prompt-cache";
-import { validateGeneratedQuizItems } from "./gameQuizValidation";
+import { collectQuizBank, type GeneratedQuizItem } from "./gameQuizValidation";
+import { teachableQuizSource } from "./gameQuizSource";
+import { classifyQuizItem } from "../shared/practice-policy";
 import { runToolWorkflow } from "./workflows/tool-run";
 import { workflowFence, workflowPhase } from "./workflows/engine";
 
@@ -39,6 +41,8 @@ export type QuizGenerationResult = {
   inserted: number;
   skipped: number;
   errors: string[];
+  /** TG-P5a: a mentett bank gyakorlati mérése (`shared/practice-policy.ts`) — tájékoztató, nem megállító kapu. */
+  practice?: { alkalmazas: number; fogalmi: number; egyeb: number };
 };
 
 const SYSTEM_PROMPT = `Magyar általános / középiskolai (1-12. osztály) tananyagból kvíz-tételeket generálsz egy oktatási játék-platformhoz.
@@ -51,6 +55,8 @@ KÖVETELMÉNYEK minden generált tétel esetén:
 - Válasz-opciók rövidek (max 30 karakter mindegyik), érthetőek, ugyanolyan hosszúak/stílusúak.
 - A rossz válaszok hihetőek legyenek, ne triviálisan hibásak.
 - KÖTELEZŐ "explanation" mező: EGY rövid magyar mondat (max 200 karakter) arról, hogy MIÉRT a helyes válasz a helyes. Matematikánál a levezetést írd le (pl. "7 x 8 = 56, mert 7 x 8 = 7 x 4 x 2 = 28 x 2."), szókincsnél a jelentést. NE hivatkozz sorszámra ("2. válasz"), mert a játék kevert sorrendben rajzol.
+- GYAKORLATIASSÁG: a tanuló a tanított példán mutassa meg a tudását — a tételek kb. kétharmada konkrét mondaton, adaton, helyzeten vagy példányon dönt, kiegészít, javít vagy számol; a többi a szükséges fogalom (jelentés, szabály) felidézése.
+- TILOS a feladatlapra, a pontozásra, a feladattípus nevére, a feladatlap felépítésére vagy a játék kezelésére kérdezni. Ha a tananyag csak ilyen adatot tartalmaz, adj vissza üres tömböt ([]).
 - NE használj idézőjelet ("," " " """ stb.) a prompt vagy options szövegében — JSON-parse miatt csak \\" escape-elt formában lenne kezelhető. Idézőjel helyett írd át (pl. "Star magyarul" — idézőjel nélkül).
 
 KIMENET: SZIGORÚAN egyetlen JSON tömb, semmilyen magyarázat / markdown / előszó, csak nyers JSON.
@@ -73,23 +79,32 @@ async function materialExists(materialId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+async function materialContent(materialId: string): Promise<string | null> {
+  const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
+  return row?.content ?? null;
+}
+
 export async function generateMaterialQuiz(
   materialId: string,
   count: number,
   owner: string,
-  deps: { materialExists?: (materialId: string) => Promise<boolean> } = {},
+  deps: { materialExists?: (materialId: string) => Promise<boolean>; materialContent?: (materialId: string) => Promise<string | null> } = {},
 ): Promise<QuizGenerationResult> {
   // Input check BEFORE the workflow: an invalid request must not leave a failed run behind.
   if (!await (deps.materialExists ?? materialExists)(materialId)) {
     throw new QuizMaterialNotFound(`Tananyag nem található: ${materialId}`);
   }
+  // TG-P5a (review #634): a tanítható tartalom hiánya a munkafolyamat ELŐTT dől el — a futás visszaolvasási szerződését nem
+  // sérti, és az admin a tartalomhiányról szóló üzenetet kapja (nem általános 500-at). Modellhívás és írás nincs.
+  const content = await (deps.materialContent ?? materialContent)(materialId);
+  if (content !== null && !teachableQuizSource(content, 14000)) {
+    return { materialId, materialTitle: "", inserted: 0, skipped: 0,
+      errors: ["Elégtelen tanítható tartalom (csak fejléc / pontozás) — nincs modellhívás, a meglévő kvízek változatlanok maradtak."] };
+  }
   if (!ANTHROPIC_API_KEY) {
     throw new Error("Anthropic API kulcs nincs konfigurálva (AI_INTEGRATIONS_ANTHROPIC_API_KEY hiányzik).");
   }
   const safeCount = Math.max(3, Math.min(20, Math.floor(count)));
-  // Token-limit a kért darabszámhoz méretezve — 4096 fix limit 15-20 tételnél
-  // csonkolta a JSON-t (parse-hiba, 0 insert). ~300 token / tétel + buffer.
-  const maxTokens = Math.min(8192, 1024 + safeCount * 350);
 
   return runToolWorkflow({ mode: "quiz", owner, request: { materialId, count: safeCount } }, async () => {
   // 1. Tananyag betöltése
@@ -103,18 +118,17 @@ export async function generateMaterialQuiz(
     throw new Error(`Tananyag nem található: ${materialId}`);
   }
 
-  // 2. HTML → tiszta szöveg
-  const stripped = material.content
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-  const truncated = stripped.length > 14000 ? stripped.slice(0, 14000) : stripped;
+  // 2. HTML → tanítható szöveg (TG-P5a: oldalváz és pontozási előszó nélkül, fejezetenként elosztott kerettel).
+  const source = teachableQuizSource(material.content, 14000);
+  const result: QuizGenerationResult = {
+    materialId,
+    materialTitle: material.title,
+    inserted: 0,
+    skipped: 0,
+    errors: [],
+  };
+  // A tartalomhiányt a munkafolyamat előtt már kiszűrtük; ha közben a tananyag kiürült, a futás hibával áll meg (a régi készlet marad).
+  if (!source) throw new Error("Elégtelen tanítható tartalom (a tananyag a kérés közben változott) — a meglévő kvízek változatlanok maradtak.");
 
   // 3. Claude hívás
   await workflowPhase("author");
@@ -123,18 +137,23 @@ export async function generateMaterialQuiz(
     baseURL: ANTHROPIC_BASE_URL || undefined,
     timeout: 90_000,
   });
-  const userPrompt = `Tananyag címe: ${material.title}
+  const userPromptFor = (n: number, note: string) => `Tananyag címe: ${material.title}
 Osztály: ${material.classroom ?? "?"}
 
 Tananyag tartalma (kivonat):
-${truncated}
-
-Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb tudásmagjából. Csak a JSON tömböt add vissza.`;
+${source.text}
+${note ? `\nPÓTLÁS: ${note}\n` : ""}
+Generálj pontosan ${n} db kvíz-tételt a fenti tananyag legfontosabb tudásmagjából. Csak a JSON tömböt add vissza.`;
 
   // Spec 2026-10-14-tartalek-b-szelet (B3) + review #219: a Claude-hívás szolgáltatói VAGY kimeneti hibájánál (csonka, nem JSON,
   // nem tömb) egyszer az ellentétes családú tartalék (GPT-6.1 Sol, medium), ugyanazzal a rendszer- és felhasználói prompttal.
   const fallbackModel = crossFamilyFallback(ANTHROPIC_MODEL);
-  const parsed = await quizItemsWithFallback(
+  // TG-P5a: első kérés + legfeljebb egy célzott pótlás (collectQuizBank) — mindkettő ugyanazzal a tartalékos úttal.
+  const ask = async (n: number, note: string): Promise<unknown[]> => {
+  const userPrompt = userPromptFor(n, note);
+  // Token-limit a kért darabszámhoz méretezve — 4096 fix limit 15-20 tételnél csonkolta a JSON-t. ~300 token / tétel + buffer.
+  const maxTokens = Math.min(8192, 1024 + n * 350);
+  return quizItemsWithFallback(
     async () => {
       const response = await client.messages.create({
         model: ANTHROPIC_MODEL,
@@ -157,33 +176,25 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
     } : undefined,
     (error) => logger.warn(`[QUIZ-GEN] ${ANTHROPIC_MODEL} hibázott (${error instanceof Error ? error.message.slice(0, 200) : String(error)}) → tartalék: ${fallbackModel}`),
   );
+  };
+  const bank = await collectQuizBank(safeCount, ask);
   await workflowPhase("gate");
 
-  // 4 + 5. DEDUP + INSERT tranzakcióba csomagolva: ha bármelyik insert dob,
-  // az egész rollbackel — nem maradhat deaktivált régi kvízkészlet új nélkül.
-  const result: QuizGenerationResult = {
-    materialId,
-    materialTitle: material.title,
-    inserted: 0,
-    skipped: 0,
-    errors: [],
-  };
-  const capped = (parsed as unknown[]).slice(0, safeCount);
-
-  // Validálás a tranzakción kívül — így a skipped számlálás nem zavarja az atomicitást.
-  // Spec 2026-09-29 (egy-helyes-valasz): a tiszta validátor a több helyes opciós tételt is eldobja.
-  const { valid: validItems, skipped } = validateGeneratedQuizItems(capped);
-  result.skipped += skipped;
-
-  // AUDIT 2026-09-01: ha egyetlen generált tétel sem érvényes, NEM deaktiváljuk a régi
-  // kvízeket — különben a tananyag teljes kérdéskészlete hiba nélkül eltűnne.
+  // Validálás és pótlás a tranzakción kívül (collectQuizBank). TG-P5a: csak teljes darabszámú, meta-mentes bank válthatja le
+  // az aktív készletet — hiányos banknál nincs deaktiválás (AUDIT 2026-09-01: a régi készlet nem tűnhet el hiba nélkül).
+  result.skipped = bank.rejected.length;
   await workflowPhase("save");
-  if (validItems.length === 0) {
-    result.errors.push("Nincs érvényes generált tétel — a meglévő kvízek változatlanok maradtak.");
+  if (!bank.complete) {
+    result.errors.push(`Hiányos készlet (${bank.items.length}/${safeCount} megfelelő tétel egy pótlás után is) — a meglévő kvízek változatlanok maradtak.`);
+    result.errors.push(...bank.rejected.slice(0, 5));
   } else {
-  // Tranzakció: deaktivál + beilleszt atomikusan.
-  // Ha bármelyik tx.insert dob, az egész rollbackel.
+  const validItems: GeneratedQuizItem[] = bank.items;
+  const signature = (rows: Array<{ prompt: string; correctIndex: number; options: unknown }>) =>
+    rows.map((r) => JSON.stringify([r.prompt, r.correctIndex, r.options])).sort().join("\n");
+  // Tranzakció: anyagonkénti tanácsadó zár + deaktivál + beilleszt + visszaolvas atomikusan.
   await db.transaction(async (tx) => {
+    // TG-P5a: azonos anyagra párhuzamos kérés nem írhat közben újabb készletet.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`game-quiz:${materialId}`}))`);
     await workflowFence(tx);
     await tx
       .update(gameQuizItems)
@@ -204,17 +215,21 @@ Generálj pontosan ${safeCount} db kvíz-tételt a fenti tananyag legfontosabb t
       });
       result.inserted++;
     }
+    // Visszaolvasás a zár alatt: pontosan a beillesztett kérdések és kulcsok aktívak a tananyaghoz.
+    const active = await tx.select({ prompt: gameQuizItems.prompt, correctIndex: gameQuizItems.correctIndex, options: gameQuizItems.options })
+      .from(gameQuizItems)
+      .where(and(eq(gameQuizItems.sourceMaterialId, materialId), eq(gameQuizItems.isActive, true)));
+    if (signature(active) !== signature(validItems)) throw new Error("A mentett kvíztételek visszaolvasása eltér.");
     await workflowFence(tx);
   });
+  const kinds = validItems.map((i) => classifyQuizItem({ question: i.prompt, options: i.options }).kind);
+  result.practice = {
+    alkalmazas: kinds.filter((k) => k === "alkalmazas").length,
+    fogalmi: kinds.filter((k) => k === "fogalmi").length,
+    egyeb: kinds.filter((k) => k !== "alkalmazas" && k !== "fogalmi").length,
+  };
   }
-
-  // Visszaolvasás: mentés után pontosan a beillesztett tételek aktívak a tananyaghoz.
   await workflowPhase("readback");
-  if (result.inserted > 0) {
-    const active = await db.select({ id: gameQuizItems.id }).from(gameQuizItems)
-      .where(and(eq(gameQuizItems.sourceMaterialId, materialId), eq(gameQuizItems.isActive, true)));
-    if (active.length !== result.inserted) throw new Error("A mentett kvíztételek visszaolvasása eltér.");
-  }
   return { value: result, result: { kind: "material" as const, id: materialId } };
   });
 }

@@ -28,9 +28,10 @@ test("games_catalog: a kliens által használt összes gameId-nek van katalógus
   }
 });
 
-test("gameQuizGeneratorService: üres validItems esetén nem deaktiválja a régi kvízeket", () => {
+// TG-P5a: a kapu szigorúbb lett — nemcsak üres, hanem bármely hiányos (nem teljes darabszámú) bank esetén sincs deaktiválás.
+test("gameQuizGeneratorService: hiányos (vagy üres) bank esetén nem deaktiválja a régi kvízeket", () => {
   const src = read("server/gameQuizGeneratorService.ts");
-  const guard = src.indexOf("validItems.length === 0");
+  const guard = src.indexOf("if (!bank.complete)");
   const deactivate = src.indexOf(".set({ isActive: false })");
   assert.ok(guard > -1 && deactivate > -1);
   assert.ok(guard < deactivate, "az üres-lista kapu a deaktiválás ELŐTT van");
