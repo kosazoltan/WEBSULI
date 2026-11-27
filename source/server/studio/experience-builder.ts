@@ -135,6 +135,11 @@ export type ExperienceBuildDeps = {
   previousSections?: ReadonlyArray<Lesson["sections"][number] | undefined>;
   /** Review #379: e fogalmak egységei nem vehetők át (forrás-helyesbítés) — egységenként, nem a teljes fejezetre. */
   reuseExcludedConceptIds?: ReadonlySet<string>;
+  /**
+   * P7B-TANITAS-MEGORZES: csak-bank javítás — a régi csomag a nyitómese-verziótól függetlenül átvehető, tétel-szintű hibái célzott cserét
+   * kapnak, csomag-szintű (régebbi szabály szerinti) eltérései tűrt örökség. RED: még nincs hatása.
+   */
+  keepLegacy?: boolean;
   reviewFeedback?: BankReviewFeedback[];
   /** Spec 2026-10-21-ciklus6 (review #357): a tulajdonos pontozási szabálya (a csomag rendszerpromptjába és hash-ébe kerül). */
   scoringRules?: string;

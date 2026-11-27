@@ -234,3 +234,60 @@ test("review #635/2: kvóta mellett a célzott csere ÚJ számítási hibája ja
     if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
   }
 });
+
+// P7B-TANITAS-MEGORZES: a csak-bank javítás (keepLegacy) a régi, hibátlan csomagot — bekapcsolt nyitómesénél is — érintetlenül hagyja.
+async function withOpener<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = process.env.STUDIO_LESSON_OPENER;
+  process.env.STUDIO_LESSON_OPENER = "on";
+  try { return await fn(); } finally { if (prev === undefined) delete process.env.STUDIO_LESSON_OPENER; else process.env.STUDIO_LESSON_OPENER = prev; }
+}
+async function legacyFirst() {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  // A nyitómese ELŐTT gyártott bank (a kapcsoló ki): a bankterv egységein nincs `opener`.
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  return { lesson, packets, first };
+}
+
+test("P7B: bekapcsolt nyitómesénél a keepLegacy a hibátlan régi bankot modellhívás nélkül, azonosítóival veszi át", async () => {
+  const { lesson, packets, first } = await legacyFirst();
+  let calls = 0;
+  const kept = await withOpener(() => buildLessonExperience(lesson, [], { previous: first, previousSections: lesson.sections, keepLegacy: true, call: async () => { calls++; return structuredClone(packets[0]); } }));
+  assert.equal(calls, 0, "nincs modellhívás");
+  assert.deepEqual(kept.quiz, first.quiz);
+  assert.deepEqual(kept.tasks, first.tasks);
+  let control = 0;
+  await withOpener(() => buildLessonExperience(lesson, [], { previous: first, previousSections: lesson.sections, call: async () => structuredClone(packets[control++ % 2]) }));
+  assert.equal(control, 2, "keepLegacy nélkül (szerzői javítás) a C döntés szerint újragyártódik");
+});
+
+test("P7B: bekapcsolt nyitómesénél a meta-hibás régi csomagban csak a kifogásolt tétel cserélődik, a másik fejezet érintetlen", async () => {
+  const { lesson, first } = await legacyFirst();
+  const dirty = structuredClone(first);
+  const victim = dirty.quiz.find(q => q.sectionIndex === 0)!;
+  victim.question = META;
+  const prompts: string[] = [];
+  const repaired = await withOpener(() => buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, keepLegacy: true,
+    call: async (_s, user) => { prompts.push(user); return { methods: [], tasks: [], quiz: [{ ...structuredClone(victim), question: PRACTICAL }], glossary: [] }; } }));
+  assert.equal(prompts.length, 1, "egy célzott hívás");
+  assert.equal(repaired.quiz.find(q => q.id === victim.id)?.question, PRACTICAL);
+  assert.deepEqual(repaired.quiz.filter(q => q.id !== victim.id), first.quiz.filter(q => q.id !== victim.id), "a többi kvíztétel és azonosító változatlan");
+  assert.deepEqual(repaired.tasks, first.tasks);
+});
+
+test("P7B: meta MELLETT érvénytelen kulcsú tétel — keepLegacy mellett egy célzott hívás mindkét tételre, a többi változatlan", async () => {
+  const { lesson, first } = await legacyFirst();
+  const dirty = structuredClone(first);
+  const [a, b] = dirty.quiz.filter(q => q.sectionIndex === 0);
+  a.question = META;
+  const fixedB = structuredClone(b);
+  b.correctIndex = b.options.length + 3;
+  const prompts: string[] = [];
+  const repaired = await withOpener(() => buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, keepLegacy: true,
+    call: async (_s, user) => { prompts.push(user); return { methods: [], tasks: [], quiz: [{ ...structuredClone(a), question: PRACTICAL }, fixedB], glossary: [] }; } }));
+  assert.equal(prompts.length, 1, "egy célzott hívás");
+  assert.match(prompts[0], new RegExp(a.id));
+  assert.match(prompts[0], new RegExp(b.id));
+  assert.deepEqual(repaired.quiz.filter(q => q.id !== a.id && q.id !== b.id), first.quiz.filter(q => q.id !== a.id && q.id !== b.id));
+});
+
