@@ -7,6 +7,6 @@ test("a job-beszúrás tranzakciós tanácsadó zárral és a zár alatti újrae
   const src = fs.readFileSync("server/storage.ts", "utf8");
   const body = src.slice(src.indexOf("async createImprovedHtmlFile"), src.indexOf("async getImprovedHtmlFile"));
   assert.match(body, /pg_advisory_xact_lock/u, "a foglalás a tananyag azonosítójára zárol");
-  assert.match(body, /status = 'processing'/u, "a zár alatt újraellenőrzi az aktív jobot");
+  assert.match(body, /improvedHtmlFiles\.status\} = 'processing'/u, "a zár alatt újraellenőrzi az aktív jobot");
   assert.match(body, /return null/u, "aktív jobnál nem szúr be újat");
 });

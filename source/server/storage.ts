@@ -185,7 +185,8 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
 
   // Improved files operations
-  createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile>;
+  /** IMPROVE-JOB-DUP: `null`, ha a tananyagra már fut javítás (atomikus foglalás). */
+  createImprovedHtmlFile(file: InsertImprovedHtmlFile, opts?: { staleAfterMs?: number }): Promise<ImprovedHtmlFile | null>;
   getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined>;
   getAllImprovedHtmlFiles(status?: string, originalFileId?: string): Promise<Omit<ImprovedHtmlFile, "content">[]>;
   getImprovedHtmlFileStatus(id: string): Promise<Pick<ImprovedHtmlFile, "id" | "status" | "title" | "contentType" | "createdAt" | "improvementNotes"> | undefined>;
@@ -1337,12 +1338,27 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== Improved Files Operations ====================
 
-  async createImprovedHtmlFile(file: InsertImprovedHtmlFile): Promise<ImprovedHtmlFile> {
-    const [improved] = await db
-      .insert(improvedHtmlFiles)
-      .values(file)
-      .returning();
-    return improved;
+  /**
+   * IMPROVE-JOB-DUP (review #640): a foglalás atomikus — tanácsadó zár a tananyag azonosítójára, a zár alatt újraellenőrzött
+   * aktív (`processing`) jobnál nincs beszúrás (`null`). A lejárt `processing` sor (szerver-újraindítás után beragadt job) a
+   * zár alatt hibára zárul, és az új job létrejön.
+   */
+  async createImprovedHtmlFile(file: InsertImprovedHtmlFile, opts: { staleAfterMs?: number } = {}): Promise<ImprovedHtmlFile | null> {
+    return db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${file.originalFileId}, 0))`);
+      const [active] = await tx.select({ id: improvedHtmlFiles.id, createdAt: improvedHtmlFiles.createdAt })
+        .from(improvedHtmlFiles)
+        .where(and(eq(improvedHtmlFiles.originalFileId, file.originalFileId), sql`${improvedHtmlFiles.status} = 'processing'`))
+        .for("update");
+      if (active) {
+        const stale = opts.staleAfterMs !== undefined && Date.now() - active.createdAt.getTime() > opts.staleAfterMs;
+        if (!stale) return null;
+        await tx.update(improvedHtmlFiles).set({ status: "error", improvementNotes: "Megszakadt feldolgozás (szerver újraindult vagy időtúllépés)." })
+          .where(eq(improvedHtmlFiles.id, active.id));
+      }
+      const [improved] = await tx.insert(improvedHtmlFiles).values(file).returning();
+      return improved;
+    });
   }
 
   async getImprovedHtmlFile(id: string): Promise<ImprovedHtmlFile | undefined> {
