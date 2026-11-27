@@ -81,11 +81,11 @@ test('resolveVerdict: helyi bizonyíték, PR-sor előtag-egyezéssel, idegen fej
   assert.equal(resolveVerdict({ head, texts: [`Független ellenőr ítélete: IGEN (fej: ${head.slice(0, 6)})`] }), null, '7 jegynél rövidebb hash nem elég');
 });
 
-test('verdictResult: IGEN → PASS, FELTÉTELLEL → WARN, NEM / hiány → FAIL érthető teendővel', () => {
+test('verdictResult: IGEN → PASS, FELTÉTELLEL / NEM → WARN (KAPU-LR-JELZES), hiány → FAIL érthető teendővel', () => {
   const h = 'c'.repeat(40);
   assert.equal(verdictResult({ verdict: 'IGEN', source: 's' }, h).status, STATUS.PASS);
   assert.equal(verdictResult({ verdict: 'IGEN, FELTÉTELLEL', source: 's' }, h).status, STATUS.WARN);
-  assert.equal(verdictResult({ verdict: 'NEM', source: 's' }, h).status, STATUS.FAIL);
+  assert.equal(verdictResult({ verdict: 'NEM', source: 's' }, h).status, STATUS.WARN);
   const none = verdictResult(null, h);
   assert.equal(none.status, STATUS.FAIL);
   assert.match(none.note, /record-review\.mjs --head c{12}/);
