@@ -126,9 +126,10 @@ test('a hatókör-táblázat minden sora indokolt, és az őr / workflow sora ne
   assert.ok(by('^scripts/qa/').mainScope.includes('^docs/specs/'), 'a three-phase-check a docs/specs-et olvassa');
 });
 
-test('decideMerge: hiányzó / NEM ítélet → FAIL; FELTÉTELLEL → WARN', () => {
+// KAPU-LR-JELZES (tulajdonosi döntés 2026-11-27): a NEM ítélet jelzés (WARN), a hiányzó ítélet (nem futott) bukás.
+test('decideMerge: hiányzó ítélet → FAIL; NEM és FELTÉTELLEL → WARN', () => {
   assert.equal(st(decideMerge(base({ verdict: null })), 'független'), STATUS.FAIL);
-  assert.equal(st(decideMerge(base({ verdict: { verdict: 'NEM', source: 'x' } })), 'független'), STATUS.FAIL);
+  assert.equal(st(decideMerge(base({ verdict: { verdict: 'NEM', source: 'x' } })), 'független'), STATUS.WARN);
   assert.equal(st(decideMerge(base({ verdict: { verdict: 'IGEN, FELTÉTELLEL', source: 'x' } })), 'független'), STATUS.WARN);
 });
 
@@ -229,7 +230,7 @@ test('V2: a main() lépés-összerakása (mergeSteps) az ítéletet a helyi bizo
   const ok = mergeSteps({ ...common, evidence: { head: HEAD, verdict: 'IGEN' } });
   assert.equal(st(ok, 'független ellenőr ítélete'), STATUS.PASS);
   assert.ok(!ok.some((r) => r.status === STATUS.FAIL && r.name !== 'külső (Gemini) ellenőr — második vélemény'), JSON.stringify(ok.filter((r) => r.status === STATUS.FAIL)));
-  assert.equal(st(mergeSteps({ ...common, evidence: { head: HEAD, verdict: 'NEM' } }), 'független ellenőr ítélete'), STATUS.FAIL);
+  assert.equal(st(mergeSteps({ ...common, evidence: { head: HEAD, verdict: 'NEM' } }), 'független ellenőr ítélete'), STATUS.WARN);
 });
 
 test('W1: szigorú mód (blindReview.exclusive) a mergeSteps-en át — sima record-review rekord FAIL, a futtató rekordja PASS', () => {

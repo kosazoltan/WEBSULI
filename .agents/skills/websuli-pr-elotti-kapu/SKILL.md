@@ -1,6 +1,6 @@
 ---
 name: websuli-pr-elotti-kapu
-description: WEBSULI PR előtti kapu (helyi, kötelező). Töltsd be automatikusan a gh pr create ELŐTT - a check-quality-gates hook zöld pre-pr bizonyíték nélkül megtagadja a PR megnyitását. Előfeltétel - a helyi GPU-ellenőr (local-review.mjs) IGEN ítélete az aktuális fejre. Parancs - npm run gate:pr -- --body-file <leírás.md>.
+description: WEBSULI PR előtti kapu (helyi, kötelező). Töltsd be automatikusan a gh pr create ELŐTT - a check-quality-gates hook zöld pre-pr bizonyíték nélkül megtagadja a PR megnyitását. Előfeltétel - a helyi GPU-ellenőr (local-review.mjs) lefutott az aktuális fejre (NEM ítélet: jelzés, a leleteket a PR-ben igazold / cáfold). Parancs - npm run gate:pr -- --body-file <leírás.md>.
 ---
 
 # PR előtti kapu
@@ -47,7 +47,9 @@ cd source && node --import tsx scripts/run-e2e-tests.ts --config playwright.gate
 
 - Zöld → `pre-pr-<fej>.json` ÉS `pre-push-<fej>.json` (a push is mehet).
 - `PR-leírás sablon FAIL`: pótold a hiányzó részt (a hiba megnevezi).
-- `független ellenőr ítélete FAIL`: nincs ítélet / NEM / más fejre szól — futtasd újra a `local-review.mjs`-t az új fejre (ingyenes, helyi).
+- `független ellenőr ítélete FAIL`: nincs ítélet / más fejre szól — futtasd újra a `local-review.mjs`-t az új fejre (ingyenes, helyi).
+- `független ellenőr ítélete WARN` NEM ítélettel (KAPU-LR-JELZES, 2026-11-27): nem megállító — a high leleteket a PR-leírásban /
+  -szálban igazold (javítás) vagy cáfold (kód / teszt hivatkozással); új ellenőrkör nem kötelező.
 - `böngészős út FAIL … nincs Docker`: a kötelező böngészős út nem hagyható ki csendben; indítsd a Dockert, vagy jelezd a tulajdonosnak
   (NOT DONE + ok + kockázat).
 - `DB-integrációs teszt NOT RUN`: Docker nélkül; `--strict` mellett bukás. A CI DB-jobja futtatja, de a kockázatot a PR-ban jelezd.

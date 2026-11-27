@@ -366,7 +366,9 @@ export function transferReviewEvidence({ evDir, head, base = 'origin/main', exec
 export function verdictResult(v, head) {
   const how = `node scripts/qa/gates/record-review.mjs --head ${head.slice(0, 12)} --verdict IGEN --report <jelentés.md>`;
   if (!v) return { status: STATUS.FAIL, note: `nincs független ellenőr-ítélet a ${head.slice(0, 12)} fejre — futtasd: node scripts/qa/gates/local-review.mjs (helyi GPU-ellenőr; tartalék: ${how})` };
-  if (v.verdict === 'NEM') return { status: STATUS.FAIL, note: `a független ellenőr ítélete NEM (${v.source}) — javítsd a blokkoló leleteket, és futtasd újra a local-review.mjs-t az új fejre` };
+  // KAPU-LR-JELZES (tulajdonosi döntés 2026-11-27): a helyi ellenőr NEM ítélete jelzés — a leleteket a PR-szálakban / -leírásban kell
+  // kezelni (a négy külső ellenőr és a CI után a merge-kapu szál-ellenőrzése a döntő). A hiányzó ítélet (nem futott) bukás marad.
+  if (v.verdict === 'NEM') return { status: STATUS.WARN, note: `a független ellenőr ítélete NEM (${v.source}) — jelzés: a high leleteket a PR-leírásban / -szálban igazold (javítás) vagy cáfold (kód / teszt hivatkozással); új ellenőrkör nem kötelező` };
   if (v.verdict === 'IGEN, FELTÉTELLEL') return { status: STATUS.WARN, note: `IGEN, FELTÉTELLEL (${v.source}) — a feltételek jegyre / a PR-leírásba kerüljenek` };
   return { status: STATUS.PASS, note: `IGEN (${v.source})` };
 }
