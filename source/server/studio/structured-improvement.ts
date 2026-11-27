@@ -86,7 +86,7 @@ async function loadSource(mapId: string) {
 }
 
 /** Read-only original/source; paid generation writes only the separate candidate. */
-export async function generateStructuredImprovement(fileId: string, instruction?: string): Promise<LessonRepair> {
+export async function generateStructuredImprovement(fileId: string, instruction?: string, opts: { bankOnly?: boolean } = {}): Promise<LessonRepair> {
   await workflowPhase("source");
   const { db } = await import("../db");
   const [row] = await db.select().from(lessons).where(eq(lessons.htmlFileId, fileId));
@@ -98,7 +98,8 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   // docs/specs/2026-10-16-egy-futas.md (S4a/S4b): minden szerep EGY beszélgetésben (Opus 5.5 medium, tartalék GPT-6.1 Sol).
   const conversationCall = await singleRunRepairCall();
   const call: RepairCall = (step, system, user, role = requireRoleForStep(step)) => conversationCall(step, system, user, role);
-  const ownerInstruction = normalizeOwnerInstruction(instruction);
+  // TG-P7b: a csak-bank javításnak nincs tanári utasítása (a tanítás érintetlen).
+  const ownerInstruction = opts.bankOnly ? undefined : normalizeOwnerInstruction(instruction);
   const { sourceFiles, ...hashedSource } = source;
   const transcript = Array.isArray(sourceFiles) && sourceFiles.some((f) => (f as { kind?: string } | null)?.kind === "image");
   // Spec 2026-11-03-javitas-bank-megorzes: ugyanazok a bank-minőségkapuk, mint a gyártásban (friss, kulcsmentes beszélgetésben).
@@ -108,7 +109,10 @@ export async function generateStructuredImprovement(fileId: string, instruction?
     (sectionIndex) => teachingTextOf(lesson.sections[sectionIndex]), (message) => logger.info(`[STUDIO] Javítás: ${message}`));
   // Review #379: a lecke utolsó írása óta módosult térképfogalmak egysége nem vehető át (minden fogalomíró út frissíti az updatedAt-et).
   const staleConceptIds = conceptsChangedSince(await db.select({ localId: kmConcepts.localId, updatedAt: kmConcepts.updatedAt }).from(kmConcepts).where(eq(kmConcepts.mapId, row.mapId)), row.updatedAt);
-  const { candidate, review, owner, staleWarnings, lektorRemoved } = await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
+  const built = opts.bankOnly ? await buildPracticeBankRepair(original, hashedSource, call, { gates, staleConceptIds })
+    : await buildStructuredImprovement(original, hashedSource, call, ownerInstruction, undefined, { transcript, gates, staleConceptIds });
+  const { candidate, review, owner, lektorRemoved } = built;
+  const staleWarnings: StaleWarning[] | undefined = "staleWarnings" in built ? (built.staleWarnings as StaleWarning[] | undefined) : undefined;
   // Vercel-review #530: a séma (KI ágon) eldobja a jelölőt — a lezárás a tárolt lecke jelölőjét írja vissza a jelöltre (előnézet = alkalmazott).
   const parseArtefact = (): LessonRepair => {
   return modelLessonRepairSchema(sourceVisualsEnabled()).parse({
@@ -257,9 +261,15 @@ async function buildStructuredImprovementScoped(original: Lesson, source: Repair
   return { ...await finishStructuredImprovement(original, candidate, corrected, call, progress, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds }), owner, ...(staleWarnings.length ? { staleWarnings } : {}) };
 }
 
-/** TG-P7b: csak-bank gyakorlati javítás. RED: a régi út (a szerző újraírja a tanítást). */
-export function buildPracticeBankRepair(original: Lesson, source: RepairSource, call: RepairCall, opts: RepairBankOptions = {}) {
-  return buildStructuredImprovement(original, source, call, undefined, undefined, opts);
+/**
+ * TG-P7b: csak-bank gyakorlati javítás — a tanítás érintetlen (nincs szerzői / pedagógusi hívás), a bankok a TG-P7a szerint
+ * épülnek újra: a hibátlan csomag átvéve, a csak meta-hibás csomagban célzott tételcsere; a lektor és a záró kapuk változatlanok.
+ */
+export async function buildPracticeBankRepair(original: Lesson, source: RepairSource, call: RepairCall, opts: RepairBankOptions = {}) {
+  // A munkafolyamat fázissorrendje (source → author → banks …) marad; a szerzői fázis itt modellhívás nélküli (a tanítás az eredeti).
+  await workflowPhase("author");
+  const owner: RepairOwner = { corrections: [] };
+  return { ...await finishStructuredImprovement(original, structuredClone(original), source, call, undefined, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds }), owner };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */

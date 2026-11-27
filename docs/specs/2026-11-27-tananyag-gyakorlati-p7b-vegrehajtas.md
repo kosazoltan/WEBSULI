@@ -19,4 +19,8 @@ kifogásolt banktételt cseréli — a meglévő előnézet → jóváhagyás �
 3. Ellenőrzés: új + érintett egységtesztek (elakadas-r1, lesson-fusion-repair, repair-bank-reuse, improve*), tsc, eslint.
    Élő futtatás (a 11 lecke) csak az élesítés után, gyártásmentes időben, jóváhagyással (előnézet → alkalmazás).
 
-Állapot: tervezve — következő: RED.
+3b. Mért: RED 2 bukás (a régi út a szerzőt hívta — a bankválasz érvénytelen tanítás lett; bekötés hiányzott); utána
+   practice-bank-repair 2/0, 29 érintett tesztfájl (elakadas, fusion-repair, repair, improve, structured, variety, flair, bank-schema,
+   practice, s7-*) 217/0; tsc, eslint OK.
+
+Állapot: kész — következő: kapulánc a TG-P7a beolvadása után; élesítés után a 11 meta-tételes lecke előnézetes javítása.
