@@ -22,26 +22,40 @@ function verifiedTlsClient(url: string): pg.Client {
 }
 
 /**
- * PRACTICE-AUDIT-SNAPSHOT (review #640): a csak olvasó tranzakció minden lekérdezése EGY pillanatképet lát (REPEATABLE READ) —
- * a több SELECT-es mérés nem keverhet a közben közzétett adattal. Csak olvasó REPEATABLE READ nem kap sorosítási hibát.
+ * PRACTICE-AUDIT-SNAPSHOT (review #640): a több SELECT-es mérés kérhet EGY pillanatképet (REPEATABLE READ, `snapshot: true`) —
+ * nem keverhet a közben közzétett adattal. Review #641: az alapértelmezett marad a READ COMMITTED (`READ_ONLY_BEGIN_DEFAULT`),
+ * mert a hosszú, sokat számoló visszajátszó szkriptek pillanatképe a VACUUM-ot tartaná vissza. A pillanatképes hívó csak olvas a
+ * tranzakcióban, a feldolgozás utána jön.
  */
 export const READ_ONLY_BEGIN = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY";
+export const READ_ONLY_BEGIN_DEFAULT = "BEGIN READ ONLY";
+
+type Query = <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>;
+type QueryClient = { query(sql: string, params?: unknown[]): Promise<{ rows: unknown[] }> };
+
+/** A tranzakció menete (tesztelhető, kapcsolat nélkül): nyitás → munka → ROLLBACK, mindig. */
+export async function runReadOnly<T>(client: QueryClient, work: (query: Query) => Promise<T>, opts: { snapshot?: boolean } = {}): Promise<T> {
+  await client.query(opts.snapshot ? READ_ONLY_BEGIN : READ_ONLY_BEGIN_DEFAULT);
+  try {
+    return await work((async (sql: string, params?: unknown[]) => (await client.query(sql, params)).rows) as Query);
+  } finally {
+    await client.query("ROLLBACK").catch(() => undefined);
+  }
+}
 
 /**
  * Review #187: a mérő/kinyerő scriptek közös, CSAK OLVASÓ kapcsolata — ellenőrzött TLS-sel (a tanúsítvány-ellenőrzés nem
  * kapcsolható ki csendben; a `DATABASE_CA_CERT` saját CA-t ad). Mérve 2026-10-05: az éles (Neon) DB ellenőrzött TLS-sel működik.
- * Minden lekérdezés egy csak olvasó, REPEATABLE READ tranzakcióban fut (`READ_ONLY_BEGIN`), a végén ROLLBACK.
+ * Minden lekérdezés csak olvasó tranzakcióban fut (`snapshot: true` → REPEATABLE READ pillanatkép), a végén ROLLBACK.
  */
-export async function withReadOnlyDb<T>(work: (query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
+export async function withReadOnlyDb<T>(work: (query: Query) => Promise<T>, opts: { snapshot?: boolean } = {}): Promise<T> {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL nincs beállítva");
   const client = verifiedTlsClient(url);
   await client.connect();
   try {
-    await client.query(READ_ONLY_BEGIN);
-    return await work(async (sql, params) => (await client.query(sql, params as unknown[] | undefined)).rows);
+    return await runReadOnly(client as unknown as QueryClient, work, opts);
   } finally {
-    await client.query("ROLLBACK").catch(() => undefined);
     await client.end();
   }
 }

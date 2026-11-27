@@ -3,7 +3,7 @@
 // Futtatás (source/ mappából):
 //   npx tsx scripts/measure/practice-audit.mts --lesson <lecke.json>      — Lesson JSON (experience bankkal)
 //   npx tsx scripts/measure/practice-audit.mts --html <lecke.html>        — fúziós HTML (websuli-lesson-data JSON-bank)
-//   npx tsx scripts/measure/practice-audit.mts --db [--out <fájl.json>]   — az éles leckék + az aktív játékkvíz-sorok (BEGIN READ ONLY)
+//   npx tsx scripts/measure/practice-audit.mts --db [--out <fájl.json>]   — az éles leckék + az aktív játékkvíz-sorok (csak olvasó, REPEATABLE READ pillanatkép)
 import { readFileSync, writeFileSync } from "node:fs";
 import { auditExperience, classifyQuizItem, PRACTICE_POLICY_VERSION, type PracticeKind } from "../../shared/practice-policy";
 import { readHtmlLessonData } from "../../shared/lesson-html-data";
@@ -22,7 +22,8 @@ function summary(e: Exp) {
 
 async function fromDb() {
   const { withReadOnlyDb } = await import("../lib/read-only-db");
-  return withReadOnlyDb(async (query) => {
+  // Review #641: a pillanatkép csak a két olvasásig él (a besorolás utána, a tranzakción kívül fut — nem tartja vissza a VACUUM-ot).
+  const { lessons, games } = await withReadOnlyDb(async (query) => {
     const lessons = await query<{ id: string; title: string | null; json: { title?: string; experience?: Exp } }>(
       // review #625: anyagonként csak a legutóbbi PUBLIKÁLT leckeváltozat (a régi / nem publikált verziók nem torzítják az arányt).
       "SELECT DISTINCT ON (coalesce(l.html_file_id, l.id)) l.id, h.title, l.json FROM lessons l " +
@@ -31,6 +32,9 @@ async function fromDb() {
     const games = await query<{ id: string; prompt: string; options: string[]; source_material_id: string | null; lesson_id: string | null; title: string | null }>(
       "SELECT g.id, g.prompt, g.options, g.source_material_id, g.lesson_id, h.title FROM game_quiz_items g " +
       "LEFT JOIN html_files h ON h.id = g.source_material_id WHERE g.is_active ORDER BY g.source_material_id, g.id");
+    return { lessons, games };
+  }, { snapshot: true });
+  {
     const lessonRows = lessons.filter((l) => l.json?.experience?.quiz).map((l) => ({
       id: l.id, title: l.title ?? l.json.title ?? null, ...summary(l.json.experience!) }));
     const byMaterial = new Map<string, { title: string | null; counts: Record<PracticeKind, number>; meta: Array<{ id: string; prompt: string }> }>();
@@ -50,7 +54,7 @@ async function fromDb() {
         rows: lessonRows.map(({ items: _items, ...rest }) => rest) },
       games: { n: games.length, counts: sum([...byMaterial.values()]), materials: [...byMaterial].map(([id, r]) => ({ id, ...r })) },
     };
-  });
+  }
 }
 
 let report: unknown;
