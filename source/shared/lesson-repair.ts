@@ -39,6 +39,15 @@ export type LessonRepair = z.infer<typeof lessonRepairSchema>;
  * egy BE állapotban mentett, új fajtájú ábrát tartalmazó lecke javítása a kapcsoló KI-re állítása után sem bukhat el a pillanatképen
  * (a fizetett javítás és lektorálás UTÁN). Régi leckére a teljes séma a bővítés előttivel azonos eredményt ad (őr: séma-próba).
  */
+/**
+ * Review #638: a javítás-artefaktum lezáró sémája. A csak-bank javítás (TG-P7b) jelöltjének tanítása TÁROLT adat, nem modellkimenet —
+ * a teljes olvasási séma zárja (a kikapcsolt forrásvizuál-kapcsoló modell-sémája a `sourceVisualId`-t levágná, az új ábrafajtát
+ * elutasítaná). A szerzői (modell-) ág sémája változatlan.
+ */
+export function repairArtefactSchema(bankOnly: boolean, sourceVisuals: boolean): z.ZodType<LessonRepair, z.ZodTypeDef, unknown> {
+  return bankOnly ? lessonRepairSchema : modelLessonRepairSchema(sourceVisuals);
+}
+
 export function modelLessonRepairSchema(sourceVisuals: boolean): z.ZodType<LessonRepair, z.ZodTypeDef, unknown> {
   return sourceVisuals ? lessonRepairSchema : lessonRepairSchema.extend({ candidate: modelLessonSchema(false) });
 }

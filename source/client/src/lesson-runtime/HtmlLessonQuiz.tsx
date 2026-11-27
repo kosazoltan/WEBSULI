@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import type { LessonExperience } from "@shared/lesson-experience";
 import { experienceRoundSizes } from "@shared/lesson-experience";
-import { quizOptionIndices, sampleIds, scoreSummary } from "@shared/lesson-experience-score";
+import { quizOptionIndices, scoreSummary } from "@shared/lesson-experience-score";
+import { sampleQuizIds } from "@shared/practice-sampling";
 import { FinishPracticeButton } from "./FinishPracticeButton";
 import { VerdictFeedback } from "./VerdictFeedback";
 
@@ -14,7 +15,7 @@ export function HtmlLessonQuiz({ experience, material }: { experience: LessonExp
   const bank = experience.quiz;
   const count = experienceRoundSizes(experience).quizRound;
   const key = `websuli:html-quiz:v1:${material}:${JSON.stringify(bank)}`;
-  const fresh = (size = count): Round => ({ ids: sampleIds(bank, size), picks: {}, started: Date.now(), finished: null });
+  const fresh = (size = count): Round => ({ ids: sampleQuizIds(bank, size), picks: {}, started: Date.now(), finished: null });
   const [storageError, setStorageError] = useState(false);
   const [round, setRound] = useState<Round>(() => {
     try {

@@ -6,6 +6,7 @@ import { lessonSchema } from "../../shared/lesson-schema";
 import { experienceRoundSizes, LESSON_METHOD_VERSION } from "../../shared/lesson-experience";
 import { selectPracticeQuestions, reviewState, type PracticeView, type AttemptResult, type QuestionReview } from "../../shared/lesson-attempt";
 import { canonicalLessonQuiz } from "../studio/canonical-quiz-bank";
+import { isApplyQuiz } from "../../shared/practice-sampling";
 import { refersToOtherOptions } from "../../shared/option-order";
 import { computeCoupon } from "../../shared/reward-policy";
 import { loadRewardPolicy } from "./store";
@@ -87,7 +88,7 @@ export async function beginPractice(userId: string, lessonId: string, now = new 
     if (active && active.bankVersion === version && now.getTime() - active.startedAt.getTime() < DAY) return viewOf(active);
     if (active) await tx.update(lessonAttempts).set({ status: "superseded", finishedAt: now }).where(eq(lessonAttempts.id, active.id));
     const previous = await tx.select().from(lessonAttempts).where(and(eq(lessonAttempts.userId, userId), eq(lessonAttempts.lessonId, lessonId), eq(lessonAttempts.status, "completed"))).orderBy(desc(lessonAttempts.finishedAt)).limit(200);
-    const questions = selectPracticeQuestions(bank, count, historyOf(previous), now.getTime()).map(q => ({
+    const questions = selectPracticeQuestions(bank, count, historyOf(previous), now.getTime(), isApplyQuiz).map(q => ({
       id: q.id, questionId: q.questionId, questionVersion: q.questionVersion, prompt: q.prompt, options: q.options,
       correctIndex: q.correctIndex, feedbackPerOption: q.feedbackPerOption, coversConceptIds: q.coversConceptIds,
     }));

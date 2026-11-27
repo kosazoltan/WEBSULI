@@ -57,14 +57,26 @@ export default function FileCard({
     setGenerating(true);
     try {
       // apiRequest: a CSRF-tokent ez teszi rá (SEC-107).
-      const data = await apiRequest<{ inserted: number; skipped: number }>(
+      const data = await apiRequest<{ inserted: number; skipped: number; errors?: string[]; canonical?: { lessonId: string; items: number } }>(
         "POST",
         `/api/admin/materials/${id}/generate-quiz`,
         { count: 10 },
+        // Review #634: az első válasz + egy célzott pótlás két modellhívás — a 60 s alapkeret lejárhat, mielőtt a szerver végez.
+        { timeout: 180_000 },
       );
       // A material-quizzes cache invalidálása — a játékok a friss tételeket
       // kapják, nem kell manuális oldal-frissítés.
       void queryClient.invalidateQueries({ queryKey: ["/api/games/material-quizzes"] });
+      // TG-P5a: hiányos / tanítható tartalom nélküli anyagnál a régi készlet marad — ezt hibaként mutatjuk, nem „0 tétel mentve”-ként.
+      // TG-P5b: Stúdió-leckénél a játékok a lecke saját bankját használják — nincs külön generálás.
+      if (data.canonical) {
+        toast({ title: "Stúdió-lecke: saját kvízbank", description: `A játékok a lecke ellenőrzött bankját használják (${data.canonical.items} tétel) — külön generálás nem kell.` });
+        return;
+      }
+      if (data.inserted === 0 && data.errors?.length) {
+        toast({ variant: "destructive", title: "Kvíz-generálás: nincs csere", description: data.errors[0] });
+        return;
+      }
       toast({
         title: "Kvíz-tételek generálva",
         description: `${data.inserted} tétel mentve. ${data.skipped > 0 ? `Kihagyva: ${data.skipped}.` : ""}`,
