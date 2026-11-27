@@ -34,27 +34,25 @@ async function fromDb() {
       "LEFT JOIN html_files h ON h.id = g.source_material_id WHERE g.is_active ORDER BY g.source_material_id, g.id");
     return { lessons, games };
   }, { snapshot: true });
-  {
-    const lessonRows = lessons.filter((l) => l.json?.experience?.quiz).map((l) => ({
-      id: l.id, title: l.title ?? l.json.title ?? null, ...summary(l.json.experience!) }));
-    const byMaterial = new Map<string, { title: string | null; counts: Record<PracticeKind, number>; meta: Array<{ id: string; prompt: string }> }>();
-    for (const g of games) {
-      const key = g.source_material_id ?? g.lesson_id ?? "—";
-      const row = byMaterial.get(key) ?? { title: g.title, counts: { alkalmazas: 0, fogalmi: 0, meta: 0, bizonytalan: 0 }, meta: [] };
-      const v = classifyQuizItem({ question: g.prompt, options: g.options });
-      row.counts[v.kind]++;
-      if (v.kind === "meta") row.meta.push({ id: g.id, prompt: g.prompt });
-      byMaterial.set(key, row);
-    }
-    const sum = (rows: Array<{ counts: Record<PracticeKind, number> }>) =>
-      rows.reduce((s, r) => { for (const k of Object.keys(s) as PracticeKind[]) s[k] += r.counts[k]; return s; }, { alkalmazas: 0, fogalmi: 0, meta: 0, bizonytalan: 0 });
-    return {
-      lessons: { n: lessonRows.length, quiz: sum(lessonRows.map((l) => l.quiz)), tasks: sum(lessonRows.map((l) => l.tasks)),
-        status: lessonRows.reduce((s, l) => ({ ...s, [l.quiz.status]: (s[l.quiz.status] ?? 0) + 1 }), {} as Record<string, number>),
-        rows: lessonRows.map(({ items: _items, ...rest }) => rest) },
-      games: { n: games.length, counts: sum([...byMaterial.values()]), materials: [...byMaterial].map(([id, r]) => ({ id, ...r })) },
-    };
+  const lessonRows = lessons.filter((l) => l.json?.experience?.quiz).map((l) => ({
+    id: l.id, title: l.title ?? l.json.title ?? null, ...summary(l.json.experience!) }));
+  const byMaterial = new Map<string, { title: string | null; counts: Record<PracticeKind, number>; meta: Array<{ id: string; prompt: string }> }>();
+  for (const g of games) {
+    const key = g.source_material_id ?? g.lesson_id ?? "—";
+    const row = byMaterial.get(key) ?? { title: g.title, counts: { alkalmazas: 0, fogalmi: 0, meta: 0, bizonytalan: 0 }, meta: [] };
+    const v = classifyQuizItem({ question: g.prompt, options: g.options });
+    row.counts[v.kind]++;
+    if (v.kind === "meta") row.meta.push({ id: g.id, prompt: g.prompt });
+    byMaterial.set(key, row);
   }
+  const sum = (rows: Array<{ counts: Record<PracticeKind, number> }>) =>
+    rows.reduce((s, r) => { for (const k of Object.keys(s) as PracticeKind[]) s[k] += r.counts[k]; return s; }, { alkalmazas: 0, fogalmi: 0, meta: 0, bizonytalan: 0 });
+  return {
+    lessons: { n: lessonRows.length, quiz: sum(lessonRows.map((l) => l.quiz)), tasks: sum(lessonRows.map((l) => l.tasks)),
+      status: lessonRows.reduce((s, l) => ({ ...s, [l.quiz.status]: (s[l.quiz.status] ?? 0) + 1 }), {} as Record<string, number>),
+      rows: lessonRows.map(({ items: _items, ...rest }) => rest) },
+    games: { n: games.length, counts: sum([...byMaterial.values()]), materials: [...byMaterial].map(([id, r]) => ({ id, ...r })) },
+  };
 }
 
 let report: unknown;
