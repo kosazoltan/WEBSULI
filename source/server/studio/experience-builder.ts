@@ -29,7 +29,7 @@ import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-
 import { calibrateRubric, retainTightened, retainTightenedPhrases } from "../../shared/answer-key-calibrate";
 import type { QuizBlindItem } from "./quiz-blind-check";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { practiceMetaProblems, practiceQuotaEnabled, practiceQuotaProblems } from "../../shared/practice-policy";
+import { isPracticeQuotaProblem, practiceMetaProblems, practiceQuotaEnabled, practiceQuotaProblems } from "../../shared/practice-policy";
 
 /**
  * Spec 2026-10-19-eroforras-s3a: a bankkérés ÁLLANDÓ előtagja (szerepkészség + módszertan + válaszszabályok, ≈ 4 000 token). A bank
@@ -810,6 +810,11 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       const removalAttempt = lastAttempt || stuck;
       const arithmeticOnly = issues.length > 0 && issues.every(i => /hibás számítás/.test(i));
       // Spec 2026-09-30 (U2, H52): nem néma figyelmeztetés — nyitott lelet, amelyet a kapu kivehető tételként kezel (limit-tábla).
+      // Élő hiba d241d7fa (TG-P4b): ha az utolsó kísérlet után CSAK a gyakorlati arány hiányzik (esetleg aritmetikai lelettel), a csomag
+      // átmegy nyitott leletként — egyetlen hiányzó alkalmazó tétel nem állíthatja meg a teljes leckét (a végkapu méri és jelzi: P4c).
+      const quotaSoft = issues.length > 0 && issues.some(isPracticeQuotaProblem) && issues.every(i => isPracticeQuotaProblem(i) || /hibás számítás/.test(i));
+      if (parsed?.success && lastAttempt && quotaSoft && !arithmeticOnly && issues.some(i => /hibás számítás/.test(i))) openIssues = issues.filter(i => /hibás számítás/.test(i));
+      if (parsed?.success && lastAttempt && quotaSoft) deps.onToolFix?.("practice-quota", issues.filter(isPracticeQuotaProblem).map(i => `${unit.sectionIndex + 1}. fejezet — nyitott lelet (átengedve): ${i}`));
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
       const quotaAndValidate = (p: Packet) => {
@@ -826,7 +831,7 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
       if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
       else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
-      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly))) packet = parsed!.data;
+      if (parsed?.success && (!issues.length || (lastAttempt && (arithmeticOnly || quotaSoft)))) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
       else {

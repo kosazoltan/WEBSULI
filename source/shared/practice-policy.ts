@@ -236,3 +236,6 @@ export function finalPracticeReport(e: ExperienceLike | null | undefined): Final
   const metaProblems = [...audit.quiz.items, ...audit.tasks.items].filter((i) => i.kind === "meta").map((i) => `${i.id}: ${i.reason} — a kiadott bankban nem lehet a feladatlapra / pontozásra kérdező tétel`);
   return { report: { version: audit.version, quiz: short(audit.quiz), tasks: short(audit.tasks) }, notes, metaProblems };
 }
+
+/** Élő hiba d241d7fa: a `practiceQuotaProblems` sora (csomagszintű arányhiány) — az utolsó kísérletnél nem állít meg, jelzés lesz. */
+export const isPracticeQuotaProblem = (issue: string): boolean => /^(?:quiz|tasks): \d+ tételből \d+ igazolt alkalmazás; /u.test(issue);

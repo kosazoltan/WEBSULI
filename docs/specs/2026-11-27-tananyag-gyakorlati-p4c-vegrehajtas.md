@@ -19,4 +19,10 @@ látszik a jobon, és egy lektori javítás által visszacsempészett meta-téte
    már kapuz; a megállítás bekapcsolása mért éles adatok után külön döntés.
 4. Ellenőrzés: practice-policy + single-run-engine + bank-* tesztek, tsc, lint.
 
+5. Élő hiba (2026-11-27 01:45, tulajdonosi gyártás `d241d7fa`): a P4b csomagkvóta kemény kapuként megállította a leckét
+   („1. fejezet … quiz: 16 tételből 9 igazolt alkalmazás; legalább 10 kell” a javító kör után is). Javítás: ha az utolsó kísérlet
+   után CSAK az arány hiányzik (esetleg aritmetikai lelettel), a csomag nyitott leletként átmegy (`onToolFix("practice-quota")`),
+   a végkapu méri és jelzi. RED: `tests/practice-policy.test.ts` „élő hiba (d241d7fa) …”. A kapcsolót a javítás élesítéséig
+   kikapcsoltuk (Render).
+
 Nem cél: a javítójelölt (structured-improvement) kapuja — PR 7; a tanulói kör mintavétele — PR 6.
