@@ -27,7 +27,7 @@ export function reviewState(history: QuestionReview[]) {
   const days = REVIEW_DAYS[Math.min(Math.max(streak - 1, 0), REVIEW_DAYS.length - 1)];
   return { latest, streak, dueAt: latest ? latest.at + days * DAY : 0 };
 }
-export function selectPracticeQuestions<T extends { id: string }>(bank: T[], count: number, history: Record<string, QuestionReview[]>, now: number): T[] {
+export function selectPracticeQuestions<T extends { id: string }>(bank: T[], count: number, history: Record<string, QuestionReview[]>, now: number, _isApply?: (q: T) => boolean): T[] {
   const ranked = bank.map((q, index) => {
     const { latest, dueAt } = reviewState(history[q.id] ?? []);
     const priority = !latest ? 0 : !latest.correct || latest.usedHint ? 1 : dueAt <= now ? 2 : 3;
