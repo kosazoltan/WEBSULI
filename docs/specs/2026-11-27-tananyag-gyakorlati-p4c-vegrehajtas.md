@@ -11,11 +11,11 @@ látszik a jobon, és egy lektori javítás által visszacsempészett meta-téte
    (`auditExperience`), tételazonosító-lista nélküli rövid jelentés; nem teljesülő sávnál látható minőségi jelzés
    (`practice_low` / `practice_high`, bankonként), fogalompár által korlátozott banknál `practice_limited` (tájékoztató);
    meta-tételnél a tétel azonosítója a hibában.
-2. Bukó teszt (`tests/single-run-engine.test.ts`): a teljes futás közzétett jobja tartalmazza a `practiceAudit`-ot (szabályverzióval);
-   `STUDIO_PRACTICE_QUOTA=on` mellett a végleges bankba került meta-tétel a végkapun megállítja a közzétételt (pontos okkal),
-   kikapcsolva nem (csak jelzés).
+2. Bukó teszt (`tests/single-run-engine.test.ts`): a teljes futás közzétett jobja tartalmazza a `practiceAudit`-ot
+   (szabályverzióval, bankonként). A meta-tétel végkapus megállítását a `finalPracticeReport().metaProblems` unit-tesztje és a
+   `finalProblems` bekötése fedi (a teszt-forgatókönyvben a csomagkapu a meta-tételt már az átvételkor kiszűri).
 3. Kód: `shared/practice-policy.ts` `finalPracticeReport`; `server/studio/single-run/engine.ts` végkapu: meta → `finalProblems`
-   (csak bekapcsolt kapcsolónál), jelentés + jelzés a `done` kimenetbe. Az arány a végkapun NEM állít meg (jelzés) — a csomagkvóta
+   (csak bekapcsolt kapcsolónál), jelentés a `done` kimenetbe (mindig), látható jelzés a kapcsoló mellett (KI mellett a kimenet változatlan). Az arány a végkapun NEM állít meg (jelzés) — a csomagkvóta
    már kapuz; a megállítás bekapcsolása mért éles adatok után külön döntés.
 4. Ellenőrzés: practice-policy + single-run-engine + bank-* tesztek, tsc, lint.
 

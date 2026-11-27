@@ -207,3 +207,32 @@ export function auditExperience(e: ExperienceLike): { version: string; quiz: Ban
     tasks: bank(e.tasks.map((x, i) => ({ id: x.id ?? `tasks[${i}]`, verdict: classifyOpenTask(x) })), 0),
   };
 }
+
+/** TG-P4c: a végleges bank rövid jelentése (a job kimenetébe; tételazonosító-lista nélkül). */
+export type PracticeBankReport = Pick<BankAudit, "total" | "counts" | "status"> & { lower: number; upper: number; limited: boolean };
+export type FinalPracticeReport = {
+  report: { version: string; quiz: PracticeBankReport; tasks: PracticeBankReport };
+  /** Látható minőségi jelzések (`qualityNotes`): sáv alatt / felett, fogalompár által korlátozott bank (tájékoztató). */
+  notes: Array<{ reason: "practice_low" | "practice_high" | "practice_limited"; note: string }>;
+  /** A végleges bankba került meta-tételek (`<azonosító>: <ok>`) — a kapcsoló mellett a végkapu ezen megáll. */
+  metaProblems: string[];
+};
+
+/**
+ * TG-P4c: a VÉGLEGES (tartalékos kivétel, vakellenőrzés, lektori javítás és összeillesztés utáni) bank mérése — a csomagkapu (P4a/P4b)
+ * az átvételt kapuzza, ez a kiadott leckét. Bankonként külön (a nyílt bank aránya külön teljesítendő).
+ */
+export function finalPracticeReport(e: ExperienceLike | null | undefined): FinalPracticeReport | null {
+  if (!e) return null;
+  const audit = auditExperience(e);
+  const short = (b: BankAudit): PracticeBankReport => ({ total: b.total, counts: b.counts, status: b.status, lower: b.target.lower, upper: b.target.upper, limited: b.target.limited });
+  const notes: FinalPracticeReport["notes"] = [];
+  for (const [label, b] of [["kvíz", audit.quiz], ["nyílt feladat", audit.tasks]] as const) {
+    const pct = b.total ? Math.round((100 * b.counts.alkalmazas) / b.total) : 0;
+    if (b.status === "alacsony") notes.push({ reason: "practice_low", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) igazolt alkalmazás — a cél ${b.target.limited ? `a fogalompár-maximum (${b.target.max})` : `${b.target.lower}–${b.target.upper}`}.` });
+    else if (b.status === "magas") notes.push({ reason: "practice_high", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) alkalmazás — a fogalmi felidézésre kevés hely maradt (legfeljebb ${b.target.limited ? b.target.max : b.target.upper}).` });
+    else if (b.status === "teljesul" && b.target.limited) notes.push({ reason: "practice_limited", note: `A ${label}bank fogalompár által korlátozott: ${b.counts.alkalmazas}/${b.total} alkalmazás az elérhető maximum (a 60% a kötelező fogalompárok mellett nem érhető el).` });
+  }
+  const metaProblems = [...audit.quiz.items, ...audit.tasks.items].filter((i) => i.kind === "meta").map((i) => `${i.id}: ${i.reason} — a kiadott bankban nem lehet a feladatlapra / pontozásra kérdező tétel`);
+  return { report: { version: audit.version, quiz: short(audit.quiz), tasks: short(audit.tasks) }, notes, metaProblems };
+}

@@ -8,6 +8,7 @@
  * J2 (átvilágítás 2026-10-16): a gyakorlóbank csomagjai, a lektorálás körei és a kulcsmentes ellenőrzések ugyanazzal a modellpárral, de
  * FRISS, célzott beszélgetésben futnak (önálló kérés; a lektor független a gyártás menetétől). J3: futásonkénti telemetria a jobon.
  */
+import { finalPracticeReport, practiceQuotaEnabled } from "../../../shared/practice-policy";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../../shared/lesson-schema";
 import { newTryProblems } from "../../../shared/try-scoring";
 import { seedFrom } from "../../../shared/seeded";
@@ -1171,7 +1172,9 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     const cov = checkCoverageGate(l, concepts);
     const skill = verifyLessonSkillBank(l.experience, l.subject, l.sections);
     const arc = checkLessonArc(l);
-    return { coverage: cov, problems: [...experienceProblems(l), ...(skill.ok ? [] : skill.problems), ...(cov.ok ? [] : cov.reasons), ...(arc.ok ? [] : arc.reasons)] };
+    // TG-P4c: a végleges bankba (lektori javítás, összeillesztés után) került meta-tétel a kapcsoló mellett nem publikálható.
+    const meta = practiceQuotaEnabled() ? finalPracticeReport(l.experience)?.metaProblems ?? [] : [];
+    return { coverage: cov, problems: [...experienceProblems(l), ...(skill.ok ? [] : skill.problems), ...(cov.ok ? [] : cov.reasons), ...(arc.ok ? [] : arc.reasons), ...meta] };
   };
   let publishable: Lesson = final.data;
   const first = finalProblems(publishable);
@@ -1261,6 +1264,14 @@ async function runSingleLessonScoped(input: SingleRunInput, deps: SingleRunDeps,
     const notes = withKindShareNotes(withTryShareNote(Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<{ reason?: unknown }> : [], publishable), publishable, sourceIds);
     const { qualityNotes: _notes, ...withoutNotes } = output;
     output = notes.length ? { ...withoutNotes, qualityNotes: notes } : withoutNotes;
+  }
+  // TG-P4c: a KIADOTT bank gyakorlati mérése (bankonként) a jobon; a sávon kívüli arány (kapcsolóval) látható jelzés, nem állít meg.
+  const practice = finalPracticeReport(publishable.experience);
+  if (practice) {
+    const prev = Array.isArray(output.qualityNotes) ? output.qualityNotes as Array<Record<string, unknown>> : [];
+    // A látható jelzés a kapcsolóhoz kötött (KI mellett a gyártás kimenete változatlan, csak a mérés kerül a jobra).
+    const notes = practiceQuotaEnabled() ? practice.notes : [];
+    output = { ...output, practiceAudit: practice.report, ...(notes.length ? { qualityNotes: [...prev, ...notes] } : {}) };
   }
   await store.saveStep(jobId, { step: "done", status: "ok", lessonId, finishedAt: new Date(),
     output: { ...output, lesson: publishable, htmlFileId: published.htmlFileId, exportedQuizItems: published.exportedQuizItems, quality: { removed: [], warnings },
