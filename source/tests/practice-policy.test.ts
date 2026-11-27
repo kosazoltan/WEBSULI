@@ -241,7 +241,7 @@ describe("TG-P4b: gyakorlati kvóta a bankcsomagon", () => {
       if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
     }
     const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /if \(practiceQuotaEnabled\(\)\) problems\.push\(\.\.\.practiceQuotaProblems\(packet, unit\.conceptIds\.length\)\)/);
+    assert.match(readFileSync(new URL("../server/studio/experience-builder.ts", import.meta.url), "utf8"), /if \(opts\.quota && practiceQuotaEnabled\(\)\) problems\.push\(\.\.\.practiceQuotaProblems\(packet, unit\.conceptIds\.length\)\)/);
   });
 });
 
@@ -315,10 +315,28 @@ describe("élő hiba (d241d7fa): a csomagkvóta a javító körök után nem ál
       const recall = e.quiz.map((q, i) => ({ ...q, question: `Mit jelent a(z) ${i}. fogalom a fejezetben?` }));
       let error: unknown = null;
       await buildLessonExperience(lesson, [], { call: async () => ({ methods: e.methods, tasks: e.tasks, quiz: recall, glossary: [] }), onToolFix: (kind: string, notes: string[]) => { fixes.push(`${kind}: ${notes.join(" | ")}`); } } as never).catch((err) => { error = err; });
-      assert.doesNotMatch(String(error ?? ""), /igazolt alkalmazás/, "a kvótahiány nem a leállás oka");
+      assert.equal(error, null, `review #633: a banképítés nem dobhat — ${String(error).slice(0, 300)}`);
       assert.ok(fixes.some((f) => f.startsWith("practice-quota:")), JSON.stringify(fixes).slice(0, 300));
     } finally {
       if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
     }
+  });
+});
+
+describe("review #633: a végleges jelentés és az átvétel ugyanazt a sávot használja", () => {
+  const app = (i: number) => ({ id: `q${i}`, question: `Melyik sortörés helyes a(z) „osztály${i}” szóban?`, options: [`osz-tály${i}`, `oszt-ály${i}`], format: "choice" });
+  const recall = (i: number) => ({ id: `r${i}`, question: `Mit jelent a(z) ${i}. fogalom?`, options: ["a", "b"], format: "choice" });
+  it("75 kvíz, 30 kötelező pár, 50 alkalmazás → magas (a maximum 45), a jelentés sávja 45–45", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const quiz = [...Array.from({ length: 50 }, (_, i) => app(i)), ...Array.from({ length: 25 }, (_, i) => recall(i))];
+    const r = finalPracticeReport({ quiz, tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: Array.from({ length: 30 }, (_, i) => `c${i}`) }] } })!;
+    assert.equal(r.report.quiz.status, "magas");
+    assert.deepEqual([r.report.quiz.lower, r.report.quiz.upper], [45, 45]);
+    assert.deepEqual(r.notes.map((n) => n.reason), ["practice_high"]);
+  });
+  it("korlátozott, 4 tételes, 3 páros bank: a jelentés sávja 1–1", async () => {
+    const { finalPracticeReport } = await import("../shared/practice-policy");
+    const r = finalPracticeReport({ quiz: [app(1), recall(2), recall(3), recall(4)], tasks: [], bankPlan: { units: [{ sectionIndex: 0, conceptIds: ["c1", "c2", "c3"] }] } })!;
+    assert.deepEqual([r.report.quiz.lower, r.report.quiz.upper], [1, 1]);
   });
 });
