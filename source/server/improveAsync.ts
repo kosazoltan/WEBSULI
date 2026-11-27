@@ -40,20 +40,24 @@ export class ImproveOutputError extends Error {
   }
 }
 
+/** TG-P7b: a javítás módja — `practice-bank`: csak-bank gyakorlati javítás (a tanítás érintetlen). */
+type ImproveMode = 'practice-bank';
+
 async function processImprovementJob(
   dbRecordId: string,
   originalFile: HtmlFile,
   customPrompt: string | undefined,
   userId: string,
-  anthropicKey: string
+  anthropicKey: string,
+  mode?: ImproveMode,
 ) {
-  return executeWorkflow(workflowStore, { id: dbRecordId, owner: userId, mode: originalFile.contentType === 'lesson' ? 'repair' : 'html', request: { original: originalFile, customPrompt } }, async () => {
+  return executeWorkflow(workflowStore, { id: dbRecordId, owner: userId, mode: originalFile.contentType === 'lesson' ? 'repair' : 'html', request: { original: originalFile, customPrompt, ...(mode ? { mode } : {}) } }, async () => {
     try {
-      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { retryOnOutputFailure: true });
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { retryOnOutputFailure: true, mode });
     } catch (error) {
       if (!(error instanceof ImproveOutputError) || !error.canFallback) throw error;
       logger.warn(`[IMPROVE] Record ${dbRecordId}: a kimenet érvénytelen (${error.message.slice(0, 200)}) — újragenerálás a tartalék modellen.`);
-      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true, previousProblems: error.problems });
+      await processImprovementCore(dbRecordId, originalFile, customPrompt, userId, anthropicKey, { startModelIndex: error.modelIndex + 1, isOutputRetry: true, previousProblems: error.problems, mode });
     }
     await workflowPhase("readback");
     const saved = await storage.getImprovedHtmlFile(dbRecordId);
@@ -63,7 +67,7 @@ async function processImprovementJob(
 }
 
 async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile, customPrompt: string | undefined, userId: string, anthropicKey: string,
-  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean; previousProblems?: string[] } = {}) {
+  opts: { startModelIndex?: number; isOutputRetry?: boolean; retryOnOutputFailure?: boolean; previousProblems?: string[]; mode?: ImproveMode } = {}) {
   const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
   // AUDIT 2026-09-01: a 15 perces abort-timer azonosítója a catch-ágban is elérhető legyen
   let abortTimeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -71,7 +75,7 @@ async function processImprovementCore(dbRecordId: string, originalFile: HtmlFile
   try {
     if (originalFile.contentType === 'lesson') {
       const { generateStructuredImprovement } = await import('./studio/structured-improvement');
-      const candidate = await generateStructuredImprovement(originalFile.id, customPrompt);
+      const candidate = await generateStructuredImprovement(originalFile.id, customPrompt, { bankOnly: opts.mode === 'practice-bank' });
       await workflowPhase("save");
       await storage.updateImprovedHtmlFileContentAndStatus(dbRecordId, JSON.stringify(candidate), 'pending');
       return;
@@ -621,8 +625,11 @@ export function registerImprovementRoutes(adminRouter: Router) {
     }
 
     const { id } = req.params;
-    const { customPrompt } = req.body || {};
+    const { customPrompt, mode: rawMode } = req.body || {};
     const userId = req.user.id;
+    // TG-P7b: `mode: "practice-bank"` — csak-bank gyakorlati javítás (a tanítás érintetlen); csak Stúdió-leckénél.
+    if (rawMode !== undefined && rawMode !== 'practice-bank') return res.status(400).json({ message: 'Ismeretlen javítási mód.' });
+    const mode: ImproveMode | undefined = rawMode === 'practice-bank' ? 'practice-bank' : undefined;
 
     try {
       const originalFile = await storage.getHtmlFile(id);
@@ -630,6 +637,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         return res.status(404).json({ message: 'Fájl nem található' });
       }
 
+      if (mode && originalFile.contentType !== 'lesson') return res.status(400).json({ message: 'A gyakorlati bankjavítás csak Stúdió-leckén érhető el.' });
       const contentSizeKB = Buffer.byteLength(originalFile.content, 'utf8') / 1024;
       if (contentSizeKB > 500) {
         return res.status(400).json({
@@ -674,7 +682,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
         description: originalFile.description,
         classroom: originalFile.classroom,
         contentType: originalFile.contentType || 'html',
-        improvementPrompt: customPrompt || 'Default improvement',
+        improvementPrompt: mode === 'practice-bank' ? 'Gyakorlati bankjavítás (csak a kvíz- és feladatbank; a tanítás változatlan)' : customPrompt || 'Default improvement',
         baselineHash: originalFile.contentType === 'lesson' ? null : htmlBaselineHash(originalFile),
         status: 'processing',
         createdBy: userId,
@@ -691,7 +699,7 @@ export function registerImprovementRoutes(adminRouter: Router) {
       });
 
       // Process in background (fire-and-forget with catch to prevent unhandled rejection)
-      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey ?? '')
+      processImprovementJob(dbRecord.id, originalFile, customPrompt, userId, anthropicKey ?? '', mode)
         .catch(err => logger.error(`[IMPROVE] FATAL unhandled error in background job ${dbRecord.id}:`, err));
 
     } catch (error: unknown) {
