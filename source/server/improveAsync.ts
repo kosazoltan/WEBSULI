@@ -653,28 +653,9 @@ export function registerImprovementRoutes(adminRouter: Router) {
         });
       }
 
-      // BUG FIX: Guard against duplicate concurrent improvement jobs for the same file
-      const existingJobs = await storage.getImprovedFilesByOriginalId(originalFile.id);
-      const activeJob = existingJobs?.find((j) => j.status === 'processing');
-      if (activeJob) {
-        const elapsed = Math.round((Date.now() - new Date(activeJob.createdAt).getTime()) / 1000);
-        // AUDIT 2026-09-01: szerver-újraindítás után a memóriában futó job elveszett, a DB-sor
-        // örökre 'processing' maradt, és minden új kérés 409-et kapott. A 15 perces AI-limit
-        // után a rekord biztosan halott → hibára állítjuk és engedjük az új javítást.
-        const STALE_JOB_MS = (originalFile.contentType === 'lesson' ? 60 : 15) * 60 * 1000;
-        if (elapsed * 1000 > STALE_JOB_MS) {
-          logger.warn(`[IMPROVE] Stale processing job ${activeJob.id} (${elapsed}s) for ${originalFile.title} → marking as error`);
-          await storage.updateImprovedHtmlFileStatus(activeJob.id, 'error', undefined, 'Megszakadt feldolgozás (szerver újraindult vagy időtúllépés).');
-        } else {
-          logger.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} - active job ${activeJob.id} (${elapsed}s)`);
-          return res.status(409).json({
-            message: `Már fut egy javítás erre a fájlra (${elapsed}s óta). Várd meg, amíg befejeződik!`,
-            existingJobId: activeJob.id
-          });
-        }
-      }
-
-      // ✅ GYÖKÉROK JAVÍTÁS: Create DB record FIRST with 'processing' status
+      // IMPROVE-JOB-DUP (review #640): a foglalás atomikus (zár + újraellenőrzés a beszúrás alatt). A 15/60 perces
+      // lejárat a szerver-újraindítás után beragadt jobot zárja hibára (AUDIT 2026-09-01).
+      const STALE_JOB_MS = (originalFile.contentType === 'lesson' ? 60 : 15) * 60 * 1000;
       const dbRecord = await storage.createImprovedHtmlFile({
         originalFileId: originalFile.id,
         title: originalFile.title,
@@ -686,7 +667,11 @@ export function registerImprovementRoutes(adminRouter: Router) {
         baselineHash: originalFile.contentType === 'lesson' ? null : htmlBaselineHash(originalFile),
         status: 'processing',
         createdBy: userId,
-      });
+      }, { staleAfterMs: STALE_JOB_MS });
+      if (!dbRecord) {
+        logger.warn(`[IMPROVE] Blocking duplicate job for ${originalFile.title} — már fut javítás`);
+        return res.status(409).json({ message: 'Már fut egy javítás erre a fájlra. Várd meg, amíg befejeződik!' });
+      }
 
       logger.info(`[IMPROVE] DB record ${dbRecord.id} created with status 'processing' for: ${originalFile.title}`);
 
