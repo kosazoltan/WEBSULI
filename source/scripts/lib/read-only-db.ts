@@ -21,13 +21,16 @@ function verifiedTlsClient(url: string): pg.Client {
   });
 }
 
-/** RED (PRACTICE-AUDIT-SNAPSHOT): a régi nyitás. */
-export const READ_ONLY_BEGIN = "BEGIN READ ONLY";
+/**
+ * PRACTICE-AUDIT-SNAPSHOT (review #640): a csak olvasó tranzakció minden lekérdezése EGY pillanatképet lát (REPEATABLE READ) —
+ * a több SELECT-es mérés nem keverhet a közben közzétett adattal. Csak olvasó REPEATABLE READ nem kap sorosítási hibát.
+ */
+export const READ_ONLY_BEGIN = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY";
 
 /**
  * Review #187: a mérő/kinyerő scriptek közös, CSAK OLVASÓ kapcsolata — ellenőrzött TLS-sel (a tanúsítvány-ellenőrzés nem
  * kapcsolható ki csendben; a `DATABASE_CA_CERT` saját CA-t ad). Mérve 2026-10-05: az éles (Neon) DB ellenőrzött TLS-sel működik.
- * Minden lekérdezés `BEGIN READ ONLY` tranzakcióban fut, a végén ROLLBACK.
+ * Minden lekérdezés egy csak olvasó, REPEATABLE READ tranzakcióban fut (`READ_ONLY_BEGIN`), a végén ROLLBACK.
  */
 export async function withReadOnlyDb<T>(work: (query: <R = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
   const url = process.env.DATABASE_URL;
@@ -35,7 +38,7 @@ export async function withReadOnlyDb<T>(work: (query: <R = Record<string, unknow
   const client = verifiedTlsClient(url);
   await client.connect();
   try {
-    await client.query("BEGIN READ ONLY");
+    await client.query(READ_ONLY_BEGIN);
     return await work(async (sql, params) => (await client.query(sql, params as unknown[] | undefined)).rows);
   } finally {
     await client.query("ROLLBACK").catch(() => undefined);
