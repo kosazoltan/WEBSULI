@@ -302,3 +302,23 @@ describe("TG-P4c: a végleges bank mérése és meta-kapuja", () => {
     assert.equal(finalPracticeReport(undefined), null);
   });
 });
+
+describe("élő hiba (d241d7fa): a csomagkvóta a javító körök után nem állítja meg a leckét", () => {
+  it("kapcsoló BE: ha az utolsó kísérlet után CSAK a gyakorlati arány hiányzik, a csomag átmegy (nyitott leletként jelezve), nem dob", async () => {
+    const { buildLessonExperience } = await import("../server/studio/experience-builder");
+    const { standardFusionFixture } = await import("../shared/fixtures/lesson-fusion");
+    const prev = process.env.STUDIO_PRACTICE_QUOTA;
+    process.env.STUDIO_PRACTICE_QUOTA = "on";
+    const fixes: string[] = [];
+    try {
+      const lesson = standardFusionFixture(); const e = lesson.experience!;
+      const recall = e.quiz.map((q, i) => ({ ...q, question: `Mit jelent a(z) ${i}. fogalom a fejezetben?` }));
+      let error: unknown = null;
+      await buildLessonExperience(lesson, [], { call: async () => ({ methods: e.methods, tasks: e.tasks, quiz: recall, glossary: [] }), onToolFix: (kind: string, notes: string[]) => { fixes.push(`${kind}: ${notes.join(" | ")}`); } } as never).catch((err) => { error = err; });
+      assert.doesNotMatch(String(error ?? ""), /igazolt alkalmazás/, "a kvótahiány nem a leállás oka");
+      assert.ok(fixes.some((f) => f.startsWith("practice-quota:")), JSON.stringify(fixes).slice(0, 300));
+    } finally {
+      if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+    }
+  });
+});
