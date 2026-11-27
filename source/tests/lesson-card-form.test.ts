@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CARD_FORMS, RECAP_FORMS, avoidSeriesRepeat, cardFormProblems, pickVarietyAxes, varietyAxesContract, recapFormById } from "../shared/lesson-variety-axes";
+import { CARD_FORMS, RECAP_FORMS, avoidSeriesRepeat, cardFormProblems, cardFormForLength, pickVarietyAxes, varietyAxesContract, recapFlashcardProblems, recapFormById } from "../shared/lesson-variety-axes";
+import { seriesPreviousOf } from "../server/studio/pipeline-store";
 import { fusionFixture } from "../shared/fixtures/lesson-fusion";
 
 /** V3b (docs/specs/2026-11-24-valtozatossag-12-tengely-vegrehajtas.md): kártyaformák a gyártásban. */
@@ -94,4 +95,48 @@ test("review #612: placeVarietyCards — a kártya egy nem első (és villámká
 test("review #612: a kártya-szerződés csak ≥ 4 fejezetnél kerül a promptba (a kapuval egyezően)", () => {
   for (const n of [1, 2, 3]) assert.equal(/KÁRTYA/.test(varietyAxesContract({ ...pickVarietyAxes(1, n), cardForm: CARD_FORMS[0] }, 900)), false, `${n} fejezet`);
   assert.match(varietyAxesContract({ ...pickVarietyAxes(1, 4), cardForm: CARD_FORMS[0] }, 900), /KÁRTYA/);
+});
+
+// Review #647 (Sourcery): kártya-kapu és sorozatszabály szigorítása.
+const L = (...kinds: Array<string | null>) => ({ sections: kinds.map((k) => ({ blocks: k ? [{ kind: "try", tryKind: k }] : [{ kind: "text" }] })) });
+
+test("review #647: a kiosztott kártya PONTOSAN egyszer, nem az első fejezetben — duplikált vagy első fejezetbeli is hiba", () => {
+  const card = CARD_FORMS[0];
+  assert.deepEqual(cardFormProblems(L(null, card.id, null, null), card), []);
+  assert.ok(cardFormProblems(L(null, card.id, card.id, null), card).length > 0, "kétszer");
+  assert.ok(cardFormProblems(L(card.id, null, card.id, null), card).length > 0, "az első fejezetben is");
+});
+
+test("review #647: a TERVEZETT fejezetszám dönt — rövidebb kimenet nem kerüli meg a kártya-kaput", () => {
+  const card = CARD_FORMS[1];
+  assert.ok(cardFormProblems(L(null, null, null), card, 4).length > 0);
+  assert.deepEqual(cardFormProblems(L(null, null, null), card), [], "terv nélkül a kimenet hossza");
+});
+
+test("review #647: villámkártyás összefoglalónál az utolsó fejezetben flashcards try blokk kell", () => {
+  const flash = recapFormById("villamkartya")!;
+  assert.ok(recapFlashcardProblems(L(null, null, null, null), flash).length > 0);
+  assert.deepEqual(recapFlashcardProblems(L(null, null, null, "flashcards"), flash), []);
+  assert.deepEqual(recapFlashcardProblems(L(null, null), RECAP_FORMS.find((r) => r.id !== "villamkartya")!), []);
+});
+
+test("review #647: a sorozatszabály a SORRENDBEN következő kártyára lép (körbe)", () => {
+  for (let i = 0; i < CARD_FORMS.length; i++) {
+    const picked = { openingForm: "x", ...pickVarietyAxes(3, 5), cardForm: CARD_FORMS[i] };
+    assert.equal(avoidSeriesRepeat(picked, { cardForm: CARD_FORMS[i].id }, 5).cardForm.id, CARD_FORMS[(i + 1) % CARD_FORMS.length].id);
+  }
+});
+
+test("review #647: a szerződés a kártya TELJES spec-alakját közli", () => {
+  for (const card of CARD_FORMS) assert.ok(varietyAxesContract({ ...pickVarietyAxes(1, 4), cardForm: card }, 900).includes(card.spec), card.id);
+});
+
+test("review #647: 4-nél rövidebb leckénél nincs mentett kártyaforma (nem fogyasztja a sorozat-forgást)", () => {
+  assert.equal(cardFormForLength(3, CARD_FORMS[0]), undefined);
+  assert.equal(cardFormForLength(4, CARD_FORMS[0]), CARD_FORMS[0]);
+});
+
+test("review #647: a sorozat-előzmény blokkváza az elhelyezés ELŐTTI (mentett seriesShape) alak", () => {
+  const prev = seriesPreviousOf({ seriesShape: "text>check|text>try>recap", outline: { sections: [{ plannedBlocks: ["text", "check"] }, { plannedBlocks: ["text", "try", "try", "recap"] }] } });
+  assert.equal(prev?.shapeSignature, "text>check|text>try>recap");
 });
