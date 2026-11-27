@@ -151,7 +151,7 @@ export function LessonRepairPanel({ fileId, isLesson, presets = [], embedded = f
                 Javítás indítása
               </Button>
               {isLesson && (
-                <Button variant="outline" onClick={() => start(true)} disabled={busy} className="min-h-11" data-testid="lesson-repair-practice-bank"
+                <Button variant="outline" onClick={() => start(true)} disabled={busy} className="min-h-11 h-auto max-w-full whitespace-normal text-left py-2" data-testid="lesson-repair-practice-bank"
                   title="Csak a feladatlapra / pontozásra kérdező (meta) kvíz- és feladattételek cseréje; a tanítás és a jó tételek változatlanok.">
                   Gyakorlati bankjavítás (a tanítás marad)
                 </Button>

@@ -3,7 +3,7 @@ import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
 import { and, eq, ne, inArray } from "drizzle-orm";
 import { lessonSchema, modelLessonSchema, type Lesson } from "../../shared/lesson-schema";
 import { newTryProblems } from "../../shared/try-scoring";
-import { lessonRepairSchema, markRepairCandidate, modelLessonRepairSchema, type LessonRepair } from "../../shared/lesson-repair";
+import { lessonRepairSchema, markRepairCandidate, repairArtefactSchema, type LessonRepair } from "../../shared/lesson-repair";
 import { sourceVisualsEnabled } from "./source-visuals-flag";
 import { adoptStoredOpeningForm, runWithLessonVariety } from "./lesson-variety-flag";
 import { carryVarietyMarker, storedVarietyMarker } from "../../shared/lesson-feedback-openers";
@@ -115,7 +115,7 @@ export async function generateStructuredImprovement(fileId: string, instruction?
   const staleWarnings: StaleWarning[] | undefined = "staleWarnings" in built ? (built.staleWarnings as StaleWarning[] | undefined) : undefined;
   // Vercel-review #530: a séma (KI ágon) eldobja a jelölőt — a lezárás a tárolt lecke jelölőjét írja vissza a jelöltre (előnézet = alkalmazott).
   const parseArtefact = (): LessonRepair => {
-  return modelLessonRepairSchema(sourceVisualsEnabled()).parse({
+  return repairArtefactSchema(Boolean(opts.bankOnly), sourceVisualsEnabled()).parse({
     kind: "lesson-repair-fusion-1", lessonId: row.id, baseVersion: row.version, baselineHash: repairHash(row.json), baselineMaterialHash: materialHash(material), sourceHash: repairHash(hashedSource), previousLesson: original, candidate, reviewNotes: review.notes,
     ...(ownerInstruction ? { ownerInstruction } : {}), ...(owner.corrections.length ? { sourceCorrections: owner.corrections } : {}), ...(owner.classroom !== undefined ? { classroom: owner.classroom } : {}),
     // Review #164: az eldöntetlen régi-alak jelöltek a javítás-artefaktumban maradnak (admin-nézet), nem csak a naplóban.
