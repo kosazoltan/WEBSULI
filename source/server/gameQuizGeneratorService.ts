@@ -13,9 +13,10 @@
  *    specifikus szűréshez használják (pl. Speed Quiz Math csak `math`)
  */
 import Anthropic from "@anthropic-ai/sdk";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "./db";
-import { gameQuizItems, htmlFiles } from "@shared/schema";
+import { gameQuizItems, htmlFiles, lessons } from "@shared/schema";
+import { canonicalLessonQuiz, type CanonicalQuizRow } from "./studio/canonical-quiz-bank";
 import { crossFamilyFallback, resolveLegacyModel } from "./ai/models";
 import { logger } from "./lib/logger";
 import { createStudioProvider, crossFamilyFallbackOptions, studioModelReady } from "./ai/studio-provider";
@@ -43,6 +44,8 @@ export type QuizGenerationResult = {
   errors: string[];
   /** TG-P5a: a mentett bank gyakorlati mérése (`shared/practice-policy.ts`) — tájékoztató, nem megállító kapu. */
   practice?: { alkalmazas: number; fogalmi: number; egyeb: number };
+  /** TG-P5b: kanonikus Stúdió-leckénél a játékok a lecke saját bankját olvassák — nincs generálás. */
+  canonical?: { lessonId: string; items: number };
 };
 
 const SYSTEM_PROMPT = `Magyar általános / középiskolai (1-12. osztály) tananyagból kvíz-tételeket generálsz egy oktatási játék-platformhoz.
@@ -79,6 +82,19 @@ async function materialExists(materialId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+/**
+ * TG-P5b: az anyaghoz kötött legfrissebb közzétett lecke kanonikus bankja (ugyanaz a kiválasztás, mint a játékok
+ * `gameQuizBankService`-ében: verzió, majd közzététel szerint csökkenő). `null` = régi (nem fúziós) anyag.
+ */
+async function publishedCanonicalQuiz(materialId: string): Promise<CanonicalQuizRow[] | null> {
+  const [lesson] = await db.select({ id: lessons.id, json: lessons.json, htmlFileId: lessons.htmlFileId, version: lessons.version })
+    .from(lessons)
+    .where(and(eq(lessons.htmlFileId, materialId), isNotNull(lessons.publishedAt)))
+    .orderBy(desc(lessons.version), desc(lessons.publishedAt))
+    .limit(1);
+  return lesson ? canonicalLessonQuiz(lesson) : null;
+}
+
 async function materialContent(materialId: string): Promise<string | null> {
   const [row] = await db.select({ content: htmlFiles.content }).from(htmlFiles).where(eq(htmlFiles.id, materialId)).limit(1);
   return row?.content ?? null;
@@ -88,11 +104,26 @@ export async function generateMaterialQuiz(
   materialId: string,
   count: number,
   owner: string,
-  deps: { materialExists?: (materialId: string) => Promise<boolean>; materialContent?: (materialId: string) => Promise<string | null> } = {},
+  deps: {
+    materialExists?: (materialId: string) => Promise<boolean>;
+    canonicalQuiz?: (materialId: string) => Promise<CanonicalQuizRow[] | null>;
+    materialContent?: (materialId: string) => Promise<string | null>;
+  } = {},
 ): Promise<QuizGenerationResult> {
   // Input check BEFORE the workflow: an invalid request must not leave a failed run behind.
   if (!await (deps.materialExists ?? materialExists)(materialId)) {
     throw new QuizMaterialNotFound(`Tananyag nem található: ${materialId}`);
+  }
+  // TG-P5b: kanonikus Stúdió-leckénél a játékok a lecke saját, ellenőrzött bankját használják — a párhuzamos bank felesleges
+  // (egyetlen játék sem olvasná), ezért a munkafolyamat és a modellhívás ELŐTT megállunk. Érvénytelen fúziós bank sem
+  // éleszti fel a régi exportot: a javítás helye a Stúdió.
+  const canonical = await (deps.canonicalQuiz ?? publishedCanonicalQuiz)(materialId);
+  if (canonical !== null) {
+    const base = { materialId, materialTitle: "", inserted: 0, skipped: 0 };
+    if (canonical.length === 0) {
+      return { ...base, errors: ["A Stúdió-lecke kvízbankja érvénytelen — a játékok nem kapnak belőle tételt; javítsd a leckét a Stúdióban (külön kvízgenerálás itt nincs)."] };
+    }
+    return { ...base, errors: [], canonical: { lessonId: canonical[0].lessonId, items: canonical.length } };
   }
   // TG-P5a (review #634): a tanítható tartalom hiánya a munkafolyamat ELŐTT dől el — a futás visszaolvasási szerződését nem
   // sérti, és az admin a tartalomhiányról szóló üzenetet kapja (nem általános 500-at). Modellhívás és írás nincs.

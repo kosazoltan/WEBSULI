@@ -5,6 +5,7 @@ import { lessonLanguage, publicationBankProblems, experiencePacketSchema } from 
 import { verifyImprovedHtml, type HtmlVerification } from "./verify-html";
 import { ZodError } from "zod";
 import { verifyLessonSkillBank } from "../../shared/lesson-skill-checks";
+import { practiceMetaProblems } from "../../shared/practice-policy";
 
 /** Shape and sample checks, not a substitute for rendering or source review. */
 export function verifyLessonMethodHtml(html: string): HtmlVerification {
@@ -24,6 +25,9 @@ export function verifyLessonMethodHtml(html: string): HtmlVerification {
   if (data) {
     problems.push(...verifyLessonSkillBank(data.experience, data.subject).problems);
     problems.push(...publicationBankProblems(data.experience), ...verifyHtmlTeaching(html, data.experience));
+    // TG-P5b: ugyanaz a meta-mérce, mint a Stúdió bankkapujában (a feladatlapra / pontozásra kérdező tétel nem mehet ki).
+    // Az arány itt nem megállító (TG-P4c: a végkapun csak a meta állít meg).
+    problems.push(...practiceMetaProblems(data.experience).map((p) => p.replace(/^([^:]+): /u, "$1: a feladatlapra vonatkozó tétel — ")));
     for (const t of data.experience.tasks) if (evaluateOpenAnswer(t.sample, t).score !== 1) problems.push(`${t.id}: a mintaválasz nem kap teljes pontot.`);
     const lang = lessonLanguage(data.subject);
     if (lang && data.experience.language !== lang) problems.push("A nyelvlecke szószedetének/TTS-ének nyelve hiányzik vagy hibás.");

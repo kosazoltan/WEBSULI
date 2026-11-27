@@ -24,4 +24,7 @@ Hiány:
 3. Ellenőrzés: új + érintett egységtesztek (improve-align-html-bank, lesson-fusion-repair, lesson-html-spec, web-bank-repair,
    s7-review-203), tsc, eslint.
 
-Állapot: tervezve — következő: RED.
+3b. Mért: RED 3 bukás (2× a modellhívás felé futott — API-kulcs hiba, 1× a meta-tétel nem jelzett); utána
+   `game-quiz-practice-p5b` 3/0, a 15 érintett improve / fusion / html / web-research tesztfájl 115/0; tsc, eslint OK.
+
+Állapot: kész — következő: kapulánc a TG-P5a beolvadása után.
