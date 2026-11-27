@@ -24,15 +24,15 @@ const META_CONTEXT =
   /(feladatlap|feladatsor|feladatt[ií]pus|feladatfajt|javítási útmutató|értékelési útmutató|pontozási útmutató|javítókulcs|vizsgaszerkezet|felvételi|\ba feladatban\b|\bebben a feladatban\b|\bez a feladat\b|\ba feladat\b(?= (?:a|az|hány|mennyit))|\bezen a lapon\b|\ba lapon\b|tesztlap)/;
 /** A kérdező rész: pontszám, típus, összetétel, sorrend, időkeret. */
 const META_ASK =
-  /(hány pont|pontot ér|pontszám|pont jár|maximális pont|összesen \d* ?pont|pontoz|mennyit ér|milyen (?:két |három |négy )?(?:feladat)?(?:típus|fajt)|melyik feladatt[ií]pus|szerepel|\bvannak\b|található|hányadik feladat|sorrendje|felépítés|időkeret|hány perc|csoport)/;
+  /(hány pont|pontot ér|pontszám|pont jár|maximális pont|összesen \d* ?pont|pontoz|mennyit ér|milyen (?:két |három |négy )?(?:feladat)?(?:típus|fajt)|melyik feladatt[ií]pus|szerepel|\bvannak\b|található|hányadik feladat|sorrendje|(?:^|[^\p{L}])felépítés|időkeret|hány perc|csoport)/u;
 /** Közvetlen meta-alakok (környezet nélkül is). */
 const META_DIRECT = /(feladatt[ií]pus|feladatfajt)\w* .*(pont|ér\b)|javítási útmutató szerint/;
 /** Vizsga / feladatlap környezet — a „hány pontot ér” csak ezzel együtt meta (review #625: a sportpont tanítható tartalom). */
-const EXAM = /(feladatlap|feladatsor|felvételi|vizsg|dolgozat|\bteszt|\bitem|javítási|értékelési|pontozási|\ba feladat\b|feladatban|feladatt[ií]pus)/;
+const EXAM = /(feladatlap|feladatsor|felvételi|vizsg(?!ált)|dolgozat|\bteszt|\bitem|javítási|értékelési|pontozási|\ba feladat\b|feladatban|feladatt[ií]pus)/;
 /** Sport / játék pontszáma — tanítható tartalom, nem a feladatlap pontozása. */
 const SPORT = /(kosár|labd|foci|futball|meccs|mérkőzés|gól|büntető|tenisz|játszmá|verseny|sport|dobó|dobott)/;
 /** A feladatlap szerkezetére kérdező erős alak — konkrét adat (szám, idézet) mellett is meta (review #625). */
-const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|felépítés|hányadik feladat)/;
+const META_STRUCT = /(feladatt[ií]pus|hány feladat|időkeret|hány perc|(?:^|[^\p{L}])felépítés|hányadik feladat)/u;
 const POINT_OPTION = /^\d+(?:[,.]\d+)? ?pont/;
 /** Pontszerzésre kérdez (nem a geometriai pontra): „hány pontot kap / ér”, „pont jár”, „pontot szerez”. */
 // TG-P4b: lookbehind nélkül — a modul a P4b-vel a kliens csomagjába is bekerül (Safari < 16.4, tests/no-lookbehind-client.test.ts).
