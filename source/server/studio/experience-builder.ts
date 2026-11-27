@@ -137,7 +137,7 @@ export type ExperienceBuildDeps = {
   reuseExcludedConceptIds?: ReadonlySet<string>;
   /**
    * P7B-TANITAS-MEGORZES: csak-bank javítás — a régi csomag a nyitómese-verziótól függetlenül átvehető, tétel-szintű hibái célzott cserét
-   * kapnak, csomag-szintű (régebbi szabály szerinti) eltérései tűrt örökség. RED: még nincs hatása.
+   * kapnak, csomag-szintű (régebbi szabály szerinti) eltérései tűrt örökség.
    */
   keepLegacy?: boolean;
   reviewFeedback?: BankReviewFeedback[];
@@ -567,7 +567,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // Review #403 (P2): bekapcsolt nyitómesénél a korábbi csomag csak akkor vehető át, ha ugyanazzal a szerződés-verzióval készült (a
     // bankterv egységének `opener` jelölője — a lektorált csomag hash-e nem a tanítás hash-e, ezért nem a hash-egyezés dönt). A kapcsoló
     // előtt gyártott bank így nem kerül át az IQ-kérdezési szabályok nélkül (C döntés: a javított lecke is megkapja).
-    const keptUnit = contentKept && (!lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
+    // P7B-TANITAS-MEGORZES: a csak-bank javítás (keepLegacy) a nyitómese előtti csomagot is átveszi — a tanítás és a jó tételek maradnak.
+    const keptUnit = contentKept && (deps.keepLegacy || !lessonOpenerEnabled() || contentKept.opener === lessonOpenerVersion(effectiveLessonVariety())) ? contentKept : undefined;
     // Spec 2026-09-30 (U2, B4): a csomag mérhető szerződése és a pontozó tényleges szabályai a KÓDBÓL generálva — egy szabály egy helyen.
     // V4: a kvíztípusok és a keverés csak változatosság BE mellett szerződés.
     const contract = bankPacketContract({ sectionIndex: unit.sectionIndex, conceptIds: unit.conceptIds, methodKinds, taskCount, taskTarget, quizCount, quizTarget, quizFormats: effectiveLessonVariety(), language });
@@ -653,6 +654,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // TG-P7a: a tanításában változatlan, CSAK meta-hibás régi csomag célzott javítási alap (a J1 `seed` útja) — egy meta-kérdés miatt
     // nem gyártódik újra a teljes csomag; a jó tételek tartalma és azonosítója (a tanulói előzmény) marad.
     let previousSeed: { packet: unknown; issues: string[] } | undefined;
+    // P7B-TANITAS-MEGORZES: a régi csomag csomag-szintű (régebbi szabály szerinti) eltérései — a csak-bank javításban tűrt örökség.
+    let legacyIssues = new Set<string>();
     const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
     // Review #298: a javításlista sem vész el — az elfogadott mentett csomagé a naplóba kerül (mint a modellválaszoknál).
@@ -669,6 +672,19 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
         const meta = new Set(practiceMetaProblems(parsed.data));
         // Review #635: kvóta (STUDIO_PRACTICE_QUOTA=on) mellett a régi csomag arányeltérése nem kényszerít teljes újragyártást.
         if (meta.size && savedProblems.every(p => meta.has(p) || isPracticeQuotaProblem(p))) previousSeed = { packet: parsed.data, issues: [...meta] };
+        else if (deps.keepLegacy) {
+          // P7B-TANITAS-MEGORZES: tétel-szintű hiba → célzott csere; csomag-szintű → tűrt örökség; ha csak örökség van, átvétel modell nélkül.
+          const plan = repairPermissions(savedProblems.filter(p => !isPracticeQuotaProblem(p)), parsed.data);
+          legacyIssues = new Set(plan.packetLevel);
+          if (plan.allows.length) previousSeed = { packet: parsed.data, issues: savedProblems.filter(p => !isPracticeQuotaProblem(p) && !legacyIssues.has(p)) };
+          else {
+            packet = parsed.data;
+            if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
+            hash = keptUnit.sourceHash; unit.sourceHash = hash;
+            deps.onToolFix?.("practice-legacy", [`${unit.sectionIndex + 1}. fejezet: régi csomag átvéve (örökölt eltérés: ${[...legacyIssues].join("; ").slice(0, 300)})`]);
+            break;
+          }
+        }
       }
       if (parsed.success && savedProblems.length === 0) {
         packet = parsed.data;
@@ -847,6 +863,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       // Review #635: a célzott meta-cserénél az arány a régi csomagé — nyitott lelet, nem teljes újragyártás oka.
       // Review #635/2: a nem utolsó célzott körben CSAK a tiszta arányhiány megy át — új számítási hiba javítókört kap.
       const quotaPass = lastAttempt ? quotaSoft : previousRepair && issues.length > 0 && issues.every(isPracticeQuotaProblem);
+      // P7B-TANITAS-MEGORZES: a csak-bank javításban a régi csomag örökölt eltérése nem javítókör oka — csak az ÚJ hiba az.
+      const legacyPass = !!deps.keepLegacy && previousRepair && issues.length > 0 && issues.every(i => isPracticeQuotaProblem(i) || legacyIssues.has(i));
       if (parsed?.success && quotaPass) deps.onToolFix?.("practice-quota", issues.filter(isPracticeQuotaProblem).map(i => `${unit.sectionIndex + 1}. fejezet — nyitott lelet (átengedve): ${i}`));
       if (parsed?.success && lastAttempt && arithmeticOnly) { openIssues = issues; deps.onToolFix?.("arithmetic-claims", issues.map(i => `nyitott lelet (átengedve, a kapunál kivehető tétel): ${i}`)); }
       // Review #153 (P1): a kivétel után a csomag-szintű kvóták (packetSchema) is újra mérve — nem csak a tételszabályok.
@@ -864,7 +882,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       if (keyTrimmed && !lastAttempt && (keyTrimmed.kept.length || quotaAndValidate(keyTrimmed.packet).length)) keyTrimmed = null;
       if (keyTrimmed && !lastAttempt) deps.onToolFix?.("bank-stuck", [`${unit.sectionIndex + 1}. fejezet: ismétlődő hiba — korai kivétel ${keyTrimmed.removed.length} tesztbukott feladat (${keyTrimmed.removed.join(", ")}); ${issues.length} válaszkulcs-hiba`]);
       else if (keyTrimmed) deps.onToolFix?.("answer-key-tests", [`${unit.sectionIndex + 1}. fejezet: ${keyTrimmed.removed.length} tesztbukott feladat kivéve a tartalék terhére (${keyTrimmed.removed.join(", ")})${keyTrimmed.kept.length ? `; ${keyTrimmed.kept.length} a padló miatt bent maradt (${keyTrimmed.kept.join(", ")})` : ""}`]);
-      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || quotaPass)) packet = parsed!.data;
+      if (parsed?.success && legacyPass) deps.onToolFix?.("practice-legacy", issues.filter(i => legacyIssues.has(i)).map(i => `${unit.sectionIndex + 1}. fejezet — örökölt eltérés (átengedve): ${i}`));
+      if (parsed?.success && (!issues.length || (lastAttempt && arithmeticOnly) || quotaPass || legacyPass)) packet = parsed!.data;
       else if (keyTrimmed) packet = keyTrimmed.packet;
       else if (salvaged) packet = salvaged.packet;
       else {

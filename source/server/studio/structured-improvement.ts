@@ -171,7 +171,7 @@ export type RepairBankGates = (ctx: AnswerKeyContext, lesson: Lesson) => Pick<Ex
  * `staleConceptIds` (review #379): a lecke utolsó írása óta módosult térképfogalmak — az egységük nem vehető át (a régi bank a régi
  * definícióból készült; a fejezetszöveg ettől még azonos lehet, pl. egy másik lecke javítása helyesbítette a közös fogalmat).
  */
-export type RepairBankOptions = { gates?: RepairBankGates; staleConceptIds?: Iterable<string> };
+export type RepairBankOptions = { gates?: RepairBankGates; staleConceptIds?: Iterable<string>; keepLegacy?: boolean };
 
 /**
  * S5a vak kör 1 (L1 — kapcsoló-szivárgás): a javítás változatossági állapota a TÁROLT lecke jelölője (nem a környezet, nem a modell);
@@ -272,7 +272,7 @@ export async function buildPracticeBankRepair(original: Lesson, source: RepairSo
   // A munkafolyamat fázissorrendje (source → author → banks …) marad; a szerzői fázis itt modellhívás nélküli (a tanítás az eredeti).
   await workflowPhase("author");
   const owner: RepairOwner = { corrections: [] };
-  return { ...await finishStructuredImprovement(original, structuredClone(original), source, call, undefined, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds }), owner };
+  return { ...await finishStructuredImprovement(original, structuredClone(original), source, call, undefined, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds, keepLegacy: true }), owner };
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
@@ -292,7 +292,7 @@ async function finishStructuredImprovementScoped(original: Lesson, candidate: Le
   const reuseExcludedConceptIds = new Set([...(owner?.corrections ?? []).map(c => c.localId), ...(bank.staleConceptIds ?? [])]);
   const gates = bank.gates;
   // Review #160: a szigorú séma (U2/C8) a javító út bankhívásán is átmegy; a hívó dönt, hogy az út támogatja-e.
-  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections: original.sections, reuseExcludedConceptIds, call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
+  candidate.experience = await buildLessonExperience(candidate, source.concepts, { ...progress, previous: original.experience, previousSections: original.sections, reuseExcludedConceptIds, ...(bank.keepLegacy ? { keepLegacy: true } : {}), call: (system, user, _attempt, extra) => call("author", system, user, "bank", extra),
     ...gates?.({ classroom, concepts: source.concepts.map(c => ({ id: c.localId, term: c.term, definition: c.definition })) }, candidate),
     ...(design?.world ? { theme: design.world } : {}) });
   assertRepairCandidate(original, candidate, source, classroom);

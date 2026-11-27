@@ -275,19 +275,16 @@ test("P7B: bekapcsolt nyitómesénél a meta-hibás régi csomagban csak a kifog
   assert.deepEqual(repaired.tasks, first.tasks);
 });
 
-test("P7B: meta MELLETT érvénytelen kulcsú tétel — keepLegacy mellett egy célzott hívás mindkét tételre, a többi változatlan", async () => {
-  const { lesson, first } = await legacyFirst();
+test("P7B: sémán bukó (érvénytelen kulcsú) régi csomag újragyártódik, de keepLegacy mellett a MÁSIK fejezet bankja érintetlen", async () => {
+  const { lesson, packets, first } = await legacyFirst();
   const dirty = structuredClone(first);
   const [a, b] = dirty.quiz.filter(q => q.sectionIndex === 0);
   a.question = META;
-  const fixedB = structuredClone(b);
   b.correctIndex = b.options.length + 3;
-  const prompts: string[] = [];
+  let calls = 0;
   const repaired = await withOpener(() => buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections, keepLegacy: true,
-    call: async (_s, user) => { prompts.push(user); return { methods: [], tasks: [], quiz: [{ ...structuredClone(a), question: PRACTICAL }, fixedB], glossary: [] }; } }));
-  assert.equal(prompts.length, 1, "egy célzott hívás");
-  assert.match(prompts[0], new RegExp(a.id));
-  assert.match(prompts[0], new RegExp(b.id));
-  assert.deepEqual(repaired.quiz.filter(q => q.id !== a.id && q.id !== b.id), first.quiz.filter(q => q.id !== a.id && q.id !== b.id));
+    call: async () => { calls++; return structuredClone(packets[0]); } }));
+  assert.equal(calls, 1, "csak a hibás fejezet csomagja gyártódik újra (a sémán bukó csomag nem célzott alap)");
+  assert.deepEqual(inSection(repaired.quiz, 1), inSection(first.quiz, 1), "a másik fejezet kvíztételei és azonosítói változatlanok");
+  assert.deepEqual(inSection(repaired.tasks, 1), inSection(first.tasks, 1));
 });
-
