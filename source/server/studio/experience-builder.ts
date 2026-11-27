@@ -29,7 +29,7 @@ import { answerKeyProblems, type AnswerKeyCases } from "../../shared/answer-key-
 import { calibrateRubric, retainTightened, retainTightenedPhrases } from "../../shared/answer-key-calibrate";
 import type { QuizBlindItem } from "./quiz-blind-check";
 import type { OpenTask } from "../../shared/lesson-experience";
-import { isPracticeQuotaProblem, practiceMetaProblems, practiceQuotaEnabled, practiceQuotaProblems } from "../../shared/practice-policy";
+import { isPracticeQuotaProblem, practiceMetaProblems, practiceQuotaEnabled, practiceQuotaProblems, practiceRatioRepairIssues } from "../../shared/practice-policy";
 
 /**
  * Spec 2026-10-19-eroforras-s3a: a bankkérés ÁLLANDÓ előtagja (szerepkészség + módszertan + válaszszabályok, ≈ 4 000 token). A bank
@@ -670,15 +670,19 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
       const parsed = salvageSchema.safeParse(saved);
       const savedProblems = parsed.success ? validate(parsed.data) : [];
-      if (source === "previous" && parsed.success && keptUnit?.sourceHash && savedProblems.length) {
+      // P7C-ARANYJAVITAS: a csak-bank javításnál a kvóta ALATTI régi csomag a hiányzó számú fogalmi tételre célzott cserét kap. Az átvétel
+      // ellenőrzése kvóta nélkül fut (Review #633), ezért itt külön mérjük (csak `keepLegacy` + `STUDIO_PRACTICE_QUOTA=on`).
+      const ratio = deps.keepLegacy && parsed.success && practiceQuotaEnabled() && practiceQuotaProblems(parsed.data, unit.conceptIds.length).length
+        ? practiceRatioRepairIssues(parsed.data, unit.conceptIds) : [];
+      if (source === "previous" && parsed.success && keptUnit?.sourceHash && (savedProblems.length || ratio.length)) {
         const meta = new Set(practiceMetaProblems(parsed.data));
         // Review #635: kvóta (STUDIO_PRACTICE_QUOTA=on) mellett a régi csomag arányeltérése nem kényszerít teljes újragyártást.
-        if (meta.size && savedProblems.every(p => meta.has(p) || isPracticeQuotaProblem(p))) previousSeed = { packet: parsed.data, issues: [...meta] };
+        if (meta.size && savedProblems.every(p => meta.has(p) || isPracticeQuotaProblem(p))) previousSeed = { packet: parsed.data, issues: [...new Set([...meta, ...ratio])] };
         else if (deps.keepLegacy) {
           // P7B-TANITAS-MEGORZES: tétel-szintű hiba → célzott csere; csomag-szintű → tűrt örökség; ha csak örökség van, átvétel modell nélkül.
-          const plan = repairPermissions(savedProblems.filter(p => !isPracticeQuotaProblem(p)), parsed.data);
+          const plan = repairPermissions([...savedProblems.filter(p => !isPracticeQuotaProblem(p)), ...ratio], parsed.data);
           legacyIssues = new Set(plan.packetLevel);
-          if (plan.allows.length) previousSeed = { packet: parsed.data, issues: savedProblems.filter(p => !isPracticeQuotaProblem(p) && !legacyIssues.has(p)) };
+          if (plan.allows.length) previousSeed = { packet: parsed.data, issues: [...savedProblems.filter(p => !isPracticeQuotaProblem(p) && !legacyIssues.has(p)), ...ratio] };
           else {
             packet = parsed.data;
             if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
@@ -688,7 +692,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
           }
         }
       }
-      if (parsed.success && savedProblems.length === 0) {
+      // P7C: arányjavításra kijelölt régi csomag nem vehető át változatlanul — a célzott kör (previousSeed) indul.
+      if (parsed.success && savedProblems.length === 0 && !(source === "previous" && ratio.length)) {
         packet = parsed.data;
         if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
         // Az átvett korábbi csomag a saját hash-ével bélyegződik: a tételazonosítók és a tanulói előzmények változatlanok maradnak.
