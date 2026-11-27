@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import { teachingHtml } from "./helpers/teaching-html";
@@ -51,4 +52,14 @@ test("TG-P5b: a HTML-javítás kapuja a JSON-bank meta-tételét (kvíz és nyí
   const joined = result.problems.join("\n");
   assert.match(joined, new RegExp(`${data.experience.quiz[0].id}: a feladatlapra`, "u"));
   assert.match(joined, new RegExp(`${data.experience.tasks[0].id}: a feladatlapra`, "u"));
+});
+
+test("review #637: a mentés a zár alatt újraellenőrzi a kanonikus leckét (az írás előtt), a két választó holtversenyben is azonos", () => {
+  const src = fs.readFileSync("server/gameQuizGeneratorService.ts", "utf8");
+  const lock = src.indexOf("pg_advisory_xact_lock");
+  const recheck = src.indexOf("canonicalAppeared = true", lock);
+  const deactivate = src.indexOf(".set({ isActive: false })", lock);
+  assert.ok(lock > -1 && recheck > lock && recheck < deactivate, "zár → kanonikus újraellenőrzés → deaktiválás");
+  assert.match(src, /orderBy\(desc\(lessons\.version\), desc\(lessons\.publishedAt\), desc\(lessons\.id\)\)/u);
+  assert.match(fs.readFileSync("server/gameQuizBankService.ts", "utf8"), /\$\{lessons\.publishedAt\} DESC, \$\{lessons\.id\} DESC/u);
 });

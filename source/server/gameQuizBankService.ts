@@ -76,9 +76,9 @@ async function latestPublishedRows(materialIds?: string[]) {
         ${lessons.version} AS version, ${lessons.publishedAt} AS published_at
       FROM ${lessons}
       WHERE ${lessons.publishedAt} IS NOT NULL ${materialIds ? sql`AND ${inArray(lessons.htmlFileId, materialIds)}` : sql``}
-      ORDER BY coalesce(${lessons.htmlFileId}, ${lessons.id}), ${lessons.version} DESC, ${lessons.publishedAt} DESC
+      ORDER BY coalesce(${lessons.htmlFileId}, ${lessons.id}), ${lessons.version} DESC, ${lessons.publishedAt} DESC, ${lessons.id} DESC
     ) latest
-    ORDER BY version DESC, published_at DESC`);
+    ORDER BY version DESC, published_at DESC, id DESC`); // review #637: determinisztikus holtverseny-feloldás (a kvízgenerátorral azonos)
   return rows;
 }
 

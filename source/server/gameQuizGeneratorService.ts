@@ -86,11 +86,12 @@ async function materialExists(materialId: string): Promise<boolean> {
  * TG-P5b: az anyaghoz kötött legfrissebb közzétett lecke kanonikus bankja (ugyanaz a kiválasztás, mint a játékok
  * `gameQuizBankService`-ében: verzió, majd közzététel szerint csökkenő). `null` = régi (nem fúziós) anyag.
  */
-async function publishedCanonicalQuiz(materialId: string): Promise<CanonicalQuizRow[] | null> {
-  const [lesson] = await db.select({ id: lessons.id, json: lessons.json, htmlFileId: lessons.htmlFileId, version: lessons.version })
+async function publishedCanonicalQuiz(materialId: string, exec: Pick<typeof db, "select"> = db): Promise<CanonicalQuizRow[] | null> {
+  // Review #637: determinisztikus holtverseny-feloldás (azonos verzió és közzétételi idő) — ugyanaz, mint a játékbank lekérdezésében.
+  const [lesson] = await exec.select({ id: lessons.id, json: lessons.json, htmlFileId: lessons.htmlFileId, version: lessons.version })
     .from(lessons)
     .where(and(eq(lessons.htmlFileId, materialId), isNotNull(lessons.publishedAt)))
-    .orderBy(desc(lessons.version), desc(lessons.publishedAt))
+    .orderBy(desc(lessons.version), desc(lessons.publishedAt), desc(lessons.id))
     .limit(1);
   return lesson ? canonicalLessonQuiz(lesson) : null;
 }
@@ -223,10 +224,14 @@ Generálj pontosan ${n} db kvíz-tételt a fenti tananyag legfontosabb tudásmag
   const signature = (rows: Array<{ prompt: string; correctIndex: number; options: unknown }>) =>
     rows.map((r) => JSON.stringify([r.prompt, r.correctIndex, r.options])).sort().join("\n");
   // Tranzakció: anyagonkénti tanácsadó zár + deaktivál + beilleszt + visszaolvas atomikusan.
+  let canonicalAppeared = false;
   await db.transaction(async (tx) => {
     // TG-P5a: azonos anyagra párhuzamos kérés nem írhat közben újabb készletet.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`game-quiz:${materialId}`}))`);
     await workflowFence(tx);
+    // Review #637: ha a generálás közben Stúdió-lecke jelent meg az anyaghoz, nem írunk mellé régi sort (a játékok úgyis a lecke
+    // bankját olvassák; a régi sor csak a lecke visszavonása után bukkanna fel elavultként).
+    if (await (deps.canonicalQuiz ?? ((id: string) => publishedCanonicalQuiz(id, tx)))(materialId) !== null) { canonicalAppeared = true; return; }
     await tx
       .update(gameQuizItems)
       .set({ isActive: false })
@@ -253,6 +258,7 @@ Generálj pontosan ${n} db kvíz-tételt a fenti tananyag legfontosabb tudásmag
     if (signature(active) !== signature(validItems)) throw new Error("A mentett kvíztételek visszaolvasása eltér.");
     await workflowFence(tx);
   });
+  if (canonicalAppeared) result.errors.push("Közben Stúdió-lecke jelent meg ehhez az anyaghoz — a játékok annak saját bankját használják; a generált tételek nem kerültek mentésre.");
   const kinds = validItems.map((i) => classifyQuizItem({ question: i.prompt, options: i.options }).kind);
   result.practice = {
     alkalmazas: kinds.filter((k) => k === "alkalmazas").length,
