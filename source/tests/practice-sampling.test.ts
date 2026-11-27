@@ -33,6 +33,7 @@ test("TG-P6: a csoporton belül az ismétlési rangsor dönt (a rosszul megvála
   for (let i = 0; i < 29; i++) history[`a${i}`] = [{ at: 4 + i, correct: true, usedHint: false }];
   history.a29 = [{ at: 50, correct: false, usedHint: false }];
   const picked = selectPracticeQuestions(conceptFirst, 25, history, 60, isApplyQuiz).filter((q) => q.id.startsWith("a"));
+  assert.ok(picked.length >= 15 && picked.length <= 18, `teljes kör: ${picked.length} alkalmazó`);
   assert.equal(picked[0].id, "a29", "a hibás tétel a csoport elején");
   assert.deepEqual(picked.slice(1).map((q) => q.id), Array.from({ length: picked.length - 1 }, (_, i) => `a${i}`), "utána a legrégebben látott");
 });
@@ -45,7 +46,10 @@ test("TG-P6: a helyi kvízkör 25-ből 15–18 alkalmazót sorsol; csak fogalmi 
   for (let s = 1; s <= 200; s++) {
     const ids = sampleQuizIds(conceptFirst, 25, seeded(s));
     assert.equal(new Set(ids).size, 25);
-    const n = ids.filter((id) => id.startsWith("a")).length;
+    // Review #636: minden azonosító a bankból való, a kategóriát a banktételből számoljuk (nem az előtagból).
+    const items = ids.map((id) => conceptFirst.find((q) => q.id === id));
+    assert.ok(items.every(Boolean), `mag ${s}: bankon kívüli azonosító`);
+    const n = items.filter((q) => isApplyQuiz(q!)).length;
     assert.ok(n >= 15 && n <= 18, `mag ${s}: ${n}`);
   }
   assert.equal(sampleQuizIds(conceptFirst.slice(0, 20), 15, seeded(3)).length, 15);
