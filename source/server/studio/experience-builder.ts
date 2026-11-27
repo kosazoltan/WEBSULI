@@ -645,6 +645,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     } : undefined;
     let packet: Packet | undefined;
     let openIssues: string[] = [];
+    // TG-P7a: a tanításában változatlan, CSAK meta-hibás régi csomag célzott javítási alap (a J1 `seed` útja) — egy meta-kérdés miatt
+    // nem gyártódik újra a teljes csomag; a jó tételek tartalma és azonosítója (a tanulói előzmény) marad.
+    let previousSeed: { packet: unknown; issues: string[] } | undefined;
     const autofixContext = { sectionIndex: unit.sectionIndex, allowedConceptIds: unit.conceptIds, teachingText: teachingTextOf(withoutFigures(lesson.sections[unit.sectionIndex])) };
     // Review #228 (P2): a mentett (gyorsítótárból jövő) csomag is megkapja a determinisztikus rubrika-bővítést — modellhívás nélkül.
     // Review #298: a javításlista sem vész el — az elfogadott mentett csomagé a naplóba kerül (mint a modellválaszoknál).
@@ -656,7 +659,12 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       // Review #245 (P2): a mentett csomag a tartalék terhére szűkülhetett (előszűrő, T2-kivétel, salvage) — az elfogadási minimummal olvassuk
       // vissza, különben folytatáskor fizetős teljes újragyártás jönne az ellenőrzött tételek helyett.
       const parsed = salvageSchema.safeParse(saved);
-      if (parsed.success && validate(parsed.data).length === 0) {
+      const savedProblems = parsed.success ? validate(parsed.data) : [];
+      if (source === "previous" && parsed.success && keptUnit?.sourceHash && savedProblems.length) {
+        const meta = new Set(practiceMetaProblems(parsed.data));
+        if (meta.size && savedProblems.every(p => meta.has(p))) previousSeed = { packet: parsed.data, issues: [...meta] };
+      }
+      if (parsed.success && savedProblems.length === 0) {
         packet = parsed.data;
         if (savedFixes.length) deps.onToolFix?.("bank-packet-autofix", savedFixes);
         // Az átvett korábbi csomag a saját hash-ével bélyegződik: a tételazonosítók és a tanulói előzmények változatlanok maradnak.
@@ -694,13 +702,15 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     // J1: a megakadt kész csomag javítási alap. A csomagot a vak kvízszűrő már a tartalék terhére szűkíthette, ezért amíg a javítás
     // ebből az alapból halad (`seeded`), az elfogadási minimum a mentő séma; teljes újraírásnál újra a tartalékos séma él.
     let seeded = false;
-    if (seed && !packet && !reviewBase) {
-      const base = salvageSchema.safeParse(seed.packet);
+    const repairSeed = seed ?? (packet || reviewBase ? undefined : previousSeed);
+    let previousRepair = false;
+    if (repairSeed && !packet && !reviewBase) {
+      const base = salvageSchema.safeParse(repairSeed.packet);
       // Review #414: a jogosultság azonosító szerint kulcsolt — a javítási alapban az azonosító a HÁROM bankon át együtt legyen egyedi,
       // különben egy feladat és egy kvíztétel közös azonosítója a másik tétel átírását is engedné (ilyenkor marad a teljes újraírás).
       const seedIds = base.success ? BANKS.flatMap(bank => base.data[bank].map(item => item.id)) : [];
       const uniqueSeedIds = base.success && new Set(seedIds).size === seedIds.length;
-      const seedPlan = base.success && uniqueSeedIds ? repairPermissions(seed.issues, base.data) : undefined;
+      const seedPlan = base.success && uniqueSeedIds ? repairPermissions(repairSeed.issues, base.data) : undefined;
       // Előbb modellhívás nélkül: ha a gépi normalizálás (ismétlődő tétel kivétele a tartalék terhére) a kész csomagot a valódi
       // előzményekhez mérve érvényessé teszi, a csomag javítókör nélkül átvehető.
       const settledSeed = base.success ? structuredClone(base.data) : undefined;
@@ -708,7 +718,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       else if (base.success && seedPlan?.allows.length && !seedPlan.packetLevel.length) {
         repairBase = base.data; previous = base.data; seeded = true;
         repairAllowed = new Map<string, string[] | "*">(seedPlan.allows.map(a => [a.itemId, a.fields] as const));
-        errors = `${packetCounts(base.data)}; elvárt: methods=${methodKinds.length}, tasks=${taskTarget}, quiz=${quizTarget}. ${seed.issues.join("; ")}`;
+        errors = `${packetCounts(base.data)}; elvárt: methods=${methodKinds.length}, tasks=${taskTarget}, quiz=${quizTarget}. ${repairSeed.issues.join("; ")}`;
+        // TG-P7a: a régi csomag javítása a régi csomag hash-ével bélyegződik (a következő javítás is megtalálja, az azonosítók maradnak).
+        if (repairSeed === previousSeed && keptUnit?.sourceHash) { previousRepair = true; hash = keptUnit.sourceHash; unit.sourceHash = hash; }
       }
     }
     // Spec 2026-09-19: three attempts per packet — on 36–48 concept maps a second miss
@@ -885,7 +897,8 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
     // IDs are scoped to the exact source/teaching version; reused packets retain them. Review #379: az átvett, már ezzel a hash-sel
     // bélyegzett csomag a SAJÁT azonosítóit tartja — egy korábbi lektori kivétel hézaga nem számozódik át (a tanulói előzmény a tételé marad).
     const stamp = <T extends { id: string; sourceHash?: string }>(items: T[], prefix: string) => {
-      const keep = reusedPacket && items.every(i => i.sourceHash === hash) && new Set(items.map(i => i.id)).size === items.length;
+      // TG-P7a: a célzottan javított régi csomag is a saját (egyedi) azonosítóit tartja — a lecserélt tétel ugyanazon a helyen.
+      const keep = (reusedPacket && items.every(i => i.sourceHash === hash) || previousRepair) && new Set(items.map(i => i.id)).size === items.length;
       return items.map((i, n) => ({ ...i, id: keep ? i.id : `${prefix}-${hash.slice(0, 24)}-${n}`, sourceHash: hash }));
     };
     packet.methods = stamp(packet.methods, "m");

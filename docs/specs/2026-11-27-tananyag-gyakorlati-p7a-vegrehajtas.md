@@ -22,4 +22,8 @@ javítás drága. A terv: csak a kifogásolt tétel cserélődjön, a többi tar
    azonosítóit tartja (egyedi azonosítóknál). Más kapuhiba esetén a régi viselkedés (teljes újragyártás).
 3. Ellenőrzés: repair-bank-reuse, experience-builder / bank-* / single-run egységtesztek, tsc, eslint.
 
-Állapot: tervezve — következő: RED.
+3b. Mért: RED 1 bukás (a régi kód teljes csomagot kért, a célzott válasz elbukott: „methods=0, tasks=0, quiz=1”); utána
+   repair-bank-reuse 8/0, a 43 érintett tesztfájl (experience-builder, bank-*, single-run, structured, repair, practice, lektor) 347/0;
+   tsc, eslint OK.
+
+Állapot: kész — következő: kapulánc; utána TG-P7b (élő állomány: a 11 meta-tételes lecke célzott javítása előnézettel).
