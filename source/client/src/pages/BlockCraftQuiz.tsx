@@ -7,6 +7,7 @@
  * Rétegek (KSZ-1): a tiszta mag (`@/lib/blockcraft/core`: bányászás, rúnaérc, zár, zsákmány, fix lépésű hurok) → a
  * three-nézet (ez a fájl: voxel-render, rúnakövek, por) → React UI (HUD ≤ 10 Hz, kérdés-sáv, rúnagombok).
  */
+import { pickStoneBand, type StoneBandKind } from "./blockcraft-stone-band";
 import { isPlayableQuestion } from "@shared/game-quiz-contract";
 import { createRng, seedFrom, type Rng } from "@shared/game-rng";
 import { createAdaptiveSession, adaptiveTimeBudget } from "@/game-engine/adaptiveSession";
@@ -3194,6 +3195,10 @@ export default function BlockCraftQuiz() {
     // ütközés alapján a gombok betűmérete lépcsőzetesen csökken (kérdésenként csak lefelé — nincs oda-vissza ugrálás).
     const RUNE_MIN_FS = 11;
     let runeFit: { key: string; fs: number | null } = { key: "", fs: null };
+    // FLAKE-BC-K1-CI: a zár alatt a kősáv FAJTÁJA (kártya alatti / alsó sáv) nem vált — ha mindkettő használható, a korábban
+    // választott marad. Különben a kártya késői növekedése (betűkészlet, gombméret-lépcső) a köveket a tanuló szeme előtt
+    // máshová ugrasztotta, és a már célzott koppintás „nincs-kő” lett (CI #631: alsó sávból az oldalsó oszlopokba).
+    let bandKind: StoneBandKind | null = null;
     const measure = () => {
       const canvas = canvasRef.current;
       const card = document.querySelector<HTMLElement>(".play-question[data-skin=\"mine\"] .play-question-card");
@@ -3298,11 +3303,11 @@ export default function BlockCraftQuiz() {
         }
       }
       const top = Math.max(cardBottom, hud?.bottom ?? 0) + 6;
-      const cands: Band[] = [{ top, bottom: bottomLimit, left, right, landscape }];
-      if (belowBand) cands.push(belowBand);
-      let best: Band | null = null;
-      for (const c of cands) if (boxOf(c) >= 26 && (!best || boxOf(c) > boxOf(best))) best = c;
-      stoneBandRef.current = best;
+      const cands: { kind: StoneBandKind; band: Band }[] = [{ kind: "main", band: { top, bottom: bottomLimit, left, right, landscape } }];
+      if (belowBand) cands.push({ kind: "below", band: belowBand });
+      const best = pickStoneBand(cands, bandKind);
+      bandKind = best?.kind ?? null;
+      stoneBandRef.current = best?.band ?? null;
     };
     measure();
     lockMeasureRef.current = measure;

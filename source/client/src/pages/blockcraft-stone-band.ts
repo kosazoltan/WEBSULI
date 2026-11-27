@@ -21,7 +21,7 @@ export function pickStoneBand(
 ): { kind: StoneBandKind; band: StoneBand } | null {
   const usable = cands.filter((c) => stoneBoxOf(c.band) >= MIN_STONE_BOX);
   const kept = usable.find((c) => c.kind === prevKind);
-  void kept; // RED: a korábbi fajta még nem számít
+  if (kept) return kept;
   let best: { kind: StoneBandKind; band: StoneBand } | null = null;
   for (const c of usable) if (!best || stoneBoxOf(c.band) > stoneBoxOf(best.band)) best = c;
   return best;
