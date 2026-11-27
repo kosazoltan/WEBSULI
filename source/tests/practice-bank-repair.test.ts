@@ -6,6 +6,8 @@ import { buildLessonExperience } from "../server/studio/experience-builder";
 import { buildPracticeBankRepair } from "../server/studio/structured-improvement";
 import { executeWorkflow, workflowPhase } from "../server/workflows/engine";
 import { memoryWorkflows } from "./helpers/workflow-store";
+import { repairArtefactSchema } from "../shared/lesson-repair";
+import { repairHash } from "../server/studio/structured-improvement";
 
 /** TG-P7b (docs/specs/2026-11-27-tananyag-gyakorlati-p7b-vegrehajtas.md): csak-bank gyakorlati javítás. */
 
@@ -53,4 +55,25 @@ test("TG-P7b: bekötés — a mode: practice-bank a csak-bank utat indítja, a p
   assert.match(route, /generateStructuredImprovement\(originalFile\.id, customPrompt, \{ bankOnly: /u);
   assert.match(fs.readFileSync("server/studio/structured-improvement.ts", "utf8"), /opts\.bankOnly\s*\?\s*await buildPracticeBankRepair/u);
   assert.match(fs.readFileSync("client/src/components/LessonRepairPanel.tsx", "utf8"), /mode: "practice-bank"/u);
+});
+
+test("review #638: a csak-bank jelölt a TELJES olvasási sémával zárul — kikapcsolt forrásvizuál mellett is megmarad a sourceVisualId", () => {
+  const lesson = standardFusionFixture();
+  const block = lesson.sections.flatMap((s) => s.blocks).find((b) => b.kind === "example") as { sourceVisualId?: string };
+  block.sourceVisualId = "sv-1";
+  const artefact = { kind: "lesson-repair-fusion-1", lessonId: "l", baseVersion: 1, baselineHash: repairHash(lesson), baselineMaterialHash: repairHash("m"),
+    sourceHash: repairHash("s"), previousLesson: lesson, candidate: lesson };
+  const kept = repairArtefactSchema(true, false).parse(artefact);
+  const keptBlock = kept.candidate.sections.flatMap((s) => s.blocks).find((b) => b.kind === "example") as { sourceVisualId?: string };
+  assert.equal(keptBlock.sourceVisualId, "sv-1", "csak-bank: a tárolt tanítás bájtra marad");
+  const model = repairArtefactSchema(false, false).parse(artefact);
+  const modelBlock = model.candidate.sections.flatMap((s) => s.blocks).find((b) => b.kind === "example") as { sourceVisualId?: string };
+  assert.equal(modelBlock.sourceVisualId, undefined, "a szerzői (modell-) ág sémája változatlan");
+});
+
+test("review #638: a gyakorlati bankjavítás gombjának felirata 320 px-en is tördelhető", () => {
+  const src = fs.readFileSync("client/src/components/LessonRepairPanel.tsx", "utf8");
+  const btn = src.slice(src.indexOf('data-testid="lesson-repair-practice-bank"') - 300, src.indexOf('data-testid="lesson-repair-practice-bank"'));
+  assert.match(btn, /whitespace-normal/u);
+  assert.match(btn, /h-auto/u);
 });
