@@ -61,7 +61,7 @@ KÖVETELMÉNYEK minden generált tétel esetén:
 - A rossz válaszok hihetőek legyenek, ne triviálisan hibásak.
 - KÖTELEZŐ "explanation" mező: EGY rövid magyar mondat (max 200 karakter) arról, hogy MIÉRT a helyes válasz a helyes. Matematikánál a levezetést írd le (pl. "7 x 8 = 56, mert 7 x 8 = 7 x 4 x 2 = 28 x 2."), szókincsnél a jelentést. NE hivatkozz sorszámra ("2. válasz"), mert a játék kevert sorrendben rajzol.
 - ${PRACTICE_BANK_RULE}
-- Játékkvíznél csak a kvíz-szabály érvényes (nyílt feladat nincs). Ha a tananyag csak a feladatlapra / pontozásra vonatkozó adatot tartalmaz, adj vissza üres tömböt ([]).
+- Játékkvíznél csak a kvíz-szabály érvényes (nyílt feladat nincs). TILOS a játék kezelésére (irányítás, gombok, szabályok) kérdezni. Ha a tananyag csak a feladatlapra, a pontozásra, a feladattípusra, a feladatlap felépítésére vagy a játék kezelésére vonatkozó adatot tartalmaz, adj vissza üres tömböt ([]).
 - NE használj idézőjelet ("," " " """ stb.) a prompt vagy options szövegében — JSON-parse miatt csak \\" escape-elt formában lenne kezelhető. Idézőjel helyett írd át (pl. "Star magyarul" — idézőjel nélkül).
 
 KIMENET: SZIGORÚAN egyetlen JSON tömb, semmilyen magyarázat / markdown / előszó, csak nyers JSON.
