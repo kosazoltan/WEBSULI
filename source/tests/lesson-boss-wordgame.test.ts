@@ -101,3 +101,21 @@ test("V5b (a #612 tanulsága): a szójáték helye a program által kiosztott bl
   assert.equal(b[1].tryKind, "crossword", "3 fejezetnél a szójáték a középső fejezetbe kerül");
   assert.deepEqual(placeVarietyCards(four.slice(0, 2), { recapForm: plain, wordGame: "crossword" }).some((s) => s.tryKind === "crossword"), false, "< 3 fejezetnél nincs szójáték");
 });
+
+// Review #648 (Codex, Vercel): a boss- és szójáték-kapu szigorítása.
+const G = (n: number, blocks: Array<Record<string, unknown>> = []) => ({ sections: Array.from({ length: n }, (_, i) => ({ blocks: i === n - 1 ? blocks : [{ kind: "text" }] })) });
+
+test("review #648: a TERVEZETT fejezetszám dönt — kevesebb fejezetű kimenet nem kerüli meg a boss- és szójáték-kaput", () => {
+  assert.ok(bossProblems(G(2), 3).length > 0, "boss");
+  assert.ok(wordGameProblems(G(2), WORD_GAMES[0], 3).length > 0, "szójáték");
+  assert.deepEqual(bossProblems(G(2)), [], "terv nélkül a kimenet hossza");
+});
+
+test("review #648: check blokk nélküli ≥ 3 fejezetes lecke sem teljesíti a boss-követelményt", () => {
+  assert.ok(bossProblems(G(3)).length > 0);
+});
+
+test("review #648: a boss-kérdés KÜLÖNBÖZŐ fogalmakat fed le (ismételt azonosító egynek számít)", () => {
+  assert.ok(bossProblems(G(3, [{ kind: "check", boss: true, coversConceptIds: ["c1", "c1"] }])).length > 0);
+  assert.deepEqual(bossProblems(G(3, [{ kind: "check", boss: true, coversConceptIds: ["c1", "c2"] }])), []);
+});
