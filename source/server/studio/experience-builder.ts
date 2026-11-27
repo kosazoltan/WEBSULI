@@ -590,7 +590,10 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       quiz: z.array(experienceQuizSchema).min(quizCount).max(quizMax),
     });
     type Packet = z.infer<typeof packetSchema>;
-    const validate = (packet: Packet): string[] => {
+    // Review #633: a gyakorlati arány (TG-P4b) CSAK a generálási ciklus kérése/javítókör-jelzése (`quota: true`) — az átvétel
+    // többi pontja (vakellenőr kivétele, folytatás, lektori javítási alap, tartalékos kivétel) nem méri, így az utolsó kísérlet
+    // engedménye nem vész el később (és egy már átvett csomag folytatáskor sem gyártódik újra).
+    const validate = (packet: Packet, opts: { quota?: boolean } = {}): string[] => {
       // Spec 2026-10-05-bank-determinisztikus-normalizalas: a gépies hibák (rubrika↔minta, ismétlődés) javítása modellhívás NÉLKÜL.
       const normalized = normalizeBankPacket(packet, { tasks: before.tasks.map((t) => t.q), quiz: before.quiz }, { tasks: taskTarget, quiz: quizTarget }, questionKey, quizDuplicateKey); // a tartalékos célig (spec 2026-10-04): a kapu kivétele így sem sérti a 45/75-öt
       if (normalized.length) logger.info(`[STUDIO] Bankcsomag gépi normalizálás (${unit.sectionIndex + 1}. fejezet): ${normalized.slice(0, 12).join("; ")}`);
@@ -607,7 +610,7 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       // TG-P4a: a feladatlapra / pontozásra kérdező tétel javító fordulót kap (tulajdonosi döntés 2026-11-26).
       problems.push(...practiceMetaProblems(packet));
       // TG-P4b: 60–75% igazolt alkalmazás (korlátozott csomagnál a fogalompár-maximum), csomagszintű javító kör.
-      if (practiceQuotaEnabled()) problems.push(...practiceQuotaProblems(packet, unit.conceptIds.length));
+      if (opts.quota && practiceQuotaEnabled()) problems.push(...practiceQuotaProblems(packet, unit.conceptIds.length));
       // Spec 2026-09-29 (egy-helyes-valasz): pontosan egy helyes opció — a kvízben és a választós módszerben is.
       problems.push(...lessonSingleChoiceProblems({ experience: packet }).flatMap(f => f.problems.map(p => `${f.id ?? f.path}: ${p}`)));
       for (const kind of new Set(methodKinds)) if (packet.methods.filter(m => m.kind === kind).length < methodKinds.filter(k => k === kind).length) problems.push('Hiányzó módszer: ' + kind);
@@ -770,11 +773,13 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
       let issues: string[];
       if (toolFailure || !parsed) issues = [toolFailure ?? "a csomag alakja hibás"];
       else if (!parsed?.success) issues = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`);
-      else { try { issues = validate(parsed!.data); } catch (error) { issues = [`a csomag ellenőrzése kivételt dobott (hibás alakú adat): ${error instanceof Error ? error.message : String(error)}`]; } }
+      else { try { issues = validate(parsed!.data, { quota: true }); } catch (error) { issues = [`a csomag ellenőrzése kivételt dobott (hibás alakú adat): ${error instanceof Error ? error.message : String(error)}`]; } }
       // Tételgyár T2.1: a determinisztikusan tiszta csomag feladatain a válaszkulcs-tesztek (a valódi pontozó, előre megírt esetekkel).
       let answerKeyOnly = false;
       answerKeyReport = [];
-      if (parsed?.success && !issues.length && deps.answerKeys) {
+      // Review #633: a válaszkulcs-tesztek a CSAK arányhiányos csomagon is lefutnak (az engedmény nem kerülheti meg a rubrika-ellenőrzést).
+      const quotaIssues = issues.filter(isPracticeQuotaProblem);
+      if (parsed?.success && issues.length === quotaIssues.length && deps.answerKeys) {
         const keys = await deps.answerKeys(parsed.data.tasks, unit.sectionIndex);
         // T2.1b: gépi kalibráció (modellhívás nélkül); a kalibrált csomag újra átmegy a teljes ellenőrzésen, különben visszavonódik.
         const before = parsed.data.tasks;
@@ -790,10 +795,10 @@ Előző JSON-adat: ${JSON.stringify(previous)}` : ""}`;
         }
         // T2.1c: blokkoló csak a túl megengedő rubrika; a maradék helyes-eset bukás jelentés (nem javítókör).
         const all = parsed.data.tasks.map((t) => ({ id: t.id, problems: answerKeyProblems(t, keys.get(t.id) ?? null) }));
-        issues = all.flatMap((r) => r.problems.filter((p) => p.includes("válaszkulcs-teszt: a hibás")));
+        issues = [...all.flatMap((r) => r.problems.filter((p) => p.includes("válaszkulcs-teszt: a hibás"))), ...quotaIssues];
         answerKeyReport = all.map((r, i) => ({ modelId: r.id, calibration: applied ? calibrated[i].changes : [], correctFails: r.problems.filter((p) => p.includes("válaszkulcs-teszt: a helyes")) }))
           .filter((r) => r.calibration.length || r.correctFails.length);
-        answerKeyOnly = issues.length > 0;
+        answerKeyOnly = issues.length > quotaIssues.length;
       }
       // Biztonsági szelep (regressziós futás 94a5ccf9): az aritmetikai gyanú determinisztikus, de nem
       // tévedhetetlen; az utolsó (mentő) kísérletnél egyedül nem ölheti meg a csomagot — figyelmeztetéssel

@@ -186,10 +186,11 @@ function bank(items: Array<{ id: string; verdict: PracticeVerdict }>, pairs: num
   const counts: Record<PracticeKind, number> = { alkalmazas: 0, fogalmi: 0, meta: 0, bizonytalan: 0 };
   for (const it of items) counts[it.verdict.kind]++;
   const total = items.length, target = practiceTarget(total, pairs);
-  const need = target.limited ? target.max : target.lower;
-  const status = total === 0 ? "ures" : counts.meta > 0 ? "meta" : counts.alkalmazas < need ? "alacsony"
-    // review #625/2: korlátozott banknál a fogalompár-maximum, egyébként a felső (75%) határ fölött `magas`.
-    : counts.alkalmazas > (target.limited ? target.max : target.upper) ? "magas" : "teljesul";
+  // Review #633: ugyanaz a sáv, mint a csomagkvótáé — a felső határ a fogalompár-maximumnál (N − C) sem nagyobb, min ≤ max
+  // (korlátozott banknál mindkettő a maximum; review #625/2).
+  const hi = Math.min(target.upper, target.max), lo = Math.min(target.lower, hi);
+  const status = total === 0 ? "ures" : counts.meta > 0 ? "meta" : counts.alkalmazas < lo ? "alacsony"
+    : counts.alkalmazas > hi ? "magas" : "teljesul";
   return {
     total, counts, ratio: total ? Math.round((1000 * counts.alkalmazas) / total) / 1000 : 0, target, status,
     items: items.map((i) => ({ id: i.id, kind: i.verdict.kind, reason: i.verdict.reason })),
@@ -225,12 +226,16 @@ export type FinalPracticeReport = {
 export function finalPracticeReport(e: ExperienceLike | null | undefined): FinalPracticeReport | null {
   if (!e) return null;
   const audit = auditExperience(e);
-  const short = (b: BankAudit): PracticeBankReport => ({ total: b.total, counts: b.counts, status: b.status, lower: b.target.lower, upper: b.target.upper, limited: b.target.limited });
+  const short = (b: BankAudit): PracticeBankReport => {
+    const hi = Math.min(b.target.upper, b.target.max);
+    return { total: b.total, counts: b.counts, status: b.status, lower: Math.min(b.target.lower, hi), upper: hi, limited: b.target.limited };
+  };
   const notes: FinalPracticeReport["notes"] = [];
   for (const [label, b] of [["kvíz", audit.quiz], ["nyílt feladat", audit.tasks]] as const) {
+    const { lower, upper } = short(b);
     const pct = b.total ? Math.round((100 * b.counts.alkalmazas) / b.total) : 0;
-    if (b.status === "alacsony") notes.push({ reason: "practice_low", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) igazolt alkalmazás — a cél ${b.target.limited ? `a fogalompár-maximum (${b.target.max})` : `${b.target.lower}–${b.target.upper}`}.` });
-    else if (b.status === "magas") notes.push({ reason: "practice_high", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) alkalmazás — a fogalmi felidézésre kevés hely maradt (legfeljebb ${b.target.limited ? b.target.max : b.target.upper}).` });
+    if (b.status === "alacsony") notes.push({ reason: "practice_low", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) igazolt alkalmazás — a cél ${b.target.limited ? `a fogalompár-maximum (${b.target.max})` : `${lower}–${upper}`}.` });
+    else if (b.status === "magas") notes.push({ reason: "practice_high", note: `A ${label}bankban ${b.counts.alkalmazas}/${b.total} (${pct}%) alkalmazás — a fogalmi felidézésre kevés hely maradt (legfeljebb ${upper}).` });
     else if (b.status === "teljesul" && b.target.limited) notes.push({ reason: "practice_limited", note: `A ${label}bank fogalompár által korlátozott: ${b.counts.alkalmazas}/${b.total} alkalmazás az elérhető maximum (a 60% a kötelező fogalompárok mellett nem érhető el).` });
   }
   const metaProblems = [...audit.quiz.items, ...audit.tasks.items].filter((i) => i.kind === "meta").map((i) => `${i.id}: ${i.reason} — a kiadott bankban nem lehet a feladatlapra / pontozásra kérdező tétel`);
