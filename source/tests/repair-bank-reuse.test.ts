@@ -149,3 +149,66 @@ test("TG-P7a: meta MELLETT más kapuhibás régi csomag továbbra is teljes újr
   assert.equal(prompts.length, 1);
   assert.doesNotMatch(prompts[0], /JAVÍTÁSI MÓD: a teljes csomag már megvan/u, "teljes csomagot kér");
 });
+
+// Review #635: a célzott meta-csere a nyílt feladat rubrikáját is cserélheti, a szószedet és az érintetlen tételek kapui nem futnak újra.
+async function dirtyTaskLesson() {
+  const { lesson, packets } = twoSectionLesson();
+  let calls = 0;
+  const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+  const dirty = structuredClone(first);
+  const victim = dirty.tasks.find(t => t.sectionIndex === 0)!;
+  victim.q = "Hány pontot ér a feladatlapon a 2. feladat, és milyen feladattípus?";
+  return { lesson, first, dirty, victim };
+}
+
+test("review #635: a meta-feladat új rubrikával (más kötelező válasszal) is lecserélhető; a szószedet nem cserélődik", async () => {
+  const { lesson, first, dirty, victim } = await dirtyTaskLesson();
+  const replacement = { ...structuredClone(victim), q: "Egy háromszög alapja 6 cm, magassága 8 cm. Mekkora a területe?", required: [["24"]], bonus: [], sample: "A terület 24 cm².", minWords: 1, needsSentence: false };
+  delete (replacement as { typedAnswers?: unknown }).typedAnswers;
+  delete (replacement as { requiredPhrases?: unknown }).requiredPhrases;
+  delete (replacement as { requiredOrder?: unknown }).requiredOrder;
+  const repaired = await buildLessonExperience(lesson, [], {
+    previous: dirty, previousSections: lesson.sections,
+    call: async () => ({ methods: [], tasks: [replacement], quiz: [], glossary: [{ word: "x", translation: "y", partOfSpeech: "n", example: "x", exampleTranslation: "y" }] }),
+  });
+  const fixed = repaired.tasks.find(t => t.id === victim.id)!;
+  assert.equal(fixed.q, replacement.q);
+  assert.deepEqual(fixed.required, [["24"]]);
+  assert.deepEqual(repaired.glossary, first.glossary, "a szószedet az eredeti");
+  assert.deepEqual(repaired.tasks.filter(t => t.id !== victim.id), first.tasks.filter(t => t.id !== victim.id));
+});
+
+test("review #635: a célzott javításnál a válaszkulcs-teszt és a vak kvízszűrő csak a lecserélt tételt kapja", async () => {
+  const { lesson, dirty, victim } = await dirtyTaskLesson();
+  const keyed: string[][] = [];
+  const blind: string[][] = [];
+  await buildLessonExperience(lesson, [], {
+    previous: dirty, previousSections: lesson.sections,
+    call: async () => ({ methods: [], tasks: [{ ...structuredClone(victim), q: "Egy háromszög alapja 6 cm, magassága 4 cm. Mekkora a területe?" }], quiz: [], glossary: [] }),
+    answerKeys: async (tasks) => { keyed.push(tasks.map(t => t.id)); return new Map(); },
+    quizBlind: async (quiz) => { blind.push(quiz.map(q => q.id)); return new Map(); },
+  });
+  assert.ok(keyed.length >= 1);
+  for (const ids of keyed) assert.deepEqual(ids.filter(id => dirty.tasks.some(t => t.id === id && t.sectionIndex === 0)), [victim.id], "csak a lecserélt feladat");
+  for (const ids of blind) assert.deepEqual(ids, [], "a kvíz nem változott — nincs vak újraellenőrzés");
+});
+
+test("review #635: STUDIO_PRACTICE_QUOTA=on mellett is célzott a meta-csere (az arányeltérés nem kényszerít teljes újragyártást)", async () => {
+  const prev = process.env.STUDIO_PRACTICE_QUOTA;
+  process.env.STUDIO_PRACTICE_QUOTA = "on";
+  try {
+    const { lesson, packets } = twoSectionLesson();
+    let calls = 0;
+    const first = await buildLessonExperience(lesson, [], { memory: "M", call: async () => structuredClone(packets[calls++ % 2]) });
+    const dirty = structuredClone(first);
+    const victim = dirty.quiz.find(q => q.sectionIndex === 0)!;
+    victim.question = META;
+    const prompts: string[] = [];
+    const repaired = await buildLessonExperience(lesson, [], { previous: dirty, previousSections: lesson.sections,
+      call: async (_s, user) => { prompts.push(user); return { methods: [], tasks: [], quiz: [{ ...structuredClone(victim), question: PRACTICAL }], glossary: [] }; } });
+    assert.ok(prompts.length >= 1 && prompts.every(p => /JAVÍTÁSI MÓD/u.test(p)), "csak célzott hívás");
+    assert.deepEqual(repaired.quiz.filter(q => q.id !== victim.id), first.quiz.filter(q => q.id !== victim.id));
+  } finally {
+    if (prev === undefined) delete process.env.STUDIO_PRACTICE_QUOTA; else process.env.STUDIO_PRACTICE_QUOTA = prev;
+  }
+});
