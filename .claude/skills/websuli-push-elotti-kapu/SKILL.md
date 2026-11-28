@@ -3,6 +3,8 @@ name: websuli-push-elotti-kapu
 description: WEBSULI push előtti kapu (helyi, kötelező). Töltsd be automatikusan minden git push ELŐTT a WEBSULI-repóban (munkafában is) - a check-quality-gates hook zöld pre-push bizonyíték nélkül megtagadja a pusht. Parancs - npm run gate:push.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Push előtti kapu
 
 Runbook: `docs/minosegkapuk.md`. A hook (`scripts/qa/hooks/check-quality-gates.mjs`) a `git push` előtt a

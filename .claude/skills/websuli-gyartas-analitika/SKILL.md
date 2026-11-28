@@ -3,6 +3,8 @@ name: websuli-gyartas-analitika
 description: A Websuli tananyaggyártás / okosítás / javítás méréses felülvizsgálata — költség állomásonként, a javítókörök okai a Render-naplóból, minőségellenőrzés, 5-ös ciklusos javítás. Használd gyártási futások után, tömeges átalakításkor, vagy ha a gyártás drága / lassú / sok javítókört fut.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Websuli gyártás-analitika (ciklusos felülvizsgálat)
 
 Forrás: a régi anyagok éjszakai átalakítása (2026-10-20/21, 98 futás, ~$574), amelyet a tulajdonos „drága analitikaként” jelölt

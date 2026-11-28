@@ -3,6 +3,8 @@ name: websuli-feladat-nyilvantartas
 description: Use when starting, slicing, opening a PR, merging or closing WEBSULI work. Track tasks in SQL.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # WEBSULI feladat-nyilvántartás (K-FELADATDB) — az SQL az igazság forrása
 
 Tulajdonosi döntés (2026-11-25): a beadott és elvégzett feladatokat, a teljesülést és a készültségi fokot a helyi SQL

@@ -3,6 +3,8 @@ name: websuli-lint-ellenor
 description: WEBSULI lint kapu és szakasz utáni kapu (helyi, gyors, ingyenes). Töltsd be automatikusan MINDEN szerkesztési szakasz után (mielőtt a következő lépésre lépsz), és bármilyen kibocsátás (commit-sorozat lezárása, push, PR, merge, telepítés) előtt. Parancsok - npm run gate:stage és npm run gate:lint.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Lint ellenőr — szakasz utáni és kibocsátás előtti helyi kapu
 
 Tulajdonosi utasítás (2026-11-17, kötelező): minden szakasz után előbb a helyi, gyors szkript-ellenőrzések és tesztek fussanak; csak

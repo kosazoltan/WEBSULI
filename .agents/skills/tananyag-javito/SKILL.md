@@ -3,6 +3,8 @@ name: tananyag-javito
 description: Hiányos, hibás HTML vagy Studio JSON tananyagok forráshű, mentett és ellenőrzött fúziós javítása. Aktiválódjon tananyag javítása esetén.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Tananyag javítása — fúzió 7.4
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
