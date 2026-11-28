@@ -99,6 +99,10 @@ export function realExec(cmd, args = [], { cwd, env, timeoutMs = 30 * 60_000, in
     cwd, env: env ?? process.env, encoding: 'utf8', timeout: timeoutMs, windowsHide: true, shell,
     maxBuffer: 256 * 1024 * 1024, input,
   });
+  // Q-3 (#168): időtúllépésnél olvasható jelzés és 124-es kód (a `timeout` parancs konvenciója), nem „kilépési kód 127”.
+  if (r.error && /ETIMEDOUT/.test(`${r.error.code ?? ''} ${r.error.message}`)) {
+    return { code: 124, stdout: r.stdout ?? '', stderr: `${r.stderr ?? ''}\nIDŐTÚLLÉPÉS ${timeoutMs / 1000} s`, ms: Date.now() - t0 };
+  }
   const stderr = `${r.stderr ?? ''}${r.error ? `\n${r.error.message}` : ''}`;
   return { code: r.status ?? (r.error ? 127 : 1), stdout: r.stdout ?? '', stderr, ms: Date.now() - t0 };
 }
