@@ -65,3 +65,20 @@ test('helyes PR: terv + végrehajtás az 1. commitban, kód a 2.-ban (vagy ugyan
   const same = decideThreePhase({ files, commits: [{ sha: '3'.repeat(40), files: [PLAN, EXEC, ...code(3).map((f) => f.path)] }], ...io });
   assert.equal(same.ok, true);
 });
+
+// Q-3 (#144, docs/specs/2026-11-19-websuli-potlasok-terv-vegrehajtas.md): a mainen már meglévő (squash-beolvadt) commit kimarad.
+test('Q-3: a mainen tartalmilag már meglévő kódcommit nem számít „első kódcommitnak” (squash-követő hamis bukás)', () => {
+  const old = { sha: 'e'.repeat(40), files: ['source/server/studio/regi.ts'] };
+  const files = [...code(2), { path: 'source/server/studio/regi.ts', added: 30, deleted: 0 }, { path: EXEC, added: 20, deleted: 0 }];
+  const commits = [old, { sha: 'f'.repeat(40), files: [EXEC] }, { sha: '1'.repeat(40), files: code(2).map((f) => f.path) }];
+  assert.equal(decideThreePhase({ files, commits, ...io }).ok, false, 'upstream nélkül a régi viselkedés (bukás)');
+  const r = decideThreePhase({ files, commits, ...io, upstream: new Set([old.sha]) });
+  assert.equal(r.ok, true, r.reason);
+});
+
+test('Q-3: ha CSAK mainen meglévő kódcommit van, nincs kódváltozás', () => {
+  const old = { sha: 'e'.repeat(40), files: code(3).map((f) => f.path) };
+  const r = decideThreePhase({ files: code(3), commits: [old], ...io, upstream: new Set([old.sha]) });
+  assert.equal(r.ok, true);
+  assert.match(r.reason, /Nincs kódváltozás/);
+});

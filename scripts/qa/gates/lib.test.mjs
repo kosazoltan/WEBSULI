@@ -196,3 +196,11 @@ test('vak L3 (9effab11): az első hibasor a hosszú stderr-ből — a csonkolás
   const long = 'e '.repeat(REDACT_CAP) + 'gh: rate limit exceeded';
   assert.ok(redactFirstLine(long).endsWith('gh: rate limit exceeded'), 'túl hosszú első sornál a sor vége (a lényeg) látszik');
 });
+
+// Q-3 (#168): időtúllépés olvasható jelzéssel, nem „kilépési kód 127”.
+test('Q-3: realExec időtúllépésnél 124-es kódot és „IDŐTÚLLÉPÉS <mp> s” sort ad', async () => {
+  const { realExec } = await import('./lib.mjs');
+  const r = realExec(process.execPath, ['-e', 'setTimeout(() => {}, 10000)'], { timeoutMs: 400 });
+  assert.equal(r.code, 124);
+  assert.match(r.stderr, /IDŐTÚLLÉPÉS 0\.4 s/);
+});
