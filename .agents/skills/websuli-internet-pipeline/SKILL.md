@@ -3,6 +3,8 @@ name: websuli-internet-pipeline
 description: Internetes tananyagkészítés a programon belüli témára — keresés, web_fetch, tudásbázis, 7.4 fúziós HTML. Aktiválódjon webes tananyag, web-research, forrásjegyzék vagy tudásbázis-pipeline esetén.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Internetes tananyag-pipeline
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.

@@ -3,6 +3,8 @@ name: websuli-merge-elotti-kapu
 description: WEBSULI merge előtti kapu (az orkesztrátor futtatja, kötelező). Töltsd be automatikusan minden gh pr merge ELŐTT, közvetlenül előtte - a check-quality-gates hook a PR jelenlegi fejére szóló, legfeljebb 15 perces zöld merge-bizonyíték nélkül megtagadja a merge-et. Parancs - npm run gate:merge -- <PR-szám>.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Merge előtti kapu
 
 Runbook: `docs/minosegkapuk.md`, `docs/telepites-elotti-or.md`. A kapu CSAK ellenőriz; a `gh pr merge`-et nem hívja.

@@ -3,6 +3,8 @@ name: websuli-pr-elotti-kapu
 description: WEBSULI PR előtti kapu (helyi, kötelező). Töltsd be automatikusan a gh pr create ELŐTT - a check-quality-gates hook zöld pre-pr bizonyíték nélkül megtagadja a PR megnyitását. Előfeltétel - a helyi GPU-ellenőr (local-review.mjs) lefutott az aktuális fejre (NEM ítélet: jelzés, a leleteket a PR-ben igazold / cáfold). Parancs - npm run gate:pr -- --body-file <leírás.md>.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # PR előtti kapu
 
 Runbook: `docs/minosegkapuk.md`. A hook a `gh pr create` előtt a `pre-pr-<HEAD>.json` bizonyítékot nézi; nélküle DENY.

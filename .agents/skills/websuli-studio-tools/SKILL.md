@@ -3,6 +3,8 @@ name: websuli-studio-tools
 description: A Studio determinisztikus eszközei (outline-autofix, bank-packet-autofix, section-visuals) — mikor futnak a pipeline-ban, hogyan futtathatók kézzel, mit javítanak és mit nem. Aktiválódjon bankcsomag-hiba, vázlat-hiba, hiányzó ábra vagy modellhívás-költség vizsgálatakor.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Studio eszközök — modellhívás helyett kód
 
 > **Befejezési mandátum** (tulajdonosi utasítás 2026-11-01/03): félbehagyás tilos, session végén teljességellenőrzés, NOT DONE + ok + kockázat, minden hibából csapda ([`docs/agent-csapdak.md`](../../../docs/agent-csapdak.md)) — [`AGENTS.md`](../../../AGENTS.md) „Befejezési mandátum”.
