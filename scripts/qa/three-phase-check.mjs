@@ -55,6 +55,24 @@ export function decideThreePhase({ files: allFiles, commits: allCommits, readFil
   return { ok: true, reason: `Rendben: terv + végrehajtási utasítás (${withPlan.join(', ')}), a kód utána.` };
 }
 
+/**
+ * Review #662 (Codex, Vercel): a base-en már meglévő commitok felismerése TARTALOM szerint (a `git cherry` patch-id-je a több commitból
+ * squash-olt előzményt nem ismeri fel, és a szóköz-eltérést figyelmen kívül hagyja). Az ág legelső commitjaiból álló leghosszabb
+ * előtagot keressük, amelynek végállapotában az előtag által érintett MINDEN fájl bájtra azonos a base-beli fájllal (`blobAt(path, sha)`;
+ * `sha = 'BASE'` → base; hiányzó fájl → null). Az ilyen előtag (pl. egy squash-beolvadt korábbi szelet összes commitja) nem része a
+ * vizsgálatnak; ami utána jön, igen.
+ */
+export function upstreamPrefix(commits, blobAt) {
+  const touched = new Set();
+  let best = -1;
+  for (let k = 0; k < commits.length; k++) {
+    for (const f of commits[k].files) touched.add(f);
+    const sha = commits[k].sha;
+    if ([...touched].every((f) => blobAt(f, sha) === blobAt(f, 'BASE'))) best = k;
+  }
+  return new Set(commits.slice(0, best + 1).map((c) => c.sha));
+}
+
 function git(argv) {
   return execFileSync('git', argv, { encoding: 'utf8' }).trim();
 }
@@ -73,9 +91,10 @@ function main() {
     const [sha, ...rest] = chunk.trim().split('\n');
     return { sha, files: rest.filter(Boolean) };
   });
-  // Q-3: `git cherry` „-” sorai = a base-en már tartalmilag meglévő commitok (patch-id egyezés).
+  // Q-3 + review #662: a base-en tartalmilag (bájtra) már meglévő commit-előtag kiszűrése.
+  const blobAt = (p, sha) => { try { return git(['rev-parse', `${sha === 'BASE' ? base : sha}:${p}`]); } catch { return null; } };
   let upstream = new Set();
-  try { upstream = new Set(git(['cherry', base, 'HEAD']).split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim())); } catch { /* régi viselkedés */ }
+  try { upstream = upstreamPrefix(commits, blobAt); } catch { /* régi viselkedés */ }
   const readFileAt = (p, sha) => { try { return execFileSync('git', ['show', `${sha ?? 'HEAD'}:${p}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
   const existsAt = (p, sha) => readFileAt(p, sha) !== null;
   const result = decideThreePhase({ files, commits, readFileAt, existsAt, upstream });

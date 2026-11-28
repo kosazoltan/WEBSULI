@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideThreePhase } from './three-phase-check.mjs';
+import { decideThreePhase, upstreamPrefix } from './three-phase-check.mjs';
 
 // docs/specs/2026-10-15-haromfazis-ci-ellenorzes.md (E1–E4), docs/specs/2026-10-15-review-236-237-javitas.md (E1–E2)
 
@@ -81,4 +81,16 @@ test('Q-3: ha CSAK mainen meglévő kódcommit van, nincs kódváltozás', () =>
   const r = decideThreePhase({ files: code(3), commits: [old], ...io, upstream: new Set([old.sha]) });
   assert.equal(r.ok, true);
   assert.match(r.reason, /Nincs kódváltozás/);
+});
+
+// Review #662: több commitból squash-olt előzmény és szóköz-eltérés — tartalom (blob) szerinti előtag.
+test('review #662: két commitból squash-olt korábbi szelet mindkét commitja kimarad; a szóközben eltérő commit NEM', () => {
+  const base = { 'a.ts': 'v2', 'b.ts': 'x' };
+  const blobs = { c1: { 'a.ts': 'v1' }, c2: { 'a.ts': 'v2', 'b.ts': 'x' }, c3: { 'a.ts': 'v2', 'b.ts': 'x', 'c.ts': 'n' } };
+  const blobAt = (f, sha) => (sha === 'BASE' ? base[f] : blobs[sha][f]) ?? null;
+  const commits = [{ sha: 'c1', files: ['a.ts'] }, { sha: 'c2', files: ['a.ts', 'b.ts'] }, { sha: 'c3', files: ['c.ts'] }];
+  assert.deepEqual([...upstreamPrefix(commits, blobAt)], ['c1', 'c2'], 'a squash-olt két commit felismerve, a saját commit marad');
+  const ws = { 'a.ts': 'v2 ', 'b.ts': 'x' };
+  const blobAt2 = (f, sha) => (sha === 'BASE' ? ws[f] : blobs[sha][f]) ?? null;
+  assert.deepEqual([...upstreamPrefix(commits, blobAt2)], [], 'szóköz-eltérés → nem azonos, nem marad ki');
 });
