@@ -178,7 +178,7 @@ test("döntőbíró: a gyorsítótárba a ténylegesen ítélő (tartalék) mode
 test("döntőbíró-lánc: séma-ellenőrzés modellenként és a tartalék keretfoglalása", async () => {
   const { callArbiterModels } = await import("../server/arbiter/routes");
   const { ARBITER_VERSION } = await import("../server/arbiter/arbiter");
-  assert.equal(ARBITER_VERSION, "arbiter-2", "a modellváltás érvényteleníti a régi gyorsítótárat");
+  assert.equal(ARBITER_VERSION, "arbiter-3", "a modellváltás érvényteleníti a régi gyorsítótárat");
   const calls: string[] = [];
   const invalidPrimary = await callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); return m === "claude-opus-5-5" ? { state: "talán" } : { state: "ok", reason: "jó" }; }, async () => true);
   assert.equal(invalidPrimary.model, "gpt-6.1-sol");
