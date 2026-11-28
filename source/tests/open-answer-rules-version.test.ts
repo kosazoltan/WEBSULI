@@ -6,7 +6,7 @@ import { OPEN_ANSWER_RULES_HU, OPEN_ANSWER_RULES_VERSION, SHORT_COMPLETE_SCORE, 
 /** S7a (docs/specs/2026-11-18-tananyag-gyartas-minoseg-vegrehajtas.md): a nyílt válasz szabályszövegének verziója és lenyomata. */
 
 // A verzió és a lenyomat EGYÜTT változik: új szabályszöveg = új verzió + új lenyomat ebben a párban.
-const FINGERPRINTS: Record<string, string> = { "open-answer-2": "__FP__" };
+const FINGERPRINTS: Record<string, string> = { "open-answer-2": "4db504ec69c1" };
 
 test("S7a: a szabályverzió open-answer-2, a lenyomat a rögzített érték", () => {
   assert.equal(OPEN_ANSWER_RULES_VERSION, "open-answer-2");

@@ -16,7 +16,7 @@ export const ANSWER_KEY_SYSTEM = [
   "Te egy tapasztalt magyar tanító vagy, aki egy nyílt feladat pontozójához TESZTVÁLASZOKAT ír.",
   "Minden feladathoz írj:",
   `- ${ANSWER_KEY_LIMITS.correctMin + 1}–${ANSWER_KEY_LIMITS.correctMax} HELYES választ, ahogy különböző gyerekek valóban leírnák: eltérő szórenddel, ragozással,`,
-  "  rokon értelmű szavakkal, rövidebben és hosszabban — de mindegyik tartalmilag teljes és helyes (minden, amit a kérdés kér, benne van).",
+  "  rokon értelmű szavakkal, rövidebben és hosszabban — de mindegyik legalább egy teljes mondat, tartalmilag teljes és helyes (minden, amit a kérdés kér, benne van).",
   `- ${ANSWER_KEY_LIMITS.wrongMin + 1}–${ANSWER_KEY_LIMITS.wrongMax} HIBÁS választ, mindegyiknél a fajtájával: "tevhit" (jellegzetes tévhit), "forditott" (fordított irány /`,
   "  felcserélt ok-okozat), \"hianyos\" (csak a válasz egy része), \"temaidegen\" (a témához tartozó, de a kérdésre nem felelő állítás).",
   "A mintaválasz csak tájékoztat: a helyes válaszok NE legyenek a minta szó szerinti másolatai.",
