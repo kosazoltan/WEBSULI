@@ -177,6 +177,8 @@ describe("JM7a — admin-útvonal regressziós őr", () => {
       "GET /api/admin/advent/preview/status", "GET /api/admin/advent/preview/state", "POST /api/admin/advent/preview/grade",
       "POST /api/admin/advent/preview/doors/:day/open", "POST /api/admin/advent/preview/doors/:day/answer",
       "POST /api/admin/advent/preview/round", "POST /api/admin/advent/preview/adopt", "DELETE /api/admin/advent/preview", "GET /api/admin/advent/mail-report",
+      // S8: az értesítő levél (száraz futás / éles küldés) is admin-őr mögött.
+      "POST /api/admin/advent/announce",
     ];
     for (const k of expected) {
       const e = byKey.get(k);
