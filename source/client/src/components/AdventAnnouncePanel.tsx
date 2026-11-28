@@ -27,7 +27,10 @@ export default function AdventAnnouncePanel() {
     if (!dry) return;
     if (!window.confirm(`Biztosan elküldöd az adventi értesítőt ${dry.recipients} címzettnek?`)) return;
     setBusy(true); setError(null);
-    try { setSent(await apiRequest<Sent>("POST", "/api/admin/advent/announce", { dryRun: false, confirmCount: dry.recipients })); setDry(null); }
+    // Review #659: a soros küldés címzettenként ~0,6 s — a kliens időkorlátja a címzettszámhoz igazodik (legalább 2 perc), újrapróba
+    // nélkül (a kétszeri küldést a szerver foglalása amúgy is kiszűri). Ha mégis lejár, az újabb előnézet mutatja, hányan kapták meg.
+    const timeout = Math.max(120_000, dry.recipients * 1_500 + 60_000);
+    try { setSent(await apiRequest<Sent>("POST", "/api/admin/advent/announce", { dryRun: false, confirmCount: dry.recipients }, { timeout, retries: 0 })); setDry(null); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };
