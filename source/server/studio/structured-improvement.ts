@@ -17,6 +17,7 @@ import { visualsOfSourceFiles } from "../../shared/source-visuals";
 import { buildAuthorPrompt, buildLektorPrompt, lektorReportSchema } from "./step-io";
 import { classifyNotes } from "./lektor";
 import { removeLektorBlockers } from "./choice-gate";
+import { bankItemRef } from "@shared/bank-item-ref";
 import { lektorSkillCodes } from "../workflows/learning";
 import { buildLessonExperience, teachingTextOf, type ExperienceBuildDeps, type ExperienceCheckpoint } from "./experience-builder";
 import type { AnswerKeyContext } from "./answer-key-writer";
@@ -272,7 +273,21 @@ export async function buildPracticeBankRepair(original: Lesson, source: RepairSo
   // A munkafolyamat fázissorrendje (source → author → banks …) marad; a szerzői fázis itt modellhívás nélküli (a tanítás az eredeti).
   await workflowPhase("author");
   const owner: RepairOwner = { corrections: [] };
-  return { ...await finishStructuredImprovement(original, structuredClone(original), source, call, undefined, owner, { gates: opts.gates, staleConceptIds: opts.staleConceptIds, keepLegacy: true }), owner };
+  const run = (stale: Iterable<string> | undefined) =>
+    finishStructuredImprovement(original, structuredClone(original), source, call, undefined, owner, { gates: opts.gates, staleConceptIds: stale, keepLegacy: true });
+  try {
+    return { ...await run(opts.staleConceptIds), owner };
+  } catch (err) {
+    // P7C-LEKTOR-REGI: a lektor egy megtartott régi tételt kifogásol, ami ki sem vehető (a bank fedése sérülne) — a tétel fogalmai
+    // egyszer újragyártódnak (nem vehetők át), a második kör blokkolója már a régi megállás.
+    if (!(err instanceof LektorBankBlockError)) throw err;
+    return { ...await run([...(opts.staleConceptIds ?? []), ...err.conceptIds]), owner };
+  }
+}
+
+/** P7C-LEKTOR-REGI: minden blokkoló létező banktételre mutat, de a kivétel a bank-szabályok miatt nem lehetséges. */
+export class LektorBankBlockError extends Error {
+  constructor(message: string, readonly conceptIds: string[]) { super(message); this.name = "LektorBankBlockError"; }
 }
 
 /** A separately inspected teaching checkpoint still passes every gate before new banks. */
@@ -306,7 +321,12 @@ async function finishStructuredImprovementScoped(original: Lesson, candidate: Le
     // Spec 2026-10-20-elakadas-gyokerok-elemzes (R1): csak kivehető tételekre (banktétel, ellenőrző blokk, ábra) a jelölt a tételek
     // nélkül megy tovább; ténybeli / tanítási jegyzetnél a régi megállás (az eredeti érintetlen).
     const removal = removeLektorBlockers(candidate, blockers, review.solutions);
-    if ("error" in removal) throw new Error(`A lektor javítást kér, az eredeti érintetlen: ${blockers.map(n => n.message).join("; ")}`);
+    if ("error" in removal) {
+      // P7C-LEKTOR-REGI (L3): az üzenet a kivétel okát és a jegyzetek útvonalát is mutatja.
+      const message = `A lektor javítást kér, az eredeti érintetlen (${removal.error}): ${blockers.map(n => `${n.blockPath ?? "—"} ${n.message}`).join("; ")}`;
+      const conceptIds = flaggedBankConcepts(candidate, blockers);
+      throw conceptIds ? new LektorBankBlockError(message, conceptIds) : new Error(message);
+    }
     candidate = removal.lesson;
     lektorRemoved = removal.removed;
   }
@@ -401,4 +421,16 @@ export async function restoreStructuredImprovement(backupId: string, userId: str
     const [restoredFile] = await tx.update(htmlFiles).set({ title: saved.title, content: saved.content, description: saved.description, classroom: saved.classroom, contentType: saved.contentType }).where(eq(htmlFiles.id, original.id)).returning();
     return { success: true, restoredFile };
   });
+}
+
+/** A blokkolók által megjelölt létező banktételek fogalmai; ha bármelyik jegyzet nem létező banktételre mutat, `null`. */
+function flaggedBankConcepts(lesson: Lesson, blockers: ReadonlyArray<{ blockPath?: string | null }>): string[] | null {
+  const ids = new Set<string>();
+  for (const note of blockers) {
+    const ref = bankItemRef(note.blockPath);
+    const item = ref && lesson.experience ? lesson.experience[ref.bank][ref.index] : undefined;
+    if (!item) return null;
+    for (const id of item.coversConceptIds) ids.add(id);
+  }
+  return ids.size ? [...ids] : null;
 }
