@@ -21,6 +21,7 @@ test("címzettek (A39): csak feliratkozók és külön címek; kisbetű, trim, i
 });
 
 /** Memóriabeli `advent_announcements` a lekérdezések szövegére illesztve (a valódi SQL-t a DB-teszt fedi). */
+let failSentUpdate = 0;
 function fakeDb() {
   const rows = new Map<string, { id: string; status: string }>();
   let n = 0;
@@ -35,7 +36,10 @@ function fakeDb() {
         return { rows: [{ id: row.id }] };
       }
       const m = /SET status = '(sent|failed)'/.exec(sql);
-      if (m) { for (const v of rows.values()) if (v.id === params[0]) v.status = m[1]!; return { rows: [] }; }
+      if (m) {
+        if (m[1] === "sent" && failSentUpdate > 0) { failSentUpdate--; throw new Error("db"); }
+        for (const v of rows.values()) if (v.id === params[0]) v.status = m[1]!; return { rows: [] };
+      }
       throw new Error(`váratlan SQL: ${sql}`);
     },
   };
@@ -45,7 +49,7 @@ function deps(over: Partial<AnnounceDeps> = {}) {
   const db = fakeDb();
   const sent: string[] = [];
   const d: AnnounceDeps = {
-    db, season: 2026, baseUrl: "https://websuli.vip", secret: () => "titok",
+    db, season: 2026, baseUrl: "https://websuli.vip", secret: () => "titok", pauseMs: 0,
     recipients: async () => ({ subscriptions: ["a@x.hu", "b@x.hu"], extras: ["c@x.hu"] }),
     send: async (to) => { sent.push(to); },
     ...over,
@@ -101,4 +105,26 @@ test("tesztben / e2e-módban valódi levél nem megy ki: a beállított hamis k�
   await adventAnnounceSender({ NODE_ENV: "test" })("a@x.hu", "t", "h", "k");
   setAdventAnnounceSender(null);
   assert.deepEqual(calls, ["a@x.hu"]);
+});
+
+test("review #659: a sikeres küldés utáni mentési hiba nem tesz failed-re; 3 próbálkozás, utána sem küld újra azonnal", async () => {
+  const { d, db, sent } = deps({ recipients: async () => ({ subscriptions: ["a@x.hu"], extras: [] }) });
+  failSentUpdate = 2;
+  assert.deepEqual(await announceAdvent(d, { dryRun: false, confirmCount: 1 }), { status: 200, dryRun: false, sent: 1, failed: 0, skipped: 0 });
+  assert.equal([...db.rows.values()][0]!.status, "sent", "a 3. próbálkozás mentett");
+  failSentUpdate = 3;
+  const { d: d2, db: db2 } = deps({ recipients: async () => ({ subscriptions: ["b@x.hu"], extras: [] }) });
+  await announceAdvent(d2, { dryRun: false, confirmCount: 1 });
+  failSentUpdate = 0;
+  assert.equal([...db2.rows.values()][0]!.status, "pending", "nem failed — a kézbesített levél nem kerül újrapróbálásra");
+  assert.deepEqual(await announceAdvent(d2, { dryRun: false, confirmCount: 1 }), { status: 200, dryRun: false, sent: 0, failed: 0, skipped: 1 });
+  assert.equal(sent.length, 1);
+});
+
+test("review #659: a küldések között szünet van (kéréskorlát)", async () => {
+  const times: number[] = [];
+  const { d } = deps({ pauseMs: 40, send: async () => { times.push(Date.now()); } });
+  await announceAdvent(d, { dryRun: false, confirmCount: 3 });
+  assert.equal(times.length, 3);
+  assert.ok(times[1]! - times[0]! >= 35 && times[2]! - times[1]! >= 35, `szünet: ${times.map((t) => t - times[0]!)}`);
 });

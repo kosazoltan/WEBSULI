@@ -22,7 +22,7 @@ test("száraz futás nem ír; az éles küldés címzettenként egy sort foglal,
   const sent: string[] = [];
   let failB = true;
   const deps = {
-    db: dbPool, season: SEASON, baseUrl: "https://websuli.vip", secret: () => "teszt-titok",
+    db: dbPool, season: SEASON, baseUrl: "https://websuli.vip", secret: () => "teszt-titok", pauseMs: 0,
     recipients: async () => ({ subscriptions: ["a@x.hu", "b@x.hu"], extras: ["c@x.hu", "A@x.hu"] }),
     send: async (to: string) => { if (failB && to === "b@x.hu") throw new Error("hálózat"); sent.push(to); },
   };
@@ -41,4 +41,22 @@ test("száraz futás nem ír; az éles küldés címzettenként egy sort foglal,
   assert.deepEqual([...sent].sort(), ["a@x.hu", "b@x.hu", "c@x.hu"]);
   const hashes = (await dbPool.query("SELECT recipient_hash FROM advent_announcements WHERE season = $1", [SEASON])).rows.map((r) => String(r.recipient_hash));
   assert.ok(hashes.every((h) => /^[0-9a-f]{64}$/.test(h)), "csak kulcsolt lenyomat, cím nem");
+});
+
+test("review #659: a megszakadt (15 perc–23 óra közötti) függő foglalás újrapróbálható; a 23 óránál régebbi bizonytalan, nem küld", async () => {
+  await dbPool.query(SEASON_CLEANUP);
+  const { announceRecipientHash } = await import("../server/advent/announce");
+  const h = (e: string) => announceRecipientHash("teszt-titok", e);
+  await dbPool.query(`INSERT INTO advent_announcements (season, recipient_hash, source, status, updated_at) VALUES
+    ($1, $2, 'subscription', 'pending', now() - interval '20 minutes'),
+    ($1, $3, 'subscription', 'pending', now() - interval '30 hours'),
+    ($1, $4, 'subscription', 'pending', now() - interval '2 minutes')`, [SEASON, h("old@x.hu"), h("lost@x.hu"), h("fresh@x.hu")]);
+  const sent: string[] = [];
+  const deps = {
+    db: dbPool, season: SEASON, baseUrl: "https://websuli.vip", secret: () => "teszt-titok", pauseMs: 0,
+    recipients: async () => ({ subscriptions: ["old@x.hu", "lost@x.hu", "fresh@x.hu"], extras: [] }),
+    send: async (to: string) => { sent.push(to); },
+  };
+  assert.deepEqual(await announceAdvent(deps, { dryRun: false, confirmCount: 3 }), { status: 200, dryRun: false, sent: 1, failed: 0, skipped: 2 });
+  assert.deepEqual(sent, ["old@x.hu"]);
 });
