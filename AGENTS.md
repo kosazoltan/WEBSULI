@@ -4,6 +4,7 @@ Magyarul dolgozunk; a kód-azonosítók angolok. Csak hatályos szabály és mut
 
 ## Alapelvek
 
+- A konkrét feladatból és az érintett forrásfájlokból indulj ki; kód, teszt, célzott ellenőrzés előbb, mint széles audit.
 - Tananyag gyártása / javítása előtt: `docs/lesson-improvement.md` (forrásellenőrzés, mentés, séma, böngészős próba, visszaolvasás).
 - **Háromfázisú munka:** terv (`docs/specs/`) → `*-vegrehajtas.md` → kód; az 1–2. fázis nem ugorható, kért munkánál a 2. után
   azonnal a 3. jön ([`docs/agent-haromfazisu-munka.md`](docs/agent-haromfazisu-munka.md)).

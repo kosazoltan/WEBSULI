@@ -166,6 +166,11 @@ ismeri fel. Ezért kötelező a független ellenőr lefuttatása (2026-11-27 ót
 
 ## Ismert korlátok (maradó kockázat)
 
+- **Átmeneti helyi modell (tulajdonosi döntés 2026-11-28):** a `local-review.mjs` alapmodellje (`gemma4:26b`) a 8 GB VRAM-on nem
+  fut, a `gate:blind-review` futtató nincs kész. Addig: `node scripts/qa/gates/local-review.mjs --model qwen3.5:4b`, és minden
+  leletet egyenként igazolni / cáfolni kell a PR-ben. A gyenge modell miatt ez átmeneti; nagyobb modellt ne tölts be (TDR-újraindulás).
+  Végleges megoldás: SQL-feladat `VAK-ELLENOR-FUTTATO`.
+
 - **Az ítélet önbevallásos** (review J5): a `Független ellenőr ítélete: IGEN (fej: …)` sort bárki beírhatja a PR-leírásba; a kapu
   a sor meglétét ellenőrzi, nem a jelentés valódiságát. A helyi `review-<fej>.json` a jelentés hash-ét is rögzíti, és a
   `record-review` a jelentés saját `Ítélet:` sorával egyezteti — a merge-et végző orkesztrátor ezt a helyi bizonyítékot nézze.
