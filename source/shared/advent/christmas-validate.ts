@@ -20,8 +20,41 @@ export function christmasItemsNeeded(grade: number): number {
   return doors * (1 + maxRepairs) * maxRounds;
 }
 
-export function validateChristmasBank(items: readonly ChristmasItem[], gradeBankPrompts: Iterable<string> = []): string[] {
+/** Ékezet- és írásjel-független szóalak; a legalább 4 betűs szavak számítanak (a toldalék miatt a szó eleje dönt). */
+function contentWords(text: string): string[] {
+  return text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").split(" ")
+    .filter((w) => w.length >= 4);
+}
+
+/**
+ * A-5 (#151): válasz-szivárgás a témacsaládon belül. Egy tag helyes válaszának bármely tartalmi szava (szótő: a szó eleje, a
+ * toldalék nélkül, legalább 4 betű) nem állhat egy MÁSIK tag kérdésében, és két tag helyes válasza nem lehet azonos.
+ */
+export function christmasAnswerLeaks(items: readonly ChristmasItem[]): string[] {
   const errors: string[] = [];
+  const families = new Map<string, ChristmasItem[]>();
+  for (const item of items) if (item.family) families.set(item.family, [...(families.get(item.family) ?? []), item]);
+  for (const [family, members] of families) {
+    for (const a of members) {
+      const answer = String(a.options[a.correctIndex] ?? "");
+      const stems = contentWords(answer).map((w) => w.slice(0, Math.max(4, w.length - 2)));
+      for (const b of members) {
+        if (a === b) continue;
+        if (normalizePrompt(answer) === normalizePrompt(String(b.options[b.correctIndex] ?? ""))) {
+          if (a.id < b.id) errors.push(`${a.id} és ${b.id} (${family}): azonos a helyes válasz („${answer}”)`);
+          continue;
+        }
+        const words = contentWords(b.prompt);
+        const leak = stems.find((stem) => words.some((w) => w.startsWith(stem)));
+        if (leak) errors.push(`${a.id} (${family}): a helyes válasz („${answer}”) a(z) ${b.id} kérdésében áll`);
+      }
+    }
+  }
+  return errors;
+}
+
+export function validateChristmasBank(items: readonly ChristmasItem[], gradeBankPrompts: Iterable<string> = []): string[] {
+  const errors: string[] = [...christmasAnswerLeaks(items)];
   const ids = new Set<string>();
   const prompts = new Map<string, string>();
   const foreign = new Set([...gradeBankPrompts].map(normalizePrompt));

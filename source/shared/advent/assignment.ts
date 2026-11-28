@@ -27,6 +27,11 @@ export type ChristmasItem = {
   options: readonly string[];
   correctIndex: number;
   explanation: string;
+  /**
+   * A-5 (#151): témacsalád — az azonos családú tételek egymás mellett kerülnek a gyerek elé, ezért egyik helyes válasza sem
+   * állhat a másik kérdésében, és két tag helyes válasza sem lehet azonos (`christmasAnswerLeaks`).
+   */
+  family?: string;
 };
 
 export type AdventItem = AdventBankItem | ChristmasItem;

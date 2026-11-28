@@ -4,7 +4,7 @@ import test from "node:test";
 import { GRADE_QUIZ_ITEMS } from "../client/src/data/gradeQuizBank/index";
 import { buildAdventPlan, findAdventItem, normalizePrompt, subjectOf, type ChristmasItem } from "../shared/advent/assignment";
 import { CHRISTMAS_ITEMS } from "../shared/advent/christmasBank/index";
-import { christmasBankWarnings, christmasItemsNeeded, longestCorrectItems, validateChristmasBank } from "../shared/advent/christmas-validate";
+import { christmasAnswerLeaks, christmasBankWarnings, christmasItemsNeeded, longestCorrectItems, validateChristmasBank } from "../shared/advent/christmas-validate";
 import { ADVENT_CHRISTMAS_DAYS, limitsForGrade } from "../shared/advent/rules";
 
 /**
@@ -100,4 +100,20 @@ test("válaszhossz: a figyelmeztetés működik, és a valódi készletre nem sz
   assert.match(christmasBankWarnings(skewed)[0] ?? "", /1–4\. évfolyam: a helyes válasz 20 \/ 20 tételben a leghosszabb/);
   assert.deepEqual(christmasBankWarnings([good({ options: ["Decemberben", "Szeptemberben", "Júliusban", "Októberben"] })]), []);
   assert.deepEqual(christmasBankWarnings(CHRISTMAS_ITEMS), []);
+});
+
+// A-5 (#151): a koszorús tételcsalád tagjai egymás mellett jönnek — egyik helyes válasza sem állhat a másik kérdésében.
+test("válasz-szivárgás: a családon belül a helyes válasz szava nem állhat másik tag kérdésében, és két tag válasza sem azonos", () => {
+  const item = (id: string, prompt: string, answer: string, family = "f"): ChristmasItem =>
+    ({ id, family, minGrade: 1, maxGrade: 4, prompt, options: [answer, "Alma", "Körte", "Szilva"], correctIndex: 0, explanation: "x".repeat(40) });
+  assert.match(christmasAnswerLeaks([item("xmas-001", "Mit gyújtunk meg?", "Gyertyát"), item("xmas-002", "Hány gyertya ég?", "Négy")]).join(), /xmas-001.*xmas-002 kérdésében/);
+  assert.match(christmasAnswerLeaks([item("xmas-001", "Hány vasárnap?", "Négy"), item("xmas-002", "Hány gyertya?", "Négy")]).join(), /azonos a helyes válasz/);
+  assert.deepEqual(christmasAnswerLeaks([item("xmas-001", "Mit gyújtunk meg?", "Gyertyát"), item("xmas-002", "Hány gyertya ég?", "Négy", "g")]), [], "más család: nem számít");
+  assert.deepEqual(christmasAnswerLeaks([item("xmas-001", "Hány ablak van?", "Kettő"), item("xmas-002", "Mi ég a koszorún?", "Láng")]), []);
+});
+
+test("a valódi koszorús család (7 tétel) szivárgásmentes", () => {
+  const family = CHRISTMAS_ITEMS.filter((i) => i.family === "advent-koszoru");
+  assert.equal(family.length, 7);
+  assert.deepEqual(christmasAnswerLeaks(CHRISTMAS_ITEMS), []);
 });
