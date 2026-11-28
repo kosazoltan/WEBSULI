@@ -643,7 +643,9 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
       return problems;
     };
     const previousHash = keptUnit?.sourceHash ?? hash;
-    const fromPrevious = deps.previous?.version === LESSON_METHOD_VERSION ? {
+    // Review #661 (P7C-LEKTOR-REGI): a nem átvehető (újragyártandó) fogalom csomagja a hash-egyezés útján sem kerülhet vissza.
+    const reuseExcluded = unit.conceptIds.some(id => deps.reuseExcludedConceptIds?.has(id));
+    const fromPrevious = !reuseExcluded && deps.previous?.version === LESSON_METHOD_VERSION ? {
       methods: deps.previous.methods.filter(i => i.sourceHash === previousHash),
       tasks: deps.previous.tasks.filter(i => i.sourceHash === previousHash),
       quiz: deps.previous.quiz.filter(i => i.sourceHash === previousHash),

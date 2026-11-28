@@ -66,3 +66,4 @@ Ellenőrzés: `node D:/repo/Hermes-agent/scripts/zaro-hurok.mjs check --repo <ú
 <!-- zaro-hurok: 2026-11-26T05:05:37.199Z nincs-uj -->
 <!-- zaro-hurok: 2026-11-26T15:15:45.216Z nincs-uj -->
 <!-- zaro-hurok: 2026-11-26T18:23:37.495Z nincs-uj -->
+- 2026-11-28: #649 P7C arányjavítás + 9/10 próbalecke élesítve (alkalmazás ~61–68%); #651 TRAP-egyesítés, #652 .hermes.md rövid mag, #653 asteroid-flake, #658 A-5 elsős felolvasás + koszorús átfedés; S8 értesítő #659; P7C-LEKTOR-REGI: ki nem vehető kifogásolt régi tétel fogalma egyszer újragyártódik (banks/lektor 2 látogatás a repair módban).
