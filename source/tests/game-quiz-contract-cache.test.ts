@@ -41,13 +41,19 @@ test("(a) a gyorsítótárazott eredmény azonos a gyorsítótár nélkülivel, 
 });
 
 test("(b) a második szűrés ugyanazon objektumokon az első töredéke (< 5 %)", () => {
-  const items = sample(6000);
-  const t0 = performance.now();
-  items.filter(isPlayableQuestion);
-  const first = performance.now() - t0;
-  // A legjobb a három ismételt szűrésből — egy véletlen GC-szünet ne buktassa a laza küszöböt.
-  let second = Infinity;
+  // FLAKE-GQ-CACHE-PERF (2026-11-28): a párhuzamos `npm test` terhelése alatt egyetlen mérés elcsúszhat. Mindkét oldal
+  // a legjobb több mérésből: az első szűrés 3 FRISS (gyorsítótár nélküli) mintán, a második 5 ismétlésen; a küszöb változatlan.
+  isPlayableQuestion(sample(1)[0]!); // JIT-bemelegítés, hogy az első mérés ne a fordítást mérje
+  let first = Infinity;
+  let items = sample(6000);
   for (let r = 0; r < 3; r++) {
+    items = sample(6000);
+    const t0 = performance.now();
+    items.filter(isPlayableQuestion);
+    first = Math.min(first, performance.now() - t0);
+  }
+  let second = Infinity;
+  for (let r = 0; r < 5; r++) {
     const t1 = performance.now();
     items.filter(isPlayableQuestion);
     second = Math.min(second, performance.now() - t1);

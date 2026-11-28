@@ -85,7 +85,17 @@ test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays
   const id=(await crystals.getAttribute('data-quiz-id'))??'';
   const prompt=(await page.getByTestId('sa-prompt').innerText()).trim();
   const correct=(await crystals.locator('[data-correct="true"] .sa-crystal-label').innerText()).trim();
-  await crystals.locator('[data-correct="false"]').first().click();
+  // FLAKE-ASTEROID-WHY-2: a mozgó kristályt a kérdéssáv kártyája időnként takarja (CI: „play-question-card intercepts pointer
+  // events”, majd „element was detached” 150 s-ig). A választást a gomb billentyűzetes aktiválási útján adjuk le
+  // VALÓS billentyűzettel (látható, fókuszálható gomb + Enter → pointerTapHandlers.onClick, detail 0) — review #653: nem
+  // szintetikus esemény. Ha a mozgó kristály a fókusz és az Enter között újrarajzolódik, a kör ismétlődik.
+  await expect(async()=>{
+   const wrong=crystals.locator('[data-correct="false"]').first();
+   await expect(wrong).toBeVisible();
+   await wrong.focus();
+   await page.keyboard.press('Enter');
+   await expect(crystals.locator('[data-correct="true"]')).toHaveAttribute('data-state','correct',{timeout:1500});
+  }).toPass({timeout:20000});
   // hibás válasz: nincs blokkoló dialógus, a helyes kristály zölden világít, a kártya csak a „Miért?”-re nyílik
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   await expect(crystals.locator('[data-correct="true"]')).toHaveAttribute('data-state','correct');
@@ -100,8 +110,9 @@ test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays
    if(!checkedVocab)await page.screenshot({path:test.info().outputPath('asteroid-explanation-vocab-mobile.png'),fullPage:true});
    checkedVocab=true;
   }else if(!checkedBank){
-   const entry=bank.find(q=>q.prompt===prompt);expect(entry,`a kérdés (${id}: ${prompt}) nincs a forrásokban`).toBeDefined();
-   await expect(why).toContainText(entry!.explanation);
+   // FLAKE-ASTEROID-WHY: ugyanaz a kérdésszöveg több bankban is szerepel (pl. grade-06 / grade-07) — bármelyik magyarázata elfogadott.
+   const entries=bank.filter(q=>q.prompt===prompt);expect(entries.length,`a kérdés (${id}: ${prompt}) nincs a forrásokban`).toBeGreaterThan(0);
+   await expect.poll(async()=>{const t=(await why.textContent())??'';return entries.some(e=>t.includes(e.explanation));},{timeout:5000}).toBe(true);
    await page.waitForTimeout(1800);
    await expect(page.getByTestId('quiz-feedback')).toBeVisible();
    await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
