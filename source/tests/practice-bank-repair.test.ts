@@ -77,3 +77,52 @@ test("review #638: a gyakorlati bankjavítás gombjának felirata 320 px-en is t
   assert.match(btn, /whitespace-normal/u);
   assert.match(btn, /h-auto/u);
 });
+
+/** P7C-LEKTOR-REGI (docs/specs/2026-11-28-p7c-lektor-regi-tetel.md): a kifogásolt, ki nem vehető régi tétel fogalma újragyártódik. */
+async function lektorRetryRun(blockTwice: boolean, solutions?: Array<{ task: string; own: string; lesson: string; match: boolean }>) {
+  const lesson = standardFusionFixture();
+  const e = structuredClone(lesson.experience!);
+  const packet = { methods: e.methods, tasks: e.tasks, quiz: e.quiz, glossary: [] };
+  lesson.experience = await buildLessonExperience(lesson, [], { call: async () => structuredClone(packet) });
+  const source = { subject: "matematika", classroom: 7, concepts: [{ localId: "area", term: "terület", definition: "Az alap és a magasság szorzatának fele.", examWeight: "core" as const }] };
+  // Minden kvíztétel kifogásolt: a kivétel után a bank nem felelne meg (hiányzó felidéző kvíz) — a 9370eb25… lecke mintája.
+  const notes = lesson.experience.quiz.map((_q, i) => ({ kind: "source_conflict", subkind: "contradicts_source", message: "Nem tanított tény a helyes opcióban.", blockPath: `experience.quiz[${i}]` }));
+  let lektorCalls = 0, bankCalls = 0, bankCallsAfterLektor = 0;
+  const { store } = memoryWorkflows();
+  let result: Awaited<ReturnType<typeof buildPracticeBankRepair>> | undefined;
+  let error: unknown;
+  await executeWorkflow(store, { id: `lr-${blockTwice}`, owner: "owner", mode: "repair" }, async () => {
+    await workflowPhase("source");
+    try {
+      result = await buildPracticeBankRepair(lesson, source, async (step) => {
+        if (step === "lektor") { lektorCalls++; return { notes: lektorCalls === 1 || blockTwice ? notes : [], ...(solutions ? { solutions } : {}) }; }
+        bankCalls++; if (lektorCalls > 0) bankCallsAfterLektor++;
+        return structuredClone(packet);
+      });
+    } catch (err) { error = err; throw err; }
+    await workflowPhase("save"); await workflowPhase("readback");
+    return { kind: "candidate", id: "lr" };
+  }).catch(() => undefined);
+  return { result, error, lektorCalls, bankCalls, bankCallsAfterLektor };
+}
+
+test("P7C-LEKTOR-REGI L1: a ki nem vehető kifogásolt régi tétel fogalma újragyártódik, a javítás lefut (két lektorkör)", async () => {
+  const run = await lektorRetryRun(false);
+  assert.equal(run.error, undefined, String(run.error));
+  assert.ok(run.result, "a javítás lefutott");
+  assert.equal(run.lektorCalls, 2, "egyetlen újrakör");
+  // Review #661: a második kör a kifogásolt fogalom csomagját TÉNYLEG újragyártja (a hash szerinti régi csomag sem vehető át).
+  assert.ok(run.bankCallsAfterLektor >= 1, `a második kör bankhívással újragyárt (${run.bankCallsAfterLektor})`);
+});
+
+test("P7C-LEKTOR-REGI L2+L3: ha az újrakör lektora is blokkol, a régi megállás jön (pontosan két kör), az üzenetben az ok és az útvonal", async () => {
+  const run = await lektorRetryRun(true);
+  assert.equal(run.lektorCalls, 2);
+  assert.match(String(run.error), /A lektor javítást kér, az eredeti érintetlen \(.+\): experience\.quiz\[0\]/u);
+});
+
+test("review #661: eltérő tanítási megoldás (solutions[].match === false) mellett NINCS újrakör — a régi megállás", async () => {
+  const run = await lektorRetryRun(false, [{ task: "1. feladat", own: "12", lesson: "15", match: false }]);
+  assert.equal(run.lektorCalls, 1);
+  assert.match(String(run.error), /A lektor javítást kér, az eredeti érintetlen/u);
+});

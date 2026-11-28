@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import {
-  evaluateOpenAnswer, evaluateOpenAnswerV1, isTypedTask, NEEDS_SENTENCE_REASON, OPEN_ANSWER_RULES_HU, shortAndIncompleteReason, shortButCompleteReason,
+  evaluateOpenAnswer, evaluateOpenAnswerV1, isTypedTask, NEEDS_SENTENCE_REASON, OPEN_ANSWER_RULES_HU, OPEN_ANSWER_RULES_VERSION, shortAndIncompleteReason, shortButCompleteReason,
 } from "../shared/lesson-experience-score";
 import { buildResultEmail, gradeTasks } from "../shared/lesson-result-email";
 import { LESSON_HTML_SPEC_V74 } from "../server/ai/lesson-html-spec";
@@ -157,6 +157,9 @@ test("a levél ugyanazt a pontot mutatja: a tömör válasz 🟡 fél pont, a ki
   assert.match(html, /1\.5 \/ 3 pont — 50%/);
 });
 
-test("őr: a bank promptjának pontozó-szabályai (OPEN_ANSWER_RULES_HU) bájtra változatlanok — nincs promptverzió-emelés", () => {
-  assert.equal(createHash("sha256").update(OPEN_ANSWER_RULES_HU).digest("hex"), "635719af48c1962d29ce9af1db8db9671744437121f52d8b89fc094a66d8920b");
+test("őr: a bank promptjának pontozó-szabályai (OPEN_ANSWER_RULES_HU) csak verzióemeléssel változnak (S7a: open-answer-2)", () => {
+  // S7a (tananyag-gyartas-minoseg-vegrehajtas, S7a-kiegészítés): a tömör, teljes válasz fél pontja a szabályszövegbe került — ez a
+  // szándékos promptverzió-emelés; a lenyomat a verzióval együtt rögzített (tests/open-answer-rules-version.test.ts is).
+  assert.equal(OPEN_ANSWER_RULES_VERSION, "open-answer-2");
+  assert.equal(createHash("sha256").update(OPEN_ANSWER_RULES_HU).digest("hex"), "4db504ec69c19d0125453f91d9f1a1edde4158485d47f34f4e16f12e0b1bd60a");
 });
