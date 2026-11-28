@@ -211,6 +211,11 @@ eltávolítva; távoli ág csak jóváhagyással).
 
 ## 2. P2 szeletek
 
+- Végrehajtás (2026-11-28; terv `docs/specs/2026-11-19-websuli-potlasok-terv.md` 7.4): (a) `decideThreePhase` új, opcionális
+  `upstream` halmaza — a mainen már tartalmilag meglévő commitok (`git cherry <base> HEAD` „-” sorai) kimaradnak a sorrend- és
+  fájlvizsgálatból (mért: a squash-beolvadás után régi ágon az első „kódcommit” a már beolvadt szelet commitja volt → hamis bukás);
+  (b) `realExec`: időtúllépésnél `code 124` és „IDŐTÚLLÉPÉS <mp> s” sor a 127-es kilépési kód helyett. Bukó tesztek előbb.
+
 ### G-21 — Szólétra olvashatóság és nyelvhelyesség (a P1-blokk után — D-16 (a))
 
 - Előfeltétel: nincs (D-05 eldöntve). Ág: `fix/szoletra-olvashatosag-2`.
