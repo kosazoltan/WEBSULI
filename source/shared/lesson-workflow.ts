@@ -60,6 +60,12 @@ export function workflowDefinition(mode: WorkflowMode): WorkflowDefinition {
     // a kapu után) még egyszer jöhet.
     : mode === "html" && step.id === "author"
       ? { ...step, after: [...step.after, "author", "gate"], maxVisits: 2 }
+    // P7C-LEKTOR-REGI (docs/specs/2026-11-28-p7c-lektor-regi-tetel.md): a csak-bank javítás a ki nem vehető kifogásolt régi tétel
+    // fogalmát EGYSZER újragyártja — a lektor után még egy bank- és lektorkör jöhet.
+    : mode === "repair" && step.id === "banks"
+      ? { ...step, after: [...step.after, "lektor"], maxVisits: 2 }
+    : mode === "repair" && step.id === "lektor"
+      ? { ...step, maxVisits: 2 }
     : mode === "html" && step.id === "gate"
       ? { ...step, maxVisits: 2 }
       : step) };

@@ -62,6 +62,8 @@ export type RunTelemetry = {
   gates: RunGates;
   /** A determinisztikus gyártási kapuk eredményei futási sorrendben (SK1: forrás-fedettség). Régi telemetriában hiányzik. */
   gateResults?: RunGateResult[];
+  /** S7a: a nyílt válasz szabályszövegének verziója a futáskor (régi telemetriában hiányzik). */
+  rulesVersion?: string;
 };
 
 /** A mentett telemetria biztonságos kiolvasása (régi jobnál nincs). */

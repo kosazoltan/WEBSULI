@@ -273,8 +273,13 @@ export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; rea
 export const shortButCompleteReason = (minWords: number): string => `A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább ${minWords} szóval.`;
 export const shortAndIncompleteReason = (minWords: number): string => `Még nincs benne minden fontos fogalom, és rövid is: írj legalább ${minWords} szót.`;
 export const NEEDS_SENTENCE_REASON = "A fogalmak megvannak. Teljes pontért kösd össze őket kötőszóval (mert, hogy, és, ezért…) — az írásjel nem számít.";
+/** S7a: a minWords alatti, minden kötelező feltételt teljesítő (tömör) válasz pontja — a modellnek adott szabályszöveg is ezt mondja. */
+export const SHORT_COMPLETE_SCORE = 0.5;
+/** S7a: a nyílt válasz szabályszövegének verziója (a csomag-hash és a telemetria része; a lenyomat-őr teszt vele együtt változik). */
+export const OPEN_ANSWER_RULES_VERSION = "open-answer-2" as const;
+
 function shortVerdict(complete: boolean, minWords: number): AnswerScore {
-  return complete ? { state: "partial", score: 0.5, reason: shortButCompleteReason(minWords) } : { state: "fail", score: 0, reason: shortAndIncompleteReason(minWords) };
+  return complete ? { state: "partial", score: SHORT_COMPLETE_SCORE, reason: shortButCompleteReason(minWords) } : { state: "fail", score: 0, reason: shortAndIncompleteReason(minWords) };
 }
 
 /** A típusos (v2) feladat ismérve: van részeredmény-lista vagy kategóriakvóta. */
@@ -450,9 +455,9 @@ export function evaluateOpenAnswer(answer: string, task: OpenTask): AnswerScore 
  */
 export const OPEN_ANSWER_RULES_HU = [
   "A NYÍLT FELADAT PONTOZÓJA (program, nem ember — ezek a tényleges szabályok):",
-  `1. Szó = szám vagy betűsor; a kötőjeles szó 2 szó, az írásjel 0 szó; csak az első 500 szó számít. minWords: ennél kevesebb szó = 0 pont — a minWords a LEGRÖVIDEBB teljes helyes válasz szószáma legyen, nem a minta hosszáé.`,
+  `1. Szó = szám vagy betűsor; a kötőjeles szó 2 szó, az írásjel 0 szó; csak az első 500 szó számít. minWords alatt: ha MINDEN kötelező feltétel teljesül (számolósnál minden részeredmény helyes) → ${String(SHORT_COMPLETE_SCORE).replace(".", ",")} (tömör válasz), különben 0; 1 pont csak minWords-től. A minWords a legrövidebb, egész mondatban KIFEJTETT helyes válasz szószáma, nem a mintáé.`,
   `2. required = ÉS-csoportok; egy csoporton belül VAGY-alternatívák. Többszavas alternatíva: minden szava külön, bármilyen sorrendben. Szóillesztés: azonos alak; ≥ 4 betűs szónál EGY toldalék (${STEM_SUFFIXES.join(", ")}) lehagyva is; ≥ 5 betűnél 1 elütés (8 betű fölött 2); ≥ ${FORM_MIN_LENGTH} betűnél a képzett (makacsságában) és összetett (sziklabarlangba) alak is, -talan/-telen nem. Szám és a tagadószavak (${NEGATIONS.join(", ")}) csak pontosan.`,
-  "3. Pontérték: a csoportok kevesebb mint felének találata → 0; nem mind → 0,5 („Még N kötelező fogalom hiányzik”); mind → 1, ha a needsSentence és a tagadás is rendben.",
+  "3. Pontérték minWords-től: a kötelező feltételek (required, requiredPhrases, requiredOrder) kevesebb mint fele → 0 (számolósnál ez nem nulláz); nem mind → 0,5 („Még N kötelező fogalom hiányzik”); mind → 1, ha a needsSentence és a tagadás is rendben.",
   `4. needsSentence: legalább egy kötőszó/névelő kell ezek közül: ${SENTENCE_CONNECTIVES.slice(0, 19).join(", ")}; különben 0,5. Tagadás: a nem/not, a cannot és az aposztrófos angol n't (don't, mustn't, can't…) tagadásnak számít; ha a válaszban van ilyen tagadás, a mintában semmilyen (no/never/tilos/soha sem) → 0,5; ha a minta angolul tagadó (not / n't), a válaszban pedig nincs tagadás (a no, never, nothing… is annak számít) → 0,5. (A „must” és a „mustn't” így nem cserélhető fel.)`,
   "5. TÍPUSOS (zárt matematikai) feladat: typedAnswers = [{part, kind: number|fraction|expression, value, unit?, form?}] részfeladatonként, SORRENDBEN (felcserélt részeredmény hibás). Az érték dönt: 2/1 ≠ 1/2; 0,5 = 1/2 csak form: any esetén; form: simplified-fraction → csak egyszerűsített tört (2/4, 0,5 nem); form: decimal → tizedes/egész alak; form: intermediate-step → a KÉRT köztes kifejezés szerepeljen (35 + 64 − 12), az értékazonos más alak (35 + 8 · 8 − 12) nem; unit → a szám után a mértékegység kötelező. Betűs (algebrai) végeredmény: kind: polynomial, value a teljes kifejezés („x² + 10x + 25”); a program a kifejtett, összevont normálalakot hasonlítja (tagsorrend, szóköz, x^2/x² nem számít); form: expanded (alapértelmezés) → kifejtett, összevont alak kell, a zárójeles (a kérdés másolata) nem; form: factored → szorzattá alakított, zárójeles alak kell. A required ekkor csak a szöveges részt méri; a végeredményt NE tedd required-csoportba.",
   "6. requiredDistinct = [{category, from: [[szinonimák]…], count}]: kategóriánként legalább count KÜLÖNBÖZŐ elem; egy szinonimacsoport egy elem (két szinonima nem két példa). Ezt használd, ha a kérdés „N példát” kér egy halmazból — ne tegyél önkényes mintát kötelezővé.",

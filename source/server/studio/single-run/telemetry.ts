@@ -4,6 +4,7 @@
  * (előzmény nélküli) hívások összesen; a kapuk eseményei; a tartalékváltás. A job `output.telemetry` mezőjébe kerül, utólag visszamérhető.
  */
 import { LESSON_MODELS } from "../../ai/models";
+import { OPEN_ANSWER_RULES_VERSION } from "../../../shared/lesson-experience-score";
 import type { ModelReply } from "./conversation";
 import { RUN_GATE_RESULT_LIMITS, type RunGateResult, type RunGates, type RunTelemetry, type StationTelemetry } from "../../../shared/run-telemetry";
 
@@ -57,7 +58,7 @@ export class TelemetryRecorder {
     const models = [...this.models];
     return { version: 1, model, fallback: models.includes(LESSON_MODELS.fallback), models, totalMs: this.baseMs + Math.max(0, this.now() - this.started),
       stations: structuredClone(this.stations), fresh: { ...this.freshTotals }, gates: { ...this.gates },
-      ...(this.gateResults.length ? { gateResults: structuredClone(this.gateResults) } : {}) };
+      ...(this.gateResults.length ? { gateResults: structuredClone(this.gateResults) } : {}), rulesVersion: OPEN_ANSWER_RULES_VERSION };
   }
 }
 
