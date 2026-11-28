@@ -270,7 +270,10 @@ export type AnswerScore = { state: "ok" | "partial" | "fail"; score: number; rea
  * tartalmi feltételt teljesítő) rövid válasz FÉL pont — a 2026-09-11-i szerződés szerint a puszta kulcsszólista részpont, nem nulla —,
  * teljes pontot rövid válasz soha nem kap. Az üzenet megmondja a teendőt, és nem utal írásjelre / mondatformára.
  */
-export const shortButCompleteReason = (minWords: number): string => `A lényeg megvan. Teljes pontért fejtsd ki egész mondatban, legalább ${minWords} szóval.`;
+/** S7b: a „tömör, de teljes” ág egyedi indoklás-előtagja — a döntőbíró ezzel ismeri fel az ágat (új mező nélkül). */
+export const SHORT_COMPLETE_PREFIX = "A lényeg megvan.";
+export const isShortComplete = (s: { state: string; reason: string }): boolean => s.state === "partial" && s.reason.startsWith(SHORT_COMPLETE_PREFIX);
+export const shortButCompleteReason = (minWords: number): string => `${SHORT_COMPLETE_PREFIX} Teljes pontért fejtsd ki egész mondatban, legalább ${minWords} szóval.`;
 export const shortAndIncompleteReason = (minWords: number): string => `Még nincs benne minden fontos fogalom, és rövid is: írj legalább ${minWords} szót.`;
 export const NEEDS_SENTENCE_REASON = "A fogalmak megvannak. Teljes pontért kösd össze őket kötőszóval (mert, hogy, és, ezért…) — az írásjel nem számít.";
 /** S7a: a minWords alatti, minden kötelező feltételt teljesítő (tömör) válasz pontja — a modellnek adott szabályszöveg is ezt mondja. */
