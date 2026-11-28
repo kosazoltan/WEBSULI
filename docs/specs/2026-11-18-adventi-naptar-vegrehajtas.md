@@ -958,3 +958,26 @@ A szeletek a saját sorukat a saját águkon (PR-jukban) teszik hozzá; a napló
   nélkül). Előbb bukó teszt: `tests/advent-s5-dry-run.test.ts` (a modul hiányzott); a küldést mérő meglévő esetek kifejezett `send` módot
   kapnak (az alapértelmezés változott, a mérce nem); DB „P-056” (száraz → összesítő → `send` → a pótlás címzettenként egyszer).
   P-036: a naptár a helyőrző képekkel indul (`art-manifest.ts` üres), a végleges képek külön tulajdonosi döntéssel.
+
+## Kiegészítés 17 — S3c: a végleges képek beépítése (2026-11-28; terv `docs/specs/2026-11-18-adventi-naptar.md` 13.6, 20.)
+
+Terv: `docs/specs/2026-11-18-adventi-naptar.md` 13.6 és 20. szakasz; a 10. kiegészítés (S3c PR összetétele) itt valósul meg.
+
+**Tulajdonosi döntés (2026-11-28, űrlap):** „Válassz te helyettem (képenként vizuális ellenőrzéssel), utána megmutatod.” A 94 jelölt
+(Seedream 5 Pro, 5,27 / 6 USD) közül képhelyenként egy, vizuális ellenőrzéssel (felirat, torzulás, kép a képben kizárva).
+
+- Hátterek: a bájtcél (150 KB) alá CSAK a B jelölt fér (a többi a legalacsonyabb minőségen is fölötte) — B mindkét tájolásban.
+- Girland: egyik jelölt sem fér a 25 KB-os célba → helyőrző marad (a felület azonos dobozt mutat); új jelölt vagy nagyobb keret
+  külön tulajdonosi döntés.
+- 29 kép, 790 450 bájt (keret 1 153 434).
+
+Lépések (új ág a friss főágról — a régi `feat/advent-s3c-kepek` a régi felület-fejre épül, archiválható):
+1. `b198047c` szkriptjei (`approve-advent.ts`, `advent-approve-lib.ts`) és bájtcéljai (a girland a 3/3 PR szerinti 1200 × 150).
+2. `server/vite.ts` `/advent` statikus mappa (helyi + e2e); élesben a `source/vercel.json` `headers` listája: `/advent/(.*)`
+   `public, max-age=31536000, immutable`.
+3. `tests/advent-art.test.ts`: a jegyzék minden fájlja létezik és a bájtcélján belül (A41), az összes a keretben; a `prompts.json`
+   és az `ADVENT_ART_SPECS` azonosítói egyeznek (kanban #161); a `vercel.json` fejléc-őr; `advent-approve-lib` egységteszt.
+
+| Parancs | Várt kimenet |
+|---|---|
+| `node --import tsx --test tests/advent-art.test.ts tests/advent-art-pipeline.test.ts` | `fail 0` |
