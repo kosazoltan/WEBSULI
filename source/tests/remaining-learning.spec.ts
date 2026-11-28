@@ -100,8 +100,9 @@ test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays
    if(!checkedVocab)await page.screenshot({path:test.info().outputPath('asteroid-explanation-vocab-mobile.png'),fullPage:true});
    checkedVocab=true;
   }else if(!checkedBank){
-   const entry=bank.find(q=>q.prompt===prompt);expect(entry,`a kérdés (${id}: ${prompt}) nincs a forrásokban`).toBeDefined();
-   await expect(why).toContainText(entry!.explanation);
+   // FLAKE-ASTEROID-WHY: ugyanaz a kérdésszöveg több bankban is szerepel (pl. grade-06 / grade-07) — bármelyik magyarázata elfogadott.
+   const entries=bank.filter(q=>q.prompt===prompt);expect(entries.length,`a kérdés (${id}: ${prompt}) nincs a forrásokban`).toBeGreaterThan(0);
+   await expect.poll(async()=>{const t=(await why.textContent())??'';return entries.some(e=>t.includes(e.explanation));},{timeout:5000}).toBe(true);
    await page.waitForTimeout(1800);
    await expect(page.getByTestId('quiz-feedback')).toBeVisible();
    await page.screenshot({path:test.info().outputPath('asteroid-explanation-mobile.png'),fullPage:true});
