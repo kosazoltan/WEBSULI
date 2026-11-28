@@ -18,7 +18,12 @@ export const isCode = (path) => CODE.test(path) && !/\.test\.[cm]?[jt]sx?$/.test
  * Tiszta döntés: a diff-fájlok, az időrendi commitok és a commit-állapot szerinti fájlolvasás alapján (`readFileAt(path, sha)`,
  * `existsAt(path, sha)`; `sha = null` → HEAD).
  */
-export function decideThreePhase({ files, commits, readFileAt, existsAt }) {
+export function decideThreePhase({ files: allFiles, commits: allCommits, readFileAt, existsAt, upstream }) {
+  // Q-3 (#144): a mainen tartalmilag már meglévő (pl. squash-beolvadt korábbi szelet) commit nem része a vizsgálatnak — sem a
+  // sorrendnek, sem a fájllistának (csak azok a fájlok maradnak, amelyeket a megmaradó commitok érintenek).
+  const commits = upstream?.size ? allCommits.filter((c) => !upstream.has(c.sha)) : allCommits;
+  const touched = upstream?.size ? new Set(commits.flatMap((c) => c.files)) : null;
+  const files = touched ? allFiles.filter((f) => touched.has(f.path)) : allFiles;
   const code = files.filter((f) => isCode(f.path));
   if (!code.length) return { ok: true, reason: 'Nincs kódváltozás (dokumentum, teszt, szkript vagy workflow).' };
   const lines = code.reduce((n, f) => n + (f.added || 0) + (f.deleted || 0), 0);
@@ -68,9 +73,12 @@ function main() {
     const [sha, ...rest] = chunk.trim().split('\n');
     return { sha, files: rest.filter(Boolean) };
   });
+  // Q-3: `git cherry` „-” sorai = a base-en már tartalmilag meglévő commitok (patch-id egyezés).
+  let upstream = new Set();
+  try { upstream = new Set(git(['cherry', base, 'HEAD']).split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2).trim())); } catch { /* régi viselkedés */ }
   const readFileAt = (p, sha) => { try { return execFileSync('git', ['show', `${sha ?? 'HEAD'}:${p}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
   const existsAt = (p, sha) => readFileAt(p, sha) !== null;
-  const result = decideThreePhase({ files, commits, readFileAt, existsAt });
+  const result = decideThreePhase({ files, commits, readFileAt, existsAt, upstream });
   if (result.warning) console.log(`[három-fázis] Figyelmeztetés: ${result.warning}`);
   console.log(`[három-fázis] ${result.ok ? 'OK' : 'HIBA'}: ${result.reason}`);
   process.exit(result.ok ? 0 : 1);
