@@ -187,3 +187,18 @@ test("döntőbíró-lánc: séma-ellenőrzés modellenként és a tartalék kere
   await assert.rejects(callArbiterModels("s", "u", () => true, async (m) => { calls.push(m); throw new Error("down"); }, async () => false), /down/);
   assert.deepEqual(calls, ["claude-opus-5-5"], "elfogyott keretnél a tartalék nem hívódik");
 });
+
+// S7b (TGM terv): a „tömör, de teljes” válasz (minWords alatt, minden kötelező fogalom megvan) fél pontja a döntőbírótól sem emelkedik.
+test("S7b: tömör + döntőbíró „ok” → 0,5 (a pont nem emelkedik); nem tömör hiányos + „ok” → 1; döntőbíró nélkül változatlan", async () => {
+  const { shortButCompleteReason, isShortComplete } = await import("../shared/lesson-experience-score");
+  const concise = { state: "partial" as const, score: 0.5, reason: shortButCompleteReason(12) };
+  assert.equal(isShortComplete(concise), true);
+  const capped = combineVerdicts(concise, { state: "ok", reason: "helyes" }, "döntőbíró");
+  assert.equal(capped.score, 0.5);
+  assert.equal(capped.state, "partial");
+  const partial = { state: "partial" as const, score: 0.5, reason: "Részben jó. Még 1 kötelező fogalom hiányzik." };
+  assert.equal(combineVerdicts(partial, { state: "ok", reason: "helyes" }, "döntőbíró").score, 1);
+  assert.deepEqual(combineVerdicts(concise, null, "döntőbíró"), { ...concise, source: "pontozó" });
+  const { ARBITER_VERSION } = await import("../server/arbiter/arbiter");
+  assert.equal(ARBITER_VERSION, "arbiter-3", "a gyorsítótár-kulcs változik — a régi ítéletek nem érvényesülnek");
+});
