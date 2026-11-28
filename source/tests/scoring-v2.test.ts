@@ -120,7 +120,12 @@ test("a pontozó szerződése a modellnek a kód konstansaiból generálódik", 
   assert.match(OPEN_ANSWER_RULES_HU, /2\/1 ≠ 1\/2/);
   assert.match(OPEN_ANSWER_RULES_HU, /requiredDistinct/);
   assert.match(OPEN_ANSWER_RULES_HU, /mert/);
-  assert.ok(OPEN_ANSWER_RULES_HU.length < 3500, `tömör maradjon (${OPEN_ANSWER_RULES_HU.length})`);
+  // Spec 2026-11-18-tananyag-gyartas-minoseg, 5. szakasz 9. pont: a 2026-11-17-i tulajdonosi döntés (tömör válasz = fél pont) szövege
+  // ~3 500 → ~3 700 karakter (S7a); a korlát tovább nem emelhető — fölötte az 5. szabály példái tömörítendők.
+  assert.ok(OPEN_ANSWER_RULES_HU.length < 3800, `tömör maradjon (${OPEN_ANSWER_RULES_HU.length})`);
+  assert.ok(OPEN_ANSWER_RULES_HU.includes("0,5 (tömör válasz)"), "S7a: a tömör, teljes válasz fél pontja a szabályban");
+  assert.ok(OPEN_ANSWER_RULES_HU.includes("Pontérték minWords-től"), "S7a: a 3. szabály a minWords-től érvényes pontértéket mondja");
+  assert.ok(!OPEN_ANSWER_RULES_HU.includes("ennél kevesebb szó = 0 pont"), "S7a: a régi, a kóddal ellentétes mondat eltűnt");
 });
 
 /* Review #159 (Codex P1/P1/P2, Copilot): tokenhatár, zárójel, kategória-duplikátum, szószám, 500 szavas ablak, köztes alak. */

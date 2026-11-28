@@ -8,7 +8,7 @@ import { lessonOpenerVersion, playfulQuestioningContract } from "../../shared/le
 import { lessonOpenerEnabled } from "./lesson-opener-flag";
 import { effectiveLessonVariety } from "./lesson-variety-flag";
 import { seedFrom } from "../../shared/seeded";
-import { OPEN_ANSWER_RULES_HU, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
+import { OPEN_ANSWER_RULES_HU, OPEN_ANSWER_RULES_VERSION, evaluateOpenAnswer, missingAnswerConcepts, missingOrder, missingPhrases, normalizeAnswer } from "../../shared/lesson-experience-score";
 import { experienceProblems } from "../../shared/lesson-experience-validation";
 import { planLessonBank, bankUnitQuota, orderMethodsByQuota, gateCountProblem } from "../../shared/lesson-bank-plan";
 import type { Lesson } from "../../shared/lesson-schema";
@@ -529,7 +529,8 @@ export async function buildLessonExperience(lesson: Lesson, concepts: MapConcept
     const source = concepts.filter(c => unit.conceptIds.includes(c.localId)).sort((a, b) => a.localId.localeCompare(b.localId));
     // Review #359: a kalibráció viselkedésének verziója a csomag hash-ében — a változás előtt mentett (pontos-alak szigorítás nélküli)
     // csomag folytatáskor sem kerül át kalibrálatlanul.
-    const teaching = { version: LESSON_METHOD_VERSION, calibration: CALIBRATION_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds,
+    // S7a: a nyílt válasz szabályszövegének verziója is a csomag azonosságának része (régi szabály alatt mentett csomag nem kerül át).
+    const teaching = { version: LESSON_METHOD_VERSION, calibration: CALIBRATION_VERSION, rules: OPEN_ANSWER_RULES_VERSION, roleSkill: roleSkillVersion("bank"), ...(workflowSkillVersion() ? { skillVersion: workflowSkillVersion() } : {}), taskCount, quizCount, taskTarget, quizTarget, methodKinds, subject: lesson.subject, classroom: lesson.classroom, sectionIndex: unit.sectionIndex, section: withoutFigures(lesson.sections[unit.sectionIndex]), concepts: source, allowedConceptIds: unit.conceptIds,
       ...(catalogOf(unitIndex) ? { catalog: { version: unitCatalogVersion(catalogOf(unitIndex)!) } } : {}),
       ...(deps.memory ? { memory: { version: memoryBlockVersion(deps.memory) } } : {}),
       ...(deps.scoringRules ? { scoringRules: deps.scoringRules } : {}),

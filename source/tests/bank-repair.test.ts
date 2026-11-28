@@ -130,7 +130,7 @@ test("C9: a csomagon belüli ismétlődés a MÁSODIK tételt nevezi meg, az els
 });
 
 test("B1/B2/B3: a bank skill a típusos rubrikát, az oral+written csomagonkénti szabályt és a jogosultságot mondja; az ábratervező csak a saját eszközét kapja; az ellenőrök értik a válaszszerződést; H53 kalibráció javítva", () => {
-  for (const must of ["typedAnswers", "requiredDistinct", "JAVÍTÁSI JOGOSULTSÁG", 'mode:"oral" és egy mode:"written"', "LEGRÖVIDEBB teljes helyes válasz", "PONTOSAN egy igaz", "BANKCSOMAG-SZERZŐDÉSE"]) assert.ok(ROLE_SKILLS.bank.includes(must), must);
+  for (const must of ["typedAnswers", "requiredDistinct", "JAVÍTÁSI JOGOSULTSÁG", 'mode:"oral" és egy mode:"written"', "LEGRÖVIDEBB mondatos helyes válasz", "tömören: fél pont", "PONTOSAN egy igaz", "BANKCSOMAG-SZERZŐDÉSE"]) assert.ok(ROLE_SKILLS.bank.includes(must), must);
   assert.ok(ROLE_SKILLS.bank.length < 5200, `bank: ${ROLE_SKILLS.bank.length}`);
   assert.deepEqual(ROLE_TOOLS.animator, ["section-visuals"]);
   assert.match(TOOL_SKILLS["bank-packet-autofix"], /typedAnswers és requiredDistinct \(nem találja ki\)/);

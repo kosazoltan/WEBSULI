@@ -1356,3 +1356,13 @@ bemenetre ugyanaz, különböző magra eltérő kiosztás, `Math.random` nélkü
 **Javasolt sorrend (önálló, semleges kis PR-ok a friss főágról, cherry-pickkel, rebase nélkül):** S5a-v2 → S2b-1 (kódja a láncra nem
 épül; az átvétel kézi ütközésfeloldással, lásd a táblázatot) → S5b → S6a → S6b → S2b-2 → S6c (a sávtokenes ábrák az S2b-re épülnek) → SK2 → S3a-1 kódja → S3a-2 → S3b. Az S6c (+572) és az S5a
 (+885, ebből 281 docs és 337 teszt) a ~400 soros irányelv fölött van: az S6c két részre bontható (sávtokenes ábrák / ábrafajta-terv).
+
+## Kiegészítés — S7a végrehajtása (2026-11-28; P-031)
+
+Terv: `docs/specs/2026-11-18-tananyag-gyartas-minoseg.md` 5. szakasz 9. pont (tömör, teljes válasz = fél pont); ez az S7a szelet.
+
+Előfeltétel ellenőrizve: a `main` pontozója (`shortVerdict`, `lesson-experience-score.ts`) a minWords alatti, minden kötelező
+feltételt teljesítő válaszra 0,5-öt ad — a modellnek adott `OPEN_ANSWER_RULES_HU` 1. szabálya viszont még „ennél kevesebb szó = 0
+pont”-ot mond (a szerződés és a kód eltér). Lépések: a fenti S7a 1–9. pontja; a fél pont a kód állandójából (`SHORT_COMPLETE_SCORE`)
+kerül a szövegbe; `OPEN_ANSWER_RULES_VERSION = "open-answer-2"` a csomag-hash (`teaching.rules`) és a futási telemetria
+(`rulesVersion`) része; lenyomat-őr teszt (`tests/open-answer-rules-version.test.ts`). Az S7b (döntőbíró-plafon) külön PR.
