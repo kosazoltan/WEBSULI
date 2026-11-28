@@ -3,6 +3,8 @@ name: websuli-fejlesztesi-ellenor
 description: WEBSULI fejlesztési ellenőr - a PR előtt és minden javító push után a HELYI GPU-modell (Ollama, angol megbízás) nézi át a diffet: node scripts/qa/gates/local-review.mjs. A felhős vak kör (friss alügynök minden fejre) 2026-11-23 óta kivezetve. Töltsd be minden fejlesztés / javítás elkészültekor, zöld helyi kapuk után.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # Fejlesztési ellenőr — helyi GPU-ellenőr a PR előtt
 
 Tulajdonosi döntés (2026-11-23): a felhős „vak kör” kivezetve — 45 PR-ra 342 felhős ellenőr-kör jutott (≈ 7,6 / PR), a 2.–4. kör

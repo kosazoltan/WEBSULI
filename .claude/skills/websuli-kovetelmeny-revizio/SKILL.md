@@ -3,6 +3,8 @@ name: websuli-kovetelmeny-revizio
 description: Use when closing a WEBSULI work batch. Run full revision.
 ---
 
+> Felejthető lépés = szkript, automatikusan: ismétlődő kézi lépést szkriptbe + hookba/kapuba kötni; a futás végét a Stop hook (`loop.mjs auto` + `check`) zárja — lásd ~/.claude/CLAUDE.md.
+
 # WEBSULI záró működési revízió — elvárt ↔ valós összevetés
 
 Cél: minden tulajdonosi elvárás (kérés, döntés, feladat) egy helyen; a munka végén a valós működést (main-kód, élő kapcsolók,
