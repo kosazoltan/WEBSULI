@@ -3,7 +3,12 @@
  * magyar `alt` szöveg. A feliratok itt, kódban élnek — a képeken nincs szöveg. A díszítőelemek `alt`-ja üres.
  * Amíg egy tétel nincs az `ADVENT_ART` jegyzékben (art-manifest.ts), a felület azonos méretű helyőrzőt mutat.
  */
-export type AdventArtSpec = { width: number; height: number; alt: string; placeholder: string };
+/** `maxBytes`: a kész WebP bájtcélja (terv 13.3, 14.5; A41) — az `approve-advent.ts` ehhez igazítja a minőséget, a teszt őrzi. */
+export type AdventArtSpec = { width: number; height: number; alt: string; placeholder: string; maxBytes: number };
+
+const KB = 1024;
+/** A teljes készlet bájtkerete (terv 13.3: ≤ 1,1 MB). */
+export const ADVENT_ART_TOTAL_MAX_BYTES = Math.round(1.1 * KB * KB);
 
 /** A 24 ablak motívuma (a nap sorszáma szerint): megnevezés az `alt`-hoz és egy jel a helyőrzőhöz. */
 export const ADVENT_DOOR_MOTIFS: ReadonlyArray<{ alt: string; placeholder: string }> = [
@@ -36,11 +41,11 @@ export const ADVENT_DOOR_MOTIFS: ReadonlyArray<{ alt: string; placeholder: strin
 export const doorArtId = (day: number): string => `advent-door-${String(day).padStart(2, "0")}`;
 
 export const ADVENT_ART_SPECS: Readonly<Record<string, AdventArtSpec>> = {
-  "advent-bg-portrait": { width: 1080, height: 1920, alt: "", placeholder: "" },
-  "advent-bg-landscape": { width: 1600, height: 900, alt: "", placeholder: "" },
-  "advent-closing": { width: 1200, height: 900, alt: "A kivilágított falu szenteste, a téren karácsonyfa ragyogó csillaggal.", placeholder: "🎄" },
-  "advent-home-banner": { width: 1600, height: 400, alt: "", placeholder: "" },
-  "advent-garland": { width: 1200, height: 150, alt: "", placeholder: "" },
-  "advent-frame": { width: 256, height: 256, alt: "", placeholder: "" },
-  ...Object.fromEntries(ADVENT_DOOR_MOTIFS.map((motif, index) => [doorArtId(index + 1), { width: 256, height: 256, alt: motif.alt, placeholder: motif.placeholder }])),
+  "advent-bg-portrait": { width: 1080, height: 1920, alt: "", placeholder: "", maxBytes: 150 * KB },
+  "advent-bg-landscape": { width: 1600, height: 900, alt: "", placeholder: "", maxBytes: 150 * KB },
+  "advent-closing": { width: 1200, height: 900, alt: "A kivilágított falu szenteste, a téren karácsonyfa ragyogó csillaggal.", placeholder: "🎄", maxBytes: 120 * KB },
+  "advent-home-banner": { width: 1600, height: 400, alt: "", placeholder: "", maxBytes: 60 * KB },
+  "advent-garland": { width: 1200, height: 150, alt: "", placeholder: "", maxBytes: 25 * KB },
+  "advent-frame": { width: 256, height: 256, alt: "", placeholder: "", maxBytes: 15 * KB },
+  ...Object.fromEntries(ADVENT_DOOR_MOTIFS.map((motif, index) => [doorArtId(index + 1), { width: 256, height: 256, alt: motif.alt, placeholder: motif.placeholder, maxBytes: 25 * KB }])),
 };
