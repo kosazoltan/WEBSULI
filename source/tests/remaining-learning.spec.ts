@@ -87,8 +87,15 @@ test('asteroid wrong-answer explanation: no blocking dialog, the Why? card stays
   const correct=(await crystals.locator('[data-correct="true"] .sa-crystal-label').innerText()).trim();
   // FLAKE-ASTEROID-WHY-2: a mozgó kristályt a kérdéssáv kártyája időnként takarja (CI: „play-question-card intercepts pointer
   // events”, majd „element was detached” 150 s-ig). A választást a gomb billentyűzetes aktiválási útján adjuk le
-  // (`click` esemény, detail 0 — pointerTapHandlers.onClick), ami nem függ a pillanatnyi takarástól.
-  await crystals.locator('[data-correct="false"]').first().dispatchEvent('click');
+  // VALÓS billentyűzettel (látható, fókuszálható gomb + Enter → pointerTapHandlers.onClick, detail 0) — review #653: nem
+  // szintetikus esemény. Ha a mozgó kristály a fókusz és az Enter között újrarajzolódik, a kör ismétlődik.
+  await expect(async()=>{
+   const wrong=crystals.locator('[data-correct="false"]').first();
+   await expect(wrong).toBeVisible();
+   await wrong.focus();
+   await page.keyboard.press('Enter');
+   await expect(crystals.locator('[data-correct="true"]')).toHaveAttribute('data-state','correct',{timeout:1500});
+  }).toPass({timeout:20000});
   // hibás válasz: nincs blokkoló dialógus, a helyes kristály zölden világít, a kártya csak a „Miért?”-re nyílik
   await expect(page.locator('[role="dialog"]')).toHaveCount(0);
   await expect(crystals.locator('[data-correct="true"]')).toHaveAttribute('data-state','correct');
