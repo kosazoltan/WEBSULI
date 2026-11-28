@@ -165,6 +165,54 @@ export function practiceQuotaProblems(packet: { quiz?: Array<{ question: string;
   ];
 }
 
+/**
+ * P7C-ARANYJAVITAS: kvóta ALATTI (régi) csomagnál a célhoz hiányzó számú fogalmi tételre tétel-szintű cserekérés (`<id>: …` — a
+ * `repairPermissions` célzott cserét ad rá). Fogalmanként legalább egy felidéző (fogalmi) tétel marad; a kvótán belüli / feletti bank üres.
+ */
+type RatioItem = { id?: string; coversConceptIds?: readonly string[]; intent?: string };
+export function practiceRatioRepairIssues(
+  packet: { quiz?: Array<RatioItem & { question: string; options?: string[]; format?: string }>; tasks?: Array<RatioItem & { q: string; sample?: string }> },
+  conceptIds: readonly string[],
+): string[] {
+  const quiz = packet.quiz ?? [], tasks = packet.tasks ?? [];
+  const quota = practiceQuota(quiz.length, conceptIds.length, tasks.length);
+  const pick = <T extends RatioItem>(items: readonly T[], kindOf: (it: T) => PracticeKind, band: { min: number; goal: number }, fix: string): string[] => {
+    const kinds = items.map(kindOf);
+    // Review #649 (Vercel): a meta-tétel a célzott meta-cserében gyakorlatira cserélődik — előre alkalmazásnak számít.
+    const have = kinds.filter((k) => k === "alkalmazas" || k === "meta").length;
+    // Csak a sáv ALATTI bank kap cserét (a sávon belüli / feletti tűrt); a cél a sáv célértéke.
+    if (have >= band.min) return [];
+    const need = band.goal - have;
+    // Fogalmanként a felidéző tételek száma — az utolsó felidéző marad (fogalompár-kötelem).
+    const left = new Map<string, number>();
+    items.forEach((it, i) => { if (kinds[i] === "fogalmi") for (const c of it.coversConceptIds ?? []) left.set(c, (left.get(c) ?? 0) + 1); });
+    // Review #649 (Codex): fogalmanként a kötelező `intent="recall"` címkéjű tétel is marad (lesson-experience recall-pár szabály).
+    const recallLeft = new Map<string, number>();
+    items.forEach((it) => { if (it.intent === "recall") for (const c of it.coversConceptIds ?? []) recallLeft.set(c, (recallLeft.get(c) ?? 0) + 1); });
+    const out: string[] = [];
+    // Előbb a fogalmi (a kötelemmel), aztán a nem egyértelmű (bizonytalan) tételek — a már alkalmazó tétel sosem.
+    for (const want of ["fogalmi", "bizonytalan"] as const) items.forEach((it, i) => {
+      if (out.length >= need || kinds[i] !== want || !it.id) return;
+      const cs = it.coversConceptIds ?? [];
+      if (it.intent === "recall") {
+        if (cs.some((c) => (recallLeft.get(c) ?? 0) <= 1)) return;
+        for (const c of cs) recallLeft.set(c, (recallLeft.get(c) ?? 0) - 1);
+      }
+      if (want === "fogalmi") {
+        if (cs.some((c) => (left.get(c) ?? 0) <= 1)) return;
+        for (const c of cs) left.set(c, (left.get(c) ?? 0) - 1);
+      }
+      out.push(`${it.id}: ${fix}`);
+    });
+    return out;
+  };
+  const fix = "fogalmi felidézés — a gyakorlati arányhoz alakítsd át UGYANARRA a fogalomra vonatkozó, konkrét példán végzett alkalmazó tétellé (döntés egy adott mondatról / adatról / helyzetről, kiegészítés, javítás, számolás)";
+  return [
+    ...pick(quiz, (it) => classifyQuizItem(it).kind, quota.quiz, fix),
+    ...pick(tasks, (t) => classifyOpenTask(t).kind, quota.tasks, fix),
+  ];
+}
+
 export type BankAudit = {
   total: number;
   counts: Record<PracticeKind, number>;
