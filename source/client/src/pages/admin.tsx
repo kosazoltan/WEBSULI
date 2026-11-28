@@ -69,6 +69,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { WorkflowHistory } from "@/components/studio/WorkflowMonitor";
 import ExtraEmailsManager from "@/components/ExtraEmailsManager";
 import EmailDiagnosticsPanel from "@/components/EmailDiagnosticsPanel";
+import AdventAnnouncePanel from "@/components/AdventAnnouncePanel";
 import ParentDashboardPanel from "@/components/ParentDashboardPanel";
 import LearnersPanel from "@/components/LearnersPanel";
 import PlayersPanel from "@/components/PlayersPanel";
@@ -920,7 +921,7 @@ export default function Admin() {
       </TabsContent>
 
       <TabsContent value="email-debug" className="space-y-2">
-        {activeTab === "email-debug" && <EmailDiagnosticsPanel />}
+        {activeTab === "email-debug" && (<><EmailDiagnosticsPanel /><AdventAnnouncePanel /></>)}
       </TabsContent>
 
       <TabsContent value="parent-dashboard" className="space-y-2">

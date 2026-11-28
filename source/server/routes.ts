@@ -11,7 +11,9 @@ import { registerAdminUserRoutes } from "./admin-users";
 import { insertHtmlFileSchema, insertMaterialCommentSchema, type User, type HtmlFile } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
-import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification } from "./resend";
+import { sendNewMaterialNotification, isResendConfigured, sendAdminNotification, resolveAppBaseUrl } from "./resend";
+import { learnerLinkSecret } from "./lib/learner-token";
+import { adventNow } from "../shared/advent/calendar";
 import { sendNewMaterialNotification as sendPushNewMaterial } from "./pushNotifications";
 import { getAllAudioBase64 } from "google-tts-api";
 import { parseAudioRange, parseTtsAudioQuery, TtsAudioCache, TTS_AUDIO_CACHE_CONTROL, TTS_AUDIO_CDN_CACHE_CONTROL } from "../shared/speech-fallback";
@@ -52,6 +54,8 @@ import { createAdventRouter } from "./advent/routes";
 import { createAdventStore } from "./advent/store";
 import { createAdventPreviewRouter } from "./advent/preview";
 import { createAdventMailReportRouter } from "./advent/mail-report";
+import { announceAdvent, type AnnounceDeps } from "./advent/announce";
+import { adventAnnounceSender } from "./advent/announce-sender";
 import { sendAdventResult } from "./advent/result-email";
 import { adventClock, adventEnabled } from "./advent/clock";
 import { defaultAdventIdentityDeps, resolveAdventSubject } from "./advent/identity";
@@ -919,6 +923,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Adventi naptár — a szülői levelek száraz összesítője (tulajdonosi P-056): az admin-őr mögött, a kapcsolótól függetlenül; csak olvas,
   // címet nem ad ki. A valódi küldés alapból KI (`ADVENT_RESULT_EMAIL_MODE=send` nélkül a végleges eredmény sem küld és nem foglal).
   app.use("/api/admin/advent/mail-report", isAuthenticatedAdmin, createAdventMailReportRouter({ store: adventStore }));
+  // S8 — adventi értesítő levél (tulajdonosi döntés 2026-11-28): száraz futás = darabszám + levél (cím nélkül); az éles küldést a
+  // tulajdonos indítja a panelről, a száraz futás darabszámával (`confirmCount`). A naplóba csak darabszám kerül. CSRF: globális.
+  app.post("/api/admin/advent/announce", isAuthenticatedAdmin, asyncRoute(async (req: Request, res) => {
+    const dryRun = req.body?.dryRun !== false;
+    const confirmCount = Number.isInteger(req.body?.confirmCount) ? Number(req.body.confirmCount) : undefined;
+    const deps: AnnounceDeps = {
+      db: dbPool,
+      recipients: async () => ({
+        subscriptions: (await storage.getActiveEmailSubscriptions()).map((s) => s.email),
+        extras: (await storage.getActiveExtraEmails()).map((e) => e.email),
+      }),
+      send: adventAnnounceSender(),
+      secret: () => learnerLinkSecret(),
+      season: adventNow(new Date()).season,
+      baseUrl: resolveAppBaseUrl(),
+    };
+    const result = await announceAdvent(deps, { dryRun, confirmCount });
+    if (!("dryRun" in result && result.dryRun)) logger.info(`[ADVENT] értesítő: ${JSON.stringify({ ...result, html: undefined, subject: undefined })}`);
+    res.setHeader("Cache-Control", "no-store");
+    res.status(result.status).json(result);
+  }));
   app.use("/api/lessons", lessonPublicRouter);
   // Spec 2026-11-10-fejezet-kisfilmek-v2 (6.): a kisfilmek tartalomcímzett médiája (kép, hang, mozgókép) — azonos eredet, korlátlanul gyorsítótárazható.
   registerLessonClipMedia(app, loadClipMedia);
