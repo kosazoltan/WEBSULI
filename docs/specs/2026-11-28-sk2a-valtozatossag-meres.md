@@ -25,7 +25,7 @@ A leckeszintű kapu (SK2 5.) külön szelet (SK2b).
 | --- | --- | --- | --- |
 | topPatternShare | 0.616 | 0.265 | ≤ 0.35 |
 | samePatternProbability | 0.404 | 0.105 | ≤ 0.2 |
-| topFeedbackOpenerShare | 0.468 | 0.07 | ≤ 0.1 |
+| topFeedbackOpenerShare (hibás válaszok) | 0.468 | 0.089 | ≤ 0.1 |
 
 Jelzés (nem küszöb): a leckék 73%-ában egy ábrafajta az ábrák > 40%-a (`kindHeavyLessonShare` 0.733) — az SK2b kapu jelzésága ezt
 naplózza; 13%-ban a try-arány < 1/3.

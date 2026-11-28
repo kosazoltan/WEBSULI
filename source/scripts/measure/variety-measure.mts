@@ -8,7 +8,7 @@
  * A DATABASE_URL a környezetből jön (soron belüli előtag), a szkript nem írja ki.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { failedThresholds, varietyReport, VARIETY_THRESHOLDS, type VarietyLesson, type VarietyReport } from "../../shared/variety-metrics";
+import { failedThresholds, round3, varietyReport, VARIETY_THRESHOLDS, type VarietyLesson, type VarietyReport } from "../../shared/variety-metrics";
 
 const arg = (name: string) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : undefined; };
 export const MIN_SAMPLE = 10;
@@ -19,7 +19,7 @@ export function measureTable(now: VarietyReport, baseline: Partial<VarietyReport
   const line = (name: keyof VarietyReport, limit: number | null) => {
     const b = baseline?.[name];
     const ok = limit === null ? "—" : (now[name] as number) <= limit ? "igen" : "NEM";
-    return `| ${name} | ${b ?? "—"} | ${now[name]} | ${limit === null ? "—" : `≤ ${Math.round(limit * 1000) / 1000}`} | ${ok} |`;
+    return `| ${name} | ${b ?? "—"} | ${round3(now[name] as number)} | ${limit === null ? "—" : `≤ ${Math.round(limit * 1000) / 1000}`} | ${ok} |`;
   };
   const rows = [
     `leckék: ${now.lessons}, fejezetek: ${now.sections}${small ? ` — KIS MINTA (< ${MIN_SAMPLE}), a küszöb nem ítél` : ""}`,

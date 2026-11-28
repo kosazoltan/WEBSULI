@@ -7,7 +7,7 @@
  */
 import { startsWithLegacyOpener } from "./lesson-feedback-openers";
 
-export type VarietyBlock = { kind: string; animKind?: string; feedbackPerOption?: readonly string[] };
+export type VarietyBlock = { kind: string; animKind?: string; feedbackPerOption?: readonly string[]; correctIndex?: number };
 export type VarietySection = { blocks: readonly VarietyBlock[] };
 export type VarietyLesson = { sections: readonly VarietySection[] };
 
@@ -19,7 +19,8 @@ export const VARIETY_THRESHOLDS = {
   minTryShare: 1 / 3,
 } as const;
 
-const round3 = (x: number) => Math.round(x * 1000) / 1000;
+/** Review #664: a jelentés NYERS értékeket tartalmaz (a küszöbdöntés kerekítés nélkül); kerekítés csak a megjelenítésben. */
+export const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /** A fejezet mintája: a blokkfajták sora („explain,example,check”). */
 export function sectionPattern(section: VarietySection): string {
@@ -47,7 +48,7 @@ export function patternShares(lessons: readonly VarietyLesson[]): Map<string, nu
 
 /** Két véletlen fejezet azonos mintájának valószínűsége: Σ p². Üres állományon 0. */
 export function samePatternProbability(lessons: readonly VarietyLesson[]): number {
-  return round3([...patternShares(lessons).values()].reduce((a, p) => a + p * p, 0));
+  return [...patternShares(lessons).values()].reduce((a, p) => a + p * p, 0);
 }
 
 /** A visszajelzések nyitása: az első két szó (írásjel nélkül, kisbetűsítve). */
@@ -60,9 +61,14 @@ function feedbacks(lessons: readonly VarietyLesson[]): string[] {
   return lessons.flatMap((l) => l.sections.flatMap((s) => s.blocks.flatMap((b) => b.feedbackPerOption ?? [])));
 }
 
-/** A visszajelzés-nyitások (első két szó) aránya az állományban. */
+/** Review #664: a HIBÁS válaszok visszajelzései (a helyes opcióé nélkül) — az alapvonal (0,468) is ezen a halmazon mért. */
+function wrongFeedbacks(lessons: readonly VarietyLesson[]): string[] {
+  return lessons.flatMap((l) => l.sections.flatMap((s) => s.blocks.flatMap((b) => (b.feedbackPerOption ?? []).filter((_, i) => i !== b.correctIndex))));
+}
+
+/** A hibás válaszok visszajelzés-nyitásainak (első két szó) aránya az állományban. */
 export function feedbackOpenerShares(lessons: readonly VarietyLesson[]): Map<string, number> {
-  return shares(countBy(feedbacks(lessons), feedbackOpener));
+  return shares(countBy(wrongFeedbacks(lessons), feedbackOpener));
 }
 
 /** A régi bátorító nyitással kezdődő visszajelzések száma (csak számlálás, a szöveg változatlan). */
@@ -106,12 +112,12 @@ export function varietyReport(lessons: readonly VarietyLesson[]): VarietyReport 
   return {
     lessons: n,
     sections: lessons.reduce((a, l) => a + l.sections.length, 0),
-    topPatternShare: round3(maxShare(patternShares(lessons))),
+    topPatternShare: maxShare(patternShares(lessons)),
     samePatternProbability: samePatternProbability(lessons),
-    topFeedbackOpenerShare: round3(maxShare(feedbackOpenerShares(lessons))),
+    topFeedbackOpenerShare: maxShare(feedbackOpenerShares(lessons)),
     legacyOpeners: legacyOpenerCount(lessons),
-    kindHeavyLessonShare: n ? round3(kindHeavy / n) : 0,
-    lowTryLessonShare: n ? round3(lowTry / n) : 0,
+    kindHeavyLessonShare: n ? kindHeavy / n : 0,
+    lowTryLessonShare: n ? lowTry / n : 0,
   };
 }
 

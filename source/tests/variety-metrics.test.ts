@@ -7,7 +7,7 @@ import {
 import { measureTable } from "../scripts/measure/variety-measure.mts";
 
 const sec = (...kinds: string[]) => ({ blocks: kinds.map((kind) => ({ kind })) });
-const check = (...fb: string[]) => ({ kind: "check", feedbackPerOption: fb });
+const check = (...fb: string[]) => ({ kind: "check", feedbackPerOption: fb, correctIndex: fb.length - 1 });
 const anim = (animKind: string) => ({ kind: "animate", animKind });
 
 // 4 szintetikus lecke, kézzel számolt elvárással
@@ -20,7 +20,7 @@ test("SK2: fejezetminta és arányok — kézzel számolt", () => {
   assert.equal(sectionPattern(A.sections[0]), "explain,example,check");
   const s = patternShares([A, B]); // 5 fejezet: e,ex,c ×3; e,t,c ×1; e,a,r ×1
   assert.equal(s.get("explain,example,check"), 3 / 5);
-  assert.equal(samePatternProbability([A, B]), Math.round(((9 + 1 + 1) / 25) * 1000) / 1000); // 0.44
+  assert.ok(Math.abs(samePatternProbability([A, B]) - 11 / 25) < 1e-12); // 0.44
   assert.equal(tryShare(A), 1 / 3);
   assert.equal(tryShare(B), 0);
 });
@@ -28,7 +28,7 @@ test("SK2: fejezetminta és arányok — kézzel számolt", () => {
 test("SK2: visszajelzés-nyitás (első két szó) és régi bátorító nyitás — csak számlálás, a szöveg változatlan", () => {
   assert.equal(feedbackOpener("Jó próba, de a 12 páros."), "jó próba");
   const sh = feedbackOpenerShares([C]);
-  assert.equal(sh.get("jó próba"), 1 / 3);
+  assert.equal(sh.get("jó próba"), 1 / 2, "csak a hibás válaszok (2) visszajelzése számít, a helyes opcióé (utolsó) nem");
   assert.equal(legacyOpenerCount([C]), 2, "„Jó próba” és „Igen” a zárt listán van");
   assert.equal(C.sections[0].blocks[1].feedbackPerOption?.[0], "Jó próba, de a 12 páros.", "nincs levágás");
 });
@@ -59,4 +59,12 @@ test("SK2: változatos állomány megfelel; a mérő füstpróbája 2 leckén �
   assert.equal(t.small, true);
   assert.match(t.rows[0], /KIS MINTA/u);
   assert.match(t.rows.join("\n"), /\| topPatternShare \| 0\.616 \| 0\.6 \| ≤ 0\.35 \| NEM \|/u);
+});
+
+test("review #664: a küszöbdöntés kerekítés nélkül — 1007-ből 101 azonos nyitás (0,1003) BUKIK", () => {
+  const fb = Array.from({ length: 1007 }, (_, i) => (i < 101 ? "Nézd meg újra." : `Szó${i} egyedi${i} nyitás.`));
+  const lessons: VarietyLesson[] = [{ sections: [{ blocks: [{ kind: "check", feedbackPerOption: [...fb, "Helyes válasz."], correctIndex: 1007 }] }] }];
+  const r = varietyReport(lessons);
+  assert.ok(r.topFeedbackOpenerShare > 0.1);
+  assert.ok(failedThresholds(r).includes("topFeedbackOpenerShare"));
 });
