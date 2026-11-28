@@ -324,7 +324,9 @@ async function finishStructuredImprovementScoped(original: Lesson, candidate: Le
     if ("error" in removal) {
       // P7C-LEKTOR-REGI (L3): az üzenet a kivétel okát és a jegyzetek útvonalát is mutatja.
       const message = `A lektor javítást kér, az eredeti érintetlen (${removal.error}): ${blockers.map(n => `${n.blockPath ?? "—"} ${n.message}`).join("; ")}`;
-      const conceptIds = flaggedBankConcepts(candidate, blockers);
+      // Review #661: eltérő tanítási megoldásnál (solutions[].match === false) nincs újrakör — a tanítás a hibás, nem a bank.
+      const teachingMismatch = (review.solutions ?? []).some((s: { match: boolean }) => !s.match);
+      const conceptIds = teachingMismatch ? null : flaggedBankConcepts(candidate, blockers);
       throw conceptIds ? new LektorBankBlockError(message, conceptIds) : new Error(message);
     }
     candidate = removal.lesson;
