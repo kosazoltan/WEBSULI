@@ -12,6 +12,8 @@ import type { AdventAnswerResult, AdventDoorView, AdventQuestion, AdventState } 
 import { doorArtId } from "@shared/advent/art";
 import { adventDateLabel, articleFor, daySuffix, nextDoorToOpen, roundIsOver } from "@shared/advent/home-card";
 import { ADVENT_MAX_GRADE, ADVENT_MIN_GRADE } from "@shared/advent/rules";
+import { adventReadAloudText, adventReadAloudVisible } from "@shared/advent/read-aloud";
+import { prefersReducedMotion, speak, speechSupported } from "@/lib/tts";
 import { isMuted, sfxClick, sfxSuccess, toggleMuted } from "@/lib/audioEngine";
 import AdventArt from "@/advent/AdventArt";
 import Snowfall from "@/advent/Snowfall";
@@ -92,6 +94,9 @@ function AdventCalendarView() {
   // A mód a lekérdezésé (minden rajzoláskor a címből; egy elutasított előnézet után már „normal”) — az írások ugyanide kerülnek.
   const { data: state, isLoading, isError, error: loadError, refetch, generation, mode } = useAdventState();
   const [open, setOpen] = useState<Open | null>(null);
+  // A-5 (#153): az ablak bezárásakor / váltásakor a futó felolvasás leáll (ne olvassa tovább az előző kérdést).
+  const openKey = open ? `${open.day}:${open.repair ? 1 : 0}` : null;
+  useEffect(() => () => { if (speechSupported()) window.speechSynthesis.cancel(); }, [openKey]);
   const [busy, setBusy] = useState(false);
   // Melyik ablak nyílik éppen (lassú hálózaton azonnali jelzés az ablakon), és kiírjuk-e már szöveggel is.
   const [openingDay, setOpeningDay] = useState<number | null>(null);
@@ -653,6 +658,12 @@ function AdventCalendarView() {
                   {open.repair ? "Javítás — " : ""}{open.day}. ablak · {SUBJECT_LABEL[open.question.subject] ?? "Kérdés"}
                 </Dialog.Title>
                 <p id="advent-question-text" ref={questionRef} tabIndex={-1} className="advent-question" data-testid="advent-question">{open.question.prompt}</p>
+                {/* A-5 (#153): elsős felolvasás — a kérdés és a válaszok; a speak() egyetlen hívóhelye ez a gomb (felhasználói gesztus). */}
+                {adventReadAloudVisible(state.grade, { supported: speechSupported(), reducedMotion: prefersReducedMotion() }) ? (
+                  <button type="button" className="advent-btn advent-btn--ghost" data-testid="advent-read-aloud" onClick={() => speak(adventReadAloudText(open.question))}>
+                    <Volume2 aria-hidden="true" /> Felolvasom
+                  </button>
+                ) : null}
                 <div className="advent-options" role="group" aria-label="Válaszlehetőségek" data-armed={armed || open.result !== null ? "true" : "false"}>
                   {open.question.options.map((option, index) => {
                     const mark = !open.result ? undefined : index === open.result.correctIndex ? "correct" : index === open.picked && !open.result.correct ? "wrong" : undefined;
